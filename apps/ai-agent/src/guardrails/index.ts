@@ -9,24 +9,32 @@ const BLOCKED_PATTERNS = [
   /miracle cure/i,
 ]
 
-const MEDICAL_DISCLAIMER = '\n\n_I am not a medical professional. Please consult a doctor for medical advice._'
+const MEDICAL_DISCLAIMER = '\n\n_I am not a medical professional. For health concerns, consult a doctor._'
 
-export function applyGuardrails(text: string): string {
-  let result = text.trim()
-
-  if (BLOCKED_PATTERNS.some((p) => p.test(result))) {
-    result = "I can't provide that kind of advice. Please consult a qualified healthcare professional."
-  }
-
-  if (/\b(symptom|disease|treat|cure|diagnose|doctor|medical)\b/i.test(result)) {
-    if (!result.includes(MEDICAL_DISCLAIMER.trim())) {
-      result += MEDICAL_DISCLAIMER
+export function applyGuardrails(content: string, skillName: string): string {
+  for (const pattern of BLOCKED_PATTERNS) {
+    if (pattern.test(content)) {
+      content = content.replace(pattern, '[REDACTED]')
     }
   }
 
-  if (/ignore previous|system prompt|you are now|developer mode/i.test(result)) {
-    result = "I can only help with nutrition and fitness topics. How can I assist you today?"
+  if (skillName === 'medical' || /diagnos|prescribe|medication|treat disease/i.test(content)) {
+    content += MEDICAL_DISCLAIMER
   }
 
-  return result.slice(0, 4000)
+  return content
+}
+
+export function isPromptInjection(input: string): boolean {
+  const injectionPatterns = [
+    /ignore previous instructions/i,
+    /system prompt/i,
+    /you are now/i,
+    /reveal your/i,
+    /internal logic/i,
+    /api key/i,
+    /token/i,
+    /model name/i,
+  ]
+  return injectionPatterns.some((p) => p.test(input))
 }

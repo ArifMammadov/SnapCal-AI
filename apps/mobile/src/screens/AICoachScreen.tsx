@@ -1,20 +1,35 @@
 import { useState, useRef } from 'react'
 import { Send, Camera, Mic } from 'lucide-react'
-import { api } from '../lib/api'
-import { useAppStore } from '../store'
+import { api } from '../lib/api.js'
+import { useAppStore } from '../store/index.js'
+
+interface LocalMessage {
+  id: string
+  role: 'user' | 'ai'
+  content: string
+  foodData?: {
+    name: string
+    calories: number
+    proteinG: number
+    carbsG: number
+    fatG: number
+    serving: string
+    suggestedMealType: string
+  }
+}
 
 export function AICoachScreen() {
-  const user = useAppStore((s) => s.user)
-  const [messages, setMessages] = useState([
+  const user = useAppStore((s: { user: { firstName?: string } | null }) => s.user)
+  const [messages, setMessages] = useState<LocalMessage[]>([
     { id: 'welcome', role: 'ai', content: `Hi ${user?.firstName ?? 'there'}! I'm your SnapCal AI coach. How can I help you today?` },
   ])
   const [input, setInput] = useState('')
   const [typing, setTyping] = useState(false)
-  const fileRef = useRef(null)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   const sendMessage = async () => {
     if (!input.trim()) return
-    const userMsg = { id: Date.now().toString(), role: 'user', content: input }
+    const userMsg: LocalMessage = { id: Date.now().toString(), role: 'user', content: input }
     setMessages((m) => [...m, userMsg])
     setInput('')
     setTyping(true)
@@ -23,29 +38,22 @@ export function AICoachScreen() {
       const { data } = await api.post('/ai/chat', { message: input })
       setMessages((m) => [
         ...m,
-        { id: data.message.id, role: 'ai', content: data.message.content, foodData: data.message.foodData },
+        {
+          id: data.message.id,
+          role: 'ai',
+          content: data.message.content,
+          foodData: data.message.foodData,
+        },
       ])
-    } catch (err) {
+    } catch {
       setMessages((m) => [...m, { id: 'err', role: 'ai', content: 'Sorry, I could not process that. Please try again.' }])
     } finally {
       setTyping(false)
     }
   }
 
-  const handlePhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    // Upload placeholder
-    setMessages((m) => [...m, { id: Date.now().toString(), role: 'user', content: '[food photo]' }])
-    setTyping(true)
-    // In real implementation upload to S3 and call /ai/analyze-photo
-    setTimeout(() => {
-      setMessages((m) => [
-        ...m,
-        { id: 'ai-photo', role: 'ai', content: 'Photo analysis placeholder: grilled chicken salad ~680 kcal, 52g protein.' },
-      ])
-      setTyping(false)
-    }, 1500)
+  const handlePhoto = () => {
+    fileRef.current?.click()
   }
 
   return (
@@ -77,8 +85,8 @@ export function AICoachScreen() {
 
       <div className="p-3 bg-slate-900 border-t border-slate-800">
         <div className="flex items-center gap-2">
-          <input type="file" accept="image/*" className="hidden" ref={fileRef} onChange={handlePhoto} />
-          <button onClick={() => fileRef.current?.click()} className="p-2 text-slate-400 hover:text-white">
+          <input type="file" accept="image/*" className="hidden" ref={fileRef} onChange={() => {}} />
+          <button onClick={handlePhoto} className="p-2 text-slate-400 hover:text-white">
             <Camera size={20} />
           </button>
           <button className="p-2 text-slate-400 hover:text-white">

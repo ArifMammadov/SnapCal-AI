@@ -49,7 +49,7 @@ export async function buildApp() {
   await app.register(rateLimit, {
     max: 100,
     timeWindow: '1 minute',
-    keyGenerator: (req) => req.user?.userId ?? req.ip,
+    keyGenerator: (req) => (req as { user?: { userId: string } }).user?.userId ?? req.ip,
   })
 
   app.setErrorHandler(errorHandler)

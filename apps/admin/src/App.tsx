@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { api } from './lib/api'
 
 export function App() {
   const [token, setToken] = useState(localStorage.getItem('snapcal_admin_token') ?? '')

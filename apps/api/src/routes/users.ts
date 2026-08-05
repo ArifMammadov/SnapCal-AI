@@ -3,16 +3,11 @@ import fp from 'fastify-plugin'
 import { z } from 'zod'
 import { prisma } from '@snapcal/database'
 import { calculateCalorieGoal } from '@snapcal/shared'
-
-declare module 'fastify' {
-  interface FastifyRequest {
-    user?: { userId: string; telegramId: string; role: string }
-  }
-}
+import type { JwtPayload } from '../types/auth.js'
 
 export const requireAuth = async (request: FastifyRequest, reply: FastifyReply) => {
   try {
-    const payload = await request.jwt.verify<{ userId: string; telegramId: string; role: string }>(request.headers.authorization?.replace('Bearer ', '') ?? '')
+    const payload = await request.server.jwt.verify<JwtPayload>(request.headers.authorization?.replace('Bearer ', '') ?? '')
     request.user = payload
   } catch {
     reply.status(401).send({ error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } })
@@ -48,63 +43,35 @@ const userRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
     return user
   })
 
-  app.patch('/me', async (request: FastifyRequest, reply: FastifyReply) => {
+  app.patch('/me/profile', async (request: FastifyRequest) => {
     const data = updateProfileSchema.parse(request.body)
+    const userId = request.user!.userId
 
-    const profile = await prisma.profile.findUnique({
-      where: { userId: request.user!.userId },
-    })
-
-    if (!profile) {
-      return reply.status(404).send({ error: { code: 'PROFILE_NOT_FOUND', message: 'Profile not found' } })
+    let dailyCalories = data.dailyCalories
+    if (data.currentWeightKg && data.heightCm && !dailyCalories) {
+      dailyCalories = calculateCalorieGoal({
+        weightKg: data.currentWeightKg,
+        heightCm: data.heightCm,
+        gender: data.gender ?? 'OTHER',
+        birthDate: data.birthDate ? new Date(data.birthDate) : new Date('1995-01-01'),
+        activityLevel: data.activityLevel ?? 'MODERATE',
+        primaryGoal: data.primaryGoal ?? 'MAINTENANCE',
+      })
     }
 
-    const merged = {
-      ...profile,
-      ...data,
-      birthDate: data.birthDate ? new Date(data.birthDate) : profile.birthDate,
-    }
-
-    const dailyCalories = data.dailyCalories ?? calculateCalorieGoal({
-      gender: merged.gender ?? undefined,
-      weightKg: merged.currentWeightKg ? Number(merged.currentWeightKg) : undefined,
-      heightCm: merged.heightCm ?? undefined,
-      birthDate: merged.birthDate ?? undefined,
-      activityLevel: merged.activityLevel ?? undefined,
-      primaryGoal: merged.primaryGoal ?? undefined,
+    return prisma.profile.upsert({
+      where: { userId },
+      update: { ...data, dailyCalories },
+      create: { userId, ...data, dailyCalories },
     })
-
-    const updated = await prisma.profile.update({
-      where: { userId: request.user!.userId },
-      data: {
-        ...data,
-        birthDate: data.birthDate ? new Date(data.birthDate) : undefined,
-        dailyCalories: data.dailyCalories ?? dailyCalories,
-      },
-    })
-
-    return updated
   })
 
-  app.get('/me/goals', async (request: FastifyRequest) => {
-    const profile = await prisma.profile.findUnique({
-      where: { userId: request.user!.userId },
+  app.get('/summary', async (request: FastifyRequest) => {
+    const user = await prisma.user.findUnique({
+      where: { id: request.user!.userId },
+      include: { profile: true, activeSubscription: true },
     })
-    return profile
-  })
-
-  app.patch('/me/goals', async (request: FastifyRequest, reply: FastifyReply) => {
-    const data = updateProfileSchema.parse(request.body)
-    const profile = await prisma.profile.findUnique({ where: { userId: request.user!.userId } })
-    if (!profile) {
-      return reply.status(404).send({ error: { code: 'PROFILE_NOT_FOUND', message: 'Profile not found' } })
-    }
-
-    const updated = await prisma.profile.update({
-      where: { userId: request.user!.userId },
-      data,
-    })
-    return updated
+    return user
   })
 }
 

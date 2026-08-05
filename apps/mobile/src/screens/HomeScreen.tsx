@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
-import { api } from '../lib/api'
+import { api } from '../lib/api.js'
+import type { DailySummary } from '@snapcal/shared'
 
 export function HomeScreen() {
-  const [summary, setSummary] = useState(null)
+  const [summary, setSummary] = useState<DailySummary | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    api.get('/tracking/summary')
+    api.get<DailySummary>('/tracking/summary')
       .then((res) => setSummary(res.data))
       .catch(console.error)
       .finally(() => setLoading(false))
@@ -55,11 +56,11 @@ export function HomeScreen() {
           <h2 className="font-semibold">Meals</h2>
           <button className="text-emerald-400 text-sm">+ Add</button>
         </div>
-        {summary.foodLogs.length === 0 ? (
+        {(summary.foodLogs?.length ?? 0) === 0 ? (
           <p className="text-slate-400 text-sm">No meals logged yet. Ask AI Coach to analyze a photo.</p>
         ) : (
           <ul className="space-y-2">
-            {summary.foodLogs.map((log) => (
+            {summary.foodLogs.map((log: { id: string; name: string; calories: number }) => (
               <li key={log.id} className="flex justify-between py-2 border-b border-slate-800">
                 <span>{log.name}</span>
                 <span className="text-slate-400">{log.calories} kcal</span>

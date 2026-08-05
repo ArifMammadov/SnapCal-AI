@@ -118,16 +118,23 @@ const trackingRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) =>
       prisma.metricLog.findMany({ where: { userId, loggedAt: { gte: start, lt: end } } }),
     ])
 
-    const caloriesConsumed = foodLogs.reduce((s, f) => s + f.calories, 0)
-    const proteinG = foodLogs.reduce((s, f) => s + (f.proteinG ?? 0), 0)
-    const carbsG = foodLogs.reduce((s, f) => s + (f.carbsG ?? 0), 0)
-    const fatG = foodLogs.reduce((s, f) => s + (f.fatG ?? 0), 0)
-    const waterMl = metrics.filter((m) => m.metricType === 'WATER_ML').reduce((s, m) => s + Number(m.value), 0)
-    const sleepH = metrics.find((m) => m.metricType === 'SLEEP_H')?.value ?? 0
-    const steps = metrics.filter((m) => m.metricType === 'STEPS').reduce((s, m) => s + Number(m.value), 0)
-    const weightKg = metrics.find((m) => m.metricType === 'WEIGHT_KG')?.value ?? profile?.currentWeightKg ?? 0
+    const caloriesConsumed = foodLogs.reduce((s: number, f: { calories: number }) => s + f.calories, 0)
+    const proteinG = foodLogs.reduce((s: number, f: { proteinG: number | null }) => s + (f.proteinG ?? 0), 0)
+    const carbsG = foodLogs.reduce((s: number, f: { carbsG: number | null }) => s + (f.carbsG ?? 0), 0)
+    const fatG = foodLogs.reduce((s: number, f: { fatG: number | null }) => s + (f.fatG ?? 0), 0)
+    const waterMl = metrics
+      .filter((m: { metricType: string }) => m.metricType === 'WATER_ML')
+      .reduce((s: number, m: { value: number }) => s + Number(m.value), 0)
+    const sleepH = metrics.find((m: { metricType: string; value: number }) => m.metricType === 'SLEEP_H')?.value ?? 0
+    const steps = metrics
+      .filter((m: { metricType: string }) => m.metricType === 'STEPS')
+      .reduce((s: number, m: { value: number }) => s + Number(m.value), 0)
+    const weightKg =
+      metrics.find((m: { metricType: string; value: number }) => m.metricType === 'WEIGHT_KG')?.value ??
+      profile?.currentWeightKg ??
+      0
     const activitiesCount = activities.length
-    const caloriesBurned = activities.reduce((s, a) => s + (a.caloriesBurned ?? 0), 0)
+    const caloriesBurned = activities.reduce((s: number, a: { caloriesBurned: number | null }) => s + (a.caloriesBurned ?? 0), 0)
 
     const calorieGoal = profile?.dailyCalories ?? 2200
     const proteinGoal = profile?.dailyProteinG ?? 150
@@ -143,7 +150,7 @@ const trackingRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) =>
       clamp(steps / stepsGoal, 0, 1),
       activitiesCount > 0 ? 1 : 0,
     ]
-    const healthScore = Math.round((scoreParts.reduce((s, v) => s + v, 0) / scoreParts.length) * 100)
+    const healthScore = Math.round((scoreParts.reduce((s: number, v: number) => s + v, 0) / scoreParts.length) * 100)
 
     return {
       date: start.toISOString().split('T')[0],

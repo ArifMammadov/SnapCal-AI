@@ -8,7 +8,7 @@ export const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-api.interceptors.request.use((config) => {
+api.interceptors.request.use((config: any) => {
   const token = localStorage.getItem('snapcal_access_token')
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
@@ -17,8 +17,8 @@ api.interceptors.request.use((config) => {
 })
 
 api.interceptors.response.use(
-  (res) => res,
-  async (err) => {
+  (res: any) => res,
+  async (err: any) => {
     if (err.response?.status === 401) {
       localStorage.removeItem('snapcal_access_token')
       window.location.reload()

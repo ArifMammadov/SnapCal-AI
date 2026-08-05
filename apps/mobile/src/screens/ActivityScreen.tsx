@@ -1,7 +1,7 @@
 import { useState } from 'react'
 
 export function ActivityScreen() {
-  const [activities, setActivities] = useState([])
+  const [_activities] = useState([])
 
   return (
     <div className="p-5">

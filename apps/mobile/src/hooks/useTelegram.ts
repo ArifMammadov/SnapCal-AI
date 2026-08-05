@@ -1,5 +1,15 @@
 import { useEffect, useState } from 'react'
-import { WebApp } from '@vkruglikov/react-telegram-web-app'
+
+declare global {
+  interface Window {
+    Telegram?: {
+      WebApp?: {
+        ready: () => void
+        expand: () => void
+      }
+    }
+  }
+}
 
 export function useTelegram() {
   const [ready, setReady] = useState(false)
@@ -13,10 +23,9 @@ export function useTelegram() {
       webApp.expand()
       setReady(true)
     } else {
-      // Fallback for browser development
       setTimeout(() => setReady(true), 300)
     }
   }, [])
 
-  return { ready, WebApp }
+  return { ready }
 }

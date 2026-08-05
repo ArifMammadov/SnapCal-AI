@@ -1,54 +1,108 @@
+import crypto from 'node:crypto'
+import { env } from '../lib/env.js'
 import { prisma } from '@snapcal/database'
 import { skills } from '../skills/index.js'
 import type { ChatInput, ChatOutput, ToolContext } from '../types/index.js'
 import { callOpenRouter, callOllama } from '../llm/openrouter.js'
-import * as tools from '../tools/index.js'
 import { applyGuardrails } from '../guardrails/index.js'
+import { auditLog } from '../audit/index.js'
+import { updateMemory } from '../memory/index.js'
+import { getUserSummary, searchKnowledge, recommendProgram, analyzePhoto, logFood, logActivity } from '../tools/index.js'
 
-const FALLBACK_MODEL = 'mistralai/mistral-7b-instruct'
+const FALLBACK_MODEL = 'gpt-4o-mini'
+const MAX_OUTPUT_TOKENS = 1024
 
-export async function classifyIntent(message: string, hasPhoto: boolean): Promise<string> {
-  if (hasPhoto) return 'food_vision'
+interface RouteResult {
+  skillName: string
+  toolNames: string[]
+  confidence: number
+}
 
-  const prompt = `Classify the user message intent into one of: onboarding, nutrition, fitness, coach, marketplace, food_vision. Only respond with the intent label.
-
-Message: ${message.slice(0, 500)}`
-
-  try {
-    const { content } = await callOpenRouter({
-      model: 'mistralai/mistral-7b-instruct',
-      messages: [{ role: 'user', content: prompt }],
-      maxTokens: 20,
-      temperature: 0.1,
-    })
-    const intent = content.trim().toLowerCase()
-    if (skills[intent]) return intent
-  } catch {
-    // fallback to local if available
+async function routeSkill(input: ChatInput): Promise<RouteResult> {
+  if (!input.message?.trim()) {
+    return { skillName: 'coach', toolNames: [], confidence: 1 }
   }
 
-  if (message.toLowerCase().includes('program') || message.toLowerCase().includes('plan')) return 'marketplace'
-  if (message.toLowerCase().includes('workout') || message.toLowerCase().includes('run') || message.toLowerCase().includes('gym')) return 'fitness'
-  if (message.toLowerCase().includes('eat') || message.toLowerCase().includes('food') || message.toLowerCase().includes('calories')) return 'nutrition'
-  return 'coach'
+  const lower = input.message.toLowerCase()
+  const hasImage = input.attachments?.some((a) => a.type === 'image')
+  const hasVoice = input.attachments?.some((a) => a.type === 'audio')
+
+  if (hasImage) return { skillName: 'food_vision', toolNames: ['analyzePhoto'], confidence: 0.9 }
+  if (hasVoice) return { skillName: 'nutrition', toolNames: [], confidence: 0.6 }
+  if (/\b(weight|goal|plan|program|workout|exercise|training)\b/i.test(lower)) return { skillName: 'fitness', toolNames: ['recommendProgram'], confidence: 0.75 }
+  if (/\b(calorie|kcal|meal|food|eat|ate|breakfast|lunch|dinner|snack)\b/i.test(lower)) return { skillName: 'nutrition', toolNames: ['logFood', 'searchKnowledge'], confidence: 0.8 }
+  if (/\b(hello|hi|who are you|help)\b/i.test(lower)) return { skillName: 'coach', toolNames: [], confidence: 0.7 }
+
+  return { skillName: 'coach', toolNames: ['searchKnowledge'], confidence: 0.55 }
+}
+
+async function runTools(toolNames: string[], context: ToolContext): Promise<Record<string, unknown>> {
+  const results: Record<string, unknown> = {}
+  for (const name of toolNames) {
+    switch (name) {
+      case 'getUserSummary':
+        results[name] = await getUserSummary(context)
+        break
+      case 'searchKnowledge':
+        results[name] = await searchKnowledge(context)
+        break
+      case 'recommendProgram':
+        results[name] = await recommendProgram(context)
+        break
+      case 'analyzePhoto':
+        results[name] = await analyzePhoto(context)
+        break
+      case 'logFood':
+        results[name] = await logFood(context)
+        break
+      case 'logActivity':
+        results[name] = await logActivity(context)
+        break
+      default:
+        results[name] = { success: false, error: 'Unknown tool' }
+    }
+  }
+  return results
+}
+
+function getUserLanguage(user: { languageCode?: string | null; region?: string | null } | null): string {
+  return user?.languageCode ?? 'en'
 }
 
 export async function handleChat(input: ChatInput): Promise<ChatOutput> {
   const { userId, message, attachments } = input
-  const hasPhoto = attachments?.some((a) => a.type === 'image') ?? false
-  const skillName = await classifyIntent(message, hasPhoto)
-  const skill = skills[skillName] ?? skills.coach
+  const start = Date.now()
 
-  const toolContext: ToolContext = { userId, message, skillName, attachments }
-
-  const toolResults: Record<string, unknown> = {}
-  for (const toolName of skill.tools) {
-    const tool = tools[toolName as keyof typeof tools]
-    if (tool) {
-      const result = await tool(toolContext)
-      toolResults[toolName] = result.success ? result.data : { error: result.error }
-    }
+  if ((message?.length ?? 0) > 12000) {
+    return { message: { id: 'rejected', role: 'ai', content: 'Your message is too long. Please keep it under 4000 characters.' } }
   }
+
+  const route = await routeSkill(input)
+  const skill = skills[route.skillName]
+  if (!skill || !skill.isActive) {
+    return { message: { id: 'unavailable', role: 'ai', content: 'This feature is temporarily unavailable.' } }
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { profile: true },
+  })
+  if (!user) {
+    return { message: { id: 'unauthorized', role: 'ai', content: 'User not found. Please log in again.' } }
+  }
+
+  const context: ToolContext = {
+    userId,
+    message: message ?? '',
+    attachments,
+    metadata: {
+      language: getUserLanguage(user),
+      subscriptionStatus: user.subscriptionStatus,
+      region: user.region ?? undefined,
+    },
+  }
+
+  const toolResults = await runTools(route.toolNames, context)
 
   const history = await prisma.chatMessage.findMany({
     where: { userId },
@@ -61,156 +115,85 @@ export async function handleChat(input: ChatInput): Promise<ChatOutput> {
   const systemPrompt = `${skill.systemPrompt}
 
 User profile and facts:
-${facts.map((f) => `- ${f.key}: ${f.value}`).join('\n')}
+${facts.map((f: { key: string; value: string }) => `- ${f.key}: ${f.value}`).join('\n')}
 
 Available tool data:
 ${JSON.stringify(toolResults, null, 2)}
 
 Recent chat history (newest first):
-${history.map((h) => `${h.role}: ${h.content.slice(0, 200)}`).join('\n')}
+${history.map((h: { role: string; content: string }) => `${h.role}: ${h.content.slice(0, 200)}`).join('\n')}
 
 Respond in a helpful, concise way in the user's language. Do not provide medical diagnoses. Keep your answer under 3 paragraphs.`
 
   const model = skill.allowedModels[0] ?? FALLBACK_MODEL
   let content = ''
-  let usedFallback = false
-  let tokensInput = 0
-  let tokensOutput = 0
+  let modelUsed = model
+  let errorMessage = ''
 
   try {
-    const result = await callOpenRouter({
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: message },
-      ],
-      maxTokens: 1500,
-      temperature: 0.7,
-    })
+    const messages = [
+      { role: 'system' as const, content: systemPrompt },
+      ...(message ? [{ role: 'user' as const, content: message }] : []),
+    ]
+    const result = await callOpenRouter(model, messages, MAX_OUTPUT_TOKENS)
     content = result.content
-    tokensInput = result.tokensInput
-    tokensOutput = result.tokensOutput
+    modelUsed = result.model
   } catch (err) {
-    usedFallback = true
-    const result = await callOllama({
-      model: skill.fallbackModel,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: message },
-      ],
-      maxTokens: 1500,
-    })
-    content = result.content
-    tokensInput = result.tokensInput
-    tokensOutput = result.tokensOutput
+    errorMessage = err instanceof Error ? err.message : 'OpenRouter error'
+    try {
+      const fallbackMessages = [
+        { role: 'system' as const, content: systemPrompt },
+        ...(message ? [{ role: 'user' as const, content: message }] : []),
+      ]
+      const fallback = env.OLLAMA_BASE_URL ? await callOllama(FALLBACK_MODEL, fallbackMessages) : null
+      if (fallback?.content) {
+        content = fallback.content
+        modelUsed = FALLBACK_MODEL
+        errorMessage = ''
+      } else {
+        throw err
+      }
+    } catch {
+      // final fallback
+    }
   }
 
-  const safeContent = applyGuardrails(content)
+  if (!content && errorMessage) {
+    return { message: { id: 'error', role: 'ai', content: 'AI service is temporarily unavailable. Please try again in a moment.' } }
+  }
 
-  await prisma.aiAuditLog.create({
+  content = applyGuardrails(content, route.skillName)
+
+  const chat = await prisma.chatMessage.create({
     data: {
       userId,
-      skillName,
-      model,
-      provider: usedFallback ? 'ollama' : 'openrouter',
-      tokensInput,
-      tokensOutput,
-      userMessage: message,
-      aiResponse: safeContent,
-      flagged: false,
+      role: 'AI',
+      content,
+      modelUsed,
+      skillName: route.skillName,
+      toolCalls: route.toolNames as unknown as object,
+      tokenUsage: { input: message?.length ?? 0, output: content.length, model: modelUsed },
+      latencyMs: Date.now() - start,
     },
   })
 
+  void auditLog({
+    userId,
+    action: 'AI_CHAT',
+    metadata: { skillName: route.skillName, modelUsed, latencyMs: Date.now() - start },
+  })
+
+  void updateMemory(userId, content)
+
   return {
-    message: safeContent,
-    type: 'text',
-    usedFallback,
+    message: {
+      id: chat.id,
+      role: 'ai',
+      content,
+    },
   }
 }
 
 export async function analyzeFoodPhoto(userId: string, imageUrl: string): Promise<ChatOutput> {
-  const skill = skills.food_vision
-  const systemPrompt = `${skill.systemPrompt}
-
-Return ONLY a JSON object with keys: name, calories, proteinG, carbsG, fatG, serving, suggestedMealType. No other text.`
-
-  const model = 'openai/gpt-4o-vision-preview'
-  let content = ''
-  let usedFallback = false
-
-  try {
-    const result = await callOpenRouter({
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        {
-          role: 'user',
-          content: [
-            { type: 'image_url', image_url: { url: imageUrl } },
-            { type: 'text', text: 'Analyze this food photo.' },
-          ],
-        },
-      ],
-      maxTokens: 500,
-      temperature: 0.2,
-    })
-    content = result.content
-  } catch {
-    usedFallback = true
-    const result = await callOllama({
-      model: 'ollama/llava',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        {
-          role: 'user',
-          content: [
-            { type: 'image_url', image_url: { url: imageUrl } },
-            { type: 'text', text: 'Analyze this food photo.' },
-          ],
-        },
-      ],
-      maxTokens: 500,
-    })
-    content = result.content
-  }
-
-  let foodData: ChatOutput['foodData'] | undefined
-  try {
-    const jsonMatch = content.match(/\{[\s\S]*\}/)
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0])
-      foodData = {
-        name: parsed.name ?? 'Unknown food',
-        calories: Number(parsed.calories ?? 0),
-        proteinG: Number(parsed.proteinG ?? 0),
-        carbsG: Number(parsed.carbsG ?? 0),
-        fatG: Number(parsed.fatG ?? 0),
-        serving: parsed.serving ?? '1 serving',
-        suggestedMealType: parsed.suggestedMealType ?? 'snack',
-      }
-    }
-  } catch {
-    // keep undefined
-  }
-
-  const safeContent = applyGuardrails(content)
-
-  await prisma.aiAuditLog.create({
-    data: {
-      userId,
-      skillName: 'food_vision',
-      model,
-      provider: usedFallback ? 'ollama' : 'openrouter',
-      userMessage: '[food photo]',
-      aiResponse: safeContent,
-      flagged: false,
-    },
-  })
-
-  return {
-    message: safeContent,
-    type: 'food-analysis',
-    foodData,
-    usedFallback,
-  }
+  return handleChat({ userId, messageId: crypto.randomUUID(), message: 'Analyze this food photo', attachments: [{ type: 'image', url: imageUrl }] })
 }

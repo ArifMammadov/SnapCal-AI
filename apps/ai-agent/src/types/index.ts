@@ -1,38 +1,19 @@
-export interface Skill {
-  name: string
-  description?: string
-  systemPrompt: string
-  tools: string[]
-  allowedModels: string[]
-  fallbackModel: string
-  isActive: boolean
+export interface Attachment {
+  type: 'image' | 'audio'
+  url: string
 }
-
-export interface ToolContext {
-  userId: string
-  message: string
-  skillName: string
-  attachments?: { type: string; url: string }[]
-}
-
-export interface ToolResult {
-  success: boolean
-  data?: unknown
-  error?: string
-}
-
-export type Tool = (context: ToolContext) => Promise<ToolResult>
 
 export interface ChatInput {
   userId: string
-  message: string
   messageId: string
-  attachments?: { type: 'image' | 'audio'; url: string }[]
+  message?: string
+  attachments?: Attachment[]
 }
 
-export interface ChatOutput {
-  message: string
-  type: 'text' | 'food-analysis' | 'macro-card' | 'voice'
+export interface ChatMessage {
+  id: string
+  role: 'user' | 'ai'
+  content: string
   foodData?: {
     name: string
     calories: number
@@ -42,5 +23,35 @@ export interface ChatOutput {
     serving: string
     suggestedMealType: string
   }
-  usedFallback: boolean
+}
+
+export interface ChatOutput {
+  message: ChatMessage
+}
+
+export interface ToolContext {
+  userId: string
+  message: string
+  attachments?: Attachment[]
+  metadata?: {
+    language?: string
+    subscriptionStatus?: string | null
+    region?: string
+  }
+}
+
+export interface ToolResult {
+  success: boolean
+  data?: unknown
+  error?: string
+}
+
+export interface Skill {
+  name: string
+  description?: string
+  systemPrompt: string
+  tools: string[]
+  allowedModels: string[]
+  fallbackModel: string
+  isActive: boolean
 }

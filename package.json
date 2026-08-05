@@ -3,22 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
   "scripts": {
     "dev:mobile": "pnpm --filter @snapcal/mobile dev",
     "dev:admin": "pnpm --filter @snapcal/admin dev",
     "dev:api": "pnpm --filter @snapcal/api dev",
     "dev:ai": "pnpm --filter @snapcal/ai-agent dev",
     "dev:bot": "pnpm --filter @snapcal/telegram-bot dev",
-    "build": "pnpm -r build",
-    "lint": "pnpm -r lint",
+    "build": "pnpm --filter @snapcal/database build \u0026\u0026 pnpm --filter @snapcal/shared build \u0026\u0026 pnpm --filter @snapcal/api build \u0026\u0026 pnpm --filter @snapcal/ai-agent build \u0026\u0026 pnpm --filter @snapcal/telegram-bot build \u0026\u0026 pnpm --filter @snapcal/mobile build \u0026\u0026 pnpm --filter @snapcal/admin build",
     "typecheck": "pnpm -r typecheck",
-    "db:generate": "pnpm --filter @snapcal/database generate",
-    "db:migrate": "pnpm --filter @snapcal/database migrate",
-    "db:studio": "pnpm --filter @snapcal/database studio",
     "test": "pnpm -r test"
   },
   "devDependencies": {

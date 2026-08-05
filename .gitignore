@@ -9,3 +9,18 @@ dist/
 .vscode/
 coverage/
 *.tsbuildinfo
+
+# Build artifacts
+**/dist
+**/tsconfig.tsbuildinfo
+**/vite.config.js
+**/vite.config.d.ts
+**/*.js.map
+**/*.d.ts.map
+# Exclude emitted JS in src when built
+packages/*/src/**/*.js
+packages/*/src/**/*.d.ts
+apps/*/src/**/*.js
+apps/*/src/**/*.d.ts
+!apps/*/src/**/*.tsx
+!apps/*/src/**/*.ts

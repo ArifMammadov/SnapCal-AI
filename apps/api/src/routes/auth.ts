@@ -10,6 +10,10 @@ const telegramAuthSchema = z.object({
   initData: z.string().min(1),
 })
 
+const refreshSchema = z.object({
+  refreshToken: z.string().min(1),
+})
+
 function verifyTelegramInitData(initData: string): Record<string, string> | null {
   const urlParams = new URLSearchParams(initData)
   const hash = urlParams.get('hash')
@@ -94,7 +98,7 @@ const authPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
     )
     const refreshToken = app.jwt.sign(
       { userId: user.id, type: 'refresh' },
-      { secret: env.JWT_REFRESH_SECRET, expiresIn: '7d' }
+      { expiresIn: '7d' }
     )
 
     await prisma.user.update({
@@ -119,13 +123,10 @@ const authPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
   })
 
   app.post('/refresh', async (request: FastifyRequest, reply: FastifyReply) => {
-    const { refreshToken } = request.cookies ?? {}
-    if (!refreshToken) {
-      return reply.status(401).send({ error: { code: 'NO_REFRESH_TOKEN', message: 'No refresh token' } })
-    }
+    const { refreshToken } = refreshSchema.parse(request.body)
 
     try {
-      const payload = app.jwt.verify<{ userId: string; type: string }>(refreshToken, { secret: env.JWT_REFRESH_SECRET })
+      const payload = app.jwt.verify<{ userId: string; type: string }>(refreshToken)
       if (payload.type !== 'refresh') throw new Error('Invalid token type')
 
       const user = await prisma.user.findUnique({ where: { id: payload.userId } })
@@ -137,7 +138,7 @@ const authPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
       )
       const newRefreshToken = app.jwt.sign(
         { userId: user.id, type: 'refresh' },
-        { secret: env.JWT_REFRESH_SECRET, expiresIn: '7d' }
+        { expiresIn: '7d' }
       )
 
       return { accessToken: newAccessToken, refreshToken: newRefreshToken }

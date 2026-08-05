@@ -2,30 +2,33 @@ import type { FastifyInstance, FastifyPluginAsync, FastifyRequest } from 'fastif
 import fp from 'fastify-plugin'
 import { z } from 'zod'
 import { handleChat, analyzeFoodPhoto } from '../agent/orchestrator.js'
+import type { ChatInput } from '../types/index.js'
 
 const chatSchema = z.object({
-  userId: z.string().uuid(),
-  message: z.string().max(4000),
-  messageId: z.string().uuid(),
-  attachments: z.array(z.object({ type: z.enum(['image', 'audio']), url: z.string().url() })).optional(),
+  message: z.string().min(1).max(4000),
 })
 
-const analyzePhotoSchema = z.object({
-  userId: z.string().uuid(),
+const photoSchema = z.object({
   imageUrl: z.string().url(),
 })
 
-const aiAgentRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
+const agentRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
   app.post('/chat', async (request: FastifyRequest, reply) => {
-    const input = chatSchema.parse(request.body)
-    const output = await handleChat(input)
-    return output
+    const body = chatSchema.parse(request.body)
+    const input: ChatInput = {
+      userId: 'demo-user',
+      messageId: crypto.randomUUID(),
+      message: body.message,
+    }
+    const result = await handleChat(input)
+    return reply.send(result)
   })
 
-  app.post('/analyze-photo', async (request: FastifyRequest) => {
-    const { userId, imageUrl } = analyzePhotoSchema.parse(request.body)
-    return analyzeFoodPhoto(userId, imageUrl)
+  app.post('/analyze-photo', async (request: FastifyRequest, reply) => {
+    const body = photoSchema.parse(request.body)
+    const result = await analyzeFoodPhoto('demo-user', body.imageUrl)
+    return reply.send(result)
   })
 }
 
-export const aiRoutes = fp(aiAgentRoutesPlugin)
+export default fp(agentRoutes, { name: 'agentRoutes' })

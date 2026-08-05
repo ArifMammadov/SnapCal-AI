@@ -149,7 +149,7 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
       where: { id: messageId, userId, role: 'AI' },
     })
     if (!message) {
-      return request.server.httpHandler
+      throw new Error('Message not found')
     }
 
     await prisma.chatMessage.update({
