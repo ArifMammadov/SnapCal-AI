@@ -1,0 +1,129 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: snapcal
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-snapcal_dev_password}
+      POSTGRES_DB: snapcal
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U snapcal -d snapcal"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: api
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://snapcal:${POSTGRES_PASSWORD:-snapcal_dev_password}@postgres:5432/snapcal
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      MOBILE_APP_URL: ${MOBILE_APP_URL}
+      ADMIN_APP_URL: ${ADMIN_APP_URL}
+      AI_AGENT_URL: http://ai-agent:4001
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  ai-agent:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: ai-agent
+    environment:
+      NODE_ENV: production
+      PORT: 4001
+      DATABASE_URL: postgresql://snapcal:${POSTGRES_PASSWORD:-snapcal_dev_password}@postgres:5432/snapcal
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      API_SERVICE_URL: http://api:4000
+    ports:
+      - "4001:4001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  telegram-bot:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: telegram-bot
+    environment:
+      NODE_ENV: production
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      MOBILE_APP_URL: ${MOBILE_APP_URL}
+      DATABASE_URL: postgresql://snapcal:${POSTGRES_PASSWORD:-snapcal_dev_password}@postgres:5432/snapcal
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  mobile:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: mobile-static
+    ports:
+      - "5173:80"
+
+  admin:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: admin-static
+    ports:
+      - "5176:80"
+
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    profiles:
+      - ai-local
+
+volumes:
+  postgres_data:
+  redis_data:
+  ollama_data:

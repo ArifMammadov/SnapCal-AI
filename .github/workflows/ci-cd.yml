@@ -1,0 +1,204 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main, develop, staging, test]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  NODE_VERSION: '22'
+  PNPM_VERSION: '9'
+
+jobs:
+  lint-and-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Type check
+        run: pnpm typecheck
+
+  test:
+    runs-on: ubuntu-latest
+    needs: lint-and-typecheck
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests
+        run: pnpm test
+
+  build-and-push:
+    runs-on: ubuntu-latest
+    needs: [lint-and-typecheck, test]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/test'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.DOCKER_REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Set image tag
+        id: vars
+        run: |
+          BRANCH=${GITHUB_REF#refs/heads/}
+          echo "tag=${BRANCH}-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+          echo "branch=${BRANCH}" >> $GITHUB_OUTPUT
+
+      - name: Build and push API
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: api
+          push: true
+          tags: ${{ secrets.DOCKER_REGISTRY }}/snapcal-api:${{ steps.vars.outputs.tag }},${{ secrets.DOCKER_REGISTRY }}/snapcal-api:${{ steps.vars.outputs.branch }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push AI Agent
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: ai-agent
+          push: true
+          tags: ${{ secrets.DOCKER_REGISTRY }}/snapcal-ai-agent:${{ steps.vars.outputs.tag }},${{ secrets.DOCKER_REGISTRY }}/snapcal-ai-agent:${{ steps.vars.outputs.branch }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Telegram Bot
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: telegram-bot
+          push: true
+          tags: ${{ secrets.DOCKER_REGISTRY }}/snapcal-telegram-bot:${{ steps.vars.outputs.tag }},${{ secrets.DOCKER_REGISTRY }}/snapcal-telegram-bot:${{ steps.vars.outputs.branch }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Mobile
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: mobile-static
+          push: true
+          tags: ${{ secrets.DOCKER_REGISTRY }}/snapcal-mobile:${{ steps.vars.outputs.tag }},${{ secrets.DOCKER_REGISTRY }}/snapcal-mobile:${{ steps.vars.outputs.branch }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Admin
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: admin-static
+          push: true
+          tags: ${{ secrets.DOCKER_REGISTRY }}/snapcal-admin:${{ steps.vars.outputs.tag }},${{ secrets.DOCKER_REGISTRY }}/snapcal-admin:${{ steps.vars.outputs.branch }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy-test:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/test'
+    environment:
+      name: test
+      url: http://157.230.113.0:5175
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to test
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 157.230.113.0
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/snapcal/test
+            docker pull ${{ secrets.DOCKER_REGISTRY }}/snapcal-api:test
+            docker pull ${{ secrets.DOCKER_REGISTRY }}/snapcal-ai-agent:test
+            docker pull ${{ secrets.DOCKER_REGISTRY }}/snapcal-telegram-bot:test
+            docker pull ${{ secrets.DOCKER_REGISTRY }}/snapcal-mobile:test
+            docker pull ${{ secrets.DOCKER_REGISTRY }}/snapcal-admin:test
+            docker-compose -f docker-compose.test.yml up -d
+
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/staging'
+    environment:
+      name: staging
+      url: http://157.230.113.0:5174
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to staging
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 157.230.113.0
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/snapcal/staging
+            docker pull ${{ secrets.DOCKER_REGISTRY }}/snapcal-api:staging
+            docker pull ${{ secrets.DOCKER_REGISTRY }}/snapcal-ai-agent:staging
+            docker pull ${{ secrets.DOCKER_REGISTRY }}/snapcal-telegram-bot:staging
+            docker pull ${{ secrets.DOCKER_REGISTRY }}/snapcal-mobile:staging
+            docker pull ${{ secrets.DOCKER_REGISTRY }}/snapcal-admin:staging
+            docker-compose -f docker-compose.staging.yml up -d
+
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: https://snapcal.health
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Blue-green deploy to production
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 157.230.113.0
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/snapcal/production
+            export IMAGE_TAG=main-${{ github.sha }}
+            ./scripts/blue-green-deploy.sh

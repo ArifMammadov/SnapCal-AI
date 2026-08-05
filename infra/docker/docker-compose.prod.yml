@@ -1,0 +1,155 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: snapcal
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: snapcal
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - snapcal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U snapcal -d snapcal"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    networks:
+      - snapcal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  api-blue:
+    image: ${DOCKER_REGISTRY}/snapcal-api:${IMAGE_TAG}
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      MOBILE_APP_URL: ${MOBILE_APP_URL}
+      ADMIN_APP_URL: ${ADMIN_APP_URL}
+      AI_AGENT_URL: http://ai-agent:4001
+    networks:
+      - snapcal
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:4000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+      update_config:
+        parallelism: 1
+        delay: 10s
+        failure_action: rollback
+
+  ai-agent-blue:
+    image: ${DOCKER_REGISTRY}/snapcal-ai-agent:${IMAGE_TAG}
+    environment:
+      NODE_ENV: production
+      PORT: 4001
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL}
+      API_SERVICE_URL: http://api:4000
+    networks:
+      - snapcal
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:4001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+
+  telegram-bot:
+    image: ${DOCKER_REGISTRY}/snapcal-telegram-bot:${IMAGE_TAG}
+    environment:
+      NODE_ENV: production
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      MOBILE_APP_URL: ${MOBILE_APP_URL}
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+    networks:
+      - snapcal
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  mobile:
+    image: ${DOCKER_REGISTRY}/snapcal-mobile:${IMAGE_TAG}
+    networks:
+      - snapcal
+    deploy:
+      replicas: 2
+
+  admin:
+    image: ${DOCKER_REGISTRY}/snapcal-admin:${IMAGE_TAG}
+    networks:
+      - snapcal
+    deploy:
+      replicas: 2
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infra/nginx/ssl:/etc/nginx/ssl:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    networks:
+      - snapcal
+    depends_on:
+      - api-blue
+      - ai-agent-blue
+      - mobile
+      - admin
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  snapcal:
+    driver: overlay
+    attachable: true

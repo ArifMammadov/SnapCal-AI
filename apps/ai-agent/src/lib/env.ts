@@ -1,0 +1,13 @@
+import { z } from 'zod'
+
+export const env = z.object({
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  PORT: z.string().transform(Number).default('4001'),
+  JWT_SECRET: z.string().min(32),
+  DATABASE_URL: z.string().url(),
+  REDIS_URL: z.string().default('redis://localhost:6379'),
+  OPENROUTER_API_KEY: z.string().optional(),
+  OPENROUTER_BASE_URL: z.string().url().default('https://openrouter.ai/api/v1'),
+  OLLAMA_BASE_URL: z.string().url().default('http://localhost:11434'),
+  API_SERVICE_URL: z.string().url().default('http://localhost:4000'),
+}).parse(process.env)

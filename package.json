@@ -1,0 +1,33 @@
+{
+  "name": "snapcal-ai",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:mobile": "pnpm --filter @snapcal/mobile dev",
+    "dev:admin": "pnpm --filter @snapcal/admin dev",
+    "dev:api": "pnpm --filter @snapcal/api dev",
+    "dev:ai": "pnpm --filter @snapcal/ai-agent dev",
+    "dev:bot": "pnpm --filter @snapcal/telegram-bot dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "db:generate": "pnpm --filter @snapcal/database generate",
+    "db:migrate": "pnpm --filter @snapcal/database migrate",
+    "db:studio": "pnpm --filter @snapcal/database studio",
+    "test": "pnpm -r test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.15.0"
+}

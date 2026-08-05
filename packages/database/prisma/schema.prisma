@@ -1,0 +1,420 @@
+// Central Prisma schema for SnapCal AI
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                   String           @id @default(uuid()) @db.Uuid
+  telegramId           BigInt           @unique
+  telegramUsername     String?
+  firstName            String?
+  lastName             String?
+  avatarUrl            String?
+  languageCode         String           @default("en")
+  regionCode           String?
+  email                String?
+  phone                String?
+  role                 UserRole         @default(USER)
+  subscriptionStatus   SubscriptionStatus @default(INACTIVE)
+  subscriptionPlanId   String?          @db.Uuid
+  subscriptionExpiresAt DateTime?
+  trialEndsAt          DateTime?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  profile       Profile?
+  foodLogs      FoodLog[]
+  activityLogs  ActivityLog[]
+  metricLogs    MetricLog[]
+  chatMessages  ChatMessage[]
+  subscriptions Subscription[]
+  enrollments   Enrollment[]
+  userFacts     UserFact[]
+  aiAuditLogs   AiAuditLog[]
+  knowledgeArticles KnowledgeArticle[] @relation("CreatedBy")
+  staffInvites  StaffInvite[]        @relation("InvitedBy")
+
+  @@index([telegramId])
+  @@index([subscriptionStatus])
+  @@map("users")
+}
+
+model Profile {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @unique @db.Uuid
+  birthDate         DateTime? @db.Date
+  gender            Gender?
+  heightCm          Int?
+  currentWeightKg   Decimal? @db.Decimal(5, 2)
+  targetWeightKg    Decimal? @db.Decimal(5, 2)
+  primaryGoal       PrimaryGoal?
+  activityLevel     ActivityLevel?
+  dietaryPreferences String[]
+  allergies         String[]
+  dailyCalories     Int?
+  dailyProteinG     Int?
+  dailyCarbsG       Int?
+  dailyFatG         Int?
+  dailyWaterMl      Int?
+  dailySleepH       Decimal? @db.Decimal(3, 1)
+  dailySteps        Int?
+  timezone          String   @default("UTC")
+  units             String   @default("metric")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+model SubscriptionPlan {
+  id            String   @id @default(uuid()) @db.Uuid
+  name          String
+  slug          String   @unique
+  priceUsd      Decimal  @db.Decimal(10, 2)
+  interval      PlanInterval
+  stripePriceId String?
+  features      String[]
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  subscriptions Subscription[]
+
+  @@map("subscription_plans")
+}
+
+model Subscription {
+  id                   String   @id @default(uuid()) @db.Uuid
+  userId               String   @db.Uuid
+  planId               String?  @db.Uuid
+  stripeSubscriptionId String?
+  status               SubscriptionStatus
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  canceledAt           DateTime?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  user User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan SubscriptionPlan? @relation(fields: [planId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@map("subscriptions")
+}
+
+model FoodLog {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @db.Uuid
+  mealType      MealType
+  name          String
+  calories      Int
+  proteinG      Int?
+  carbsG        Int?
+  fatG          Int?
+  imageUrl      String?
+  aiAnalyzed    Boolean  @default(false)
+  loggedAt      DateTime
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, loggedAt])
+  @@map("food_logs")
+}
+
+model ActivityLog {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @db.Uuid
+  type            String
+  durationMin     Int
+  caloriesBurned  Int?
+  startedAt       DateTime
+  notes           String?
+  createdAt       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, startedAt])
+  @@map("activity_logs")
+}
+
+model MetricLog {
+  id        String     @id @default(uuid()) @db.Uuid
+  userId    String     @db.Uuid
+  metricType MetricType
+  value     Decimal    @db.Decimal(10, 2)
+  loggedAt  DateTime
+  createdAt DateTime   @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, metricType, loggedAt])
+  @@map("metric_logs")
+}
+
+model ChatMessage {
+  id                String    @id @default(uuid()) @db.Uuid
+  userId            String    @db.Uuid
+  role              MessageRole
+  type              MessageType @default(TEXT)
+  content           String
+  attachments       Json?
+  modelUsed         String?
+  tokensInput       Int?
+  tokensOutput      Int?
+  latencyMs         Int?
+  feedbackRating    FeedbackRating?
+  feedbackCorrection String?
+  createdAt         DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("chat_messages")
+}
+
+model UserFact {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  key        String
+  value      String
+  source     String?
+  confidence Decimal  @db.Decimal(3, 2) @default(0.8)
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+  @@index([userId])
+  @@map("user_facts")
+}
+
+model KnowledgeArticle {
+  id          String   @id @default(uuid()) @db.Uuid
+  title       String
+  slug        String   @unique
+  content     String
+  category    String?
+  tags        String[]
+  sourceUrl   String?
+  isPublished Boolean  @default(true)
+  createdBy   String?  @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  creator User?           @relation("CreatedBy", fields: [createdBy], references: [id])
+  chunks  KnowledgeChunk[]
+
+  @@index([isPublished, category])
+  @@map("knowledge_articles")
+}
+
+model KnowledgeChunk {
+  id          String @id @default(uuid()) @db.Uuid
+  articleId   String @db.Uuid
+  chunkIndex  Int
+  content     String
+  embedding   Unsupported("vector(768)")?
+
+  article KnowledgeArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@index([articleId])
+  @@map("knowledge_chunks")
+}
+
+model AiSkill {
+  id              String   @id @default(uuid()) @db.Uuid
+  name            String   @unique
+  description     String?
+  systemPrompt    String
+  tools           String[]
+  allowedModels   String[]
+  fallbackModel   String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  trainingExamples TrainingExample[]
+
+  @@map("ai_skills")
+}
+
+model TrainingExample {
+  id              String   @id @default(uuid()) @db.Uuid
+  skillId         String   @db.Uuid
+  inputText       String
+  expectedOutput  String
+  context         Json?
+  source          String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  skill AiSkill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@index([skillId])
+  @@map("training_examples")
+}
+
+model Program {
+  id            String   @id @default(uuid()) @db.Uuid
+  name          String
+  slug          String   @unique
+  instructor    String?
+  category      String?
+  description   String?
+  durationWeeks Int?
+  priceUsd      Decimal? @db.Decimal(10, 2)
+  includes      String[]
+  level         String?
+  rating        Decimal? @db.Decimal(2, 1)
+  reviewsCount  Int      @default(0)
+  emoji         String?
+  gradient      String?
+  tag           String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  enrollments Enrollment[]
+
+  @@index([isActive, category])
+  @@map("programs")
+}
+
+model Enrollment {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @db.Uuid
+  programId     String   @db.Uuid
+  status        String   @default("active")
+  paymentStatus String?
+  enrolledAt    DateTime @default(now())
+  expiresAt     DateTime?
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, programId])
+  @@map("enrollments")
+}
+
+model AiAuditLog {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String?  @db.Uuid
+  requestId     String?
+  skillName     String?
+  model         String?
+  provider      String?
+  tokensInput   Int?
+  tokensOutput  Int?
+  costUsd       Decimal? @db.Decimal(10, 6)
+  latencyMs     Int?
+  userMessage   String?
+  aiResponse    String?
+  flagged       Boolean  @default(false)
+  flagReason    String?
+  createdAt     DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([skillName])
+  @@map("ai_audit_logs")
+}
+
+model StaffInvite {
+  id        String    @id @default(uuid()) @db.Uuid
+  email     String
+  role      UserRole
+  invitedBy String?   @db.Uuid
+  token     String    @unique
+  usedAt    DateTime?
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+
+  inviter User? @relation("InvitedBy", fields: [invitedBy], references: [id])
+
+  @@map("staff_invites")
+}
+
+enum UserRole {
+  USER
+  SUPPORT
+  ADMIN
+  VIEWER
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum PrimaryGoal {
+  FAT_LOSS
+  MUSCLE_GAIN
+  MAINTENANCE
+  HEALTH
+}
+
+enum ActivityLevel {
+  SEDENTARY
+  LIGHT
+  MODERATE
+  ACTIVE
+  VERY_ACTIVE
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  INACTIVE
+  TRIALING
+  CANCELED
+  PAST_DUE
+}
+
+enum PlanInterval {
+  MONTHLY
+  SIX_MONTH
+  YEARLY
+}
+
+enum MealType {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACK
+}
+
+enum MetricType {
+  WATER_ML
+  SLEEP_H
+  WEIGHT_KG
+  STEPS
+}
+
+enum MessageRole {
+  USER
+  AI
+  SYSTEM
+}
+
+enum MessageType {
+  TEXT
+  FOOD_ANALYSIS
+  MACRO_CARD
+  VOICE
+}
+
+enum FeedbackRating {
+  UP
+  DOWN
+}

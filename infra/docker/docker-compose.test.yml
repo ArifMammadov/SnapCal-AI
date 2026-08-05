@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: snapcal
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-snapcal_test_password}
+      POSTGRES_DB: snapcal
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_test_data:/data
+
+  api:
+    image: ${DOCKER_REGISTRY}/snapcal-api:test
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://snapcal:${POSTGRES_PASSWORD:-snapcal_test_password}@postgres:5432/snapcal
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+    ports:
+      - "5175:4000"
+
+  ai-agent:
+    image: ${DOCKER_REGISTRY}/snapcal-ai-agent:test
+    environment:
+      NODE_ENV: production
+      PORT: 4001
+      DATABASE_URL: postgresql://snapcal:${POSTGRES_PASSWORD:-snapcal_test_password}@postgres:5432/snapcal
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET}
+
+  telegram-bot:
+    image: ${DOCKER_REGISTRY}/snapcal-telegram-bot:test
+    environment:
+      NODE_ENV: production
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      MOBILE_APP_URL: http://157.230.113.0:5175
+      DATABASE_URL: postgresql://snapcal:${POSTGRES_PASSWORD:-snapcal_test_password}@postgres:5432/snapcal
+      REDIS_URL: redis://redis:6379
+
+  mobile:
+    image: ${DOCKER_REGISTRY}/snapcal-mobile:test
+    ports:
+      - "8081:80"
+
+  admin:
+    image: ${DOCKER_REGISTRY}/snapcal-admin:test
+    ports:
+      - "8082:80"
+
+volumes:
+  postgres_test_data:
+  redis_test_data:
