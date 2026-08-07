@@ -6,6 +6,7 @@ declare global {
       WebApp?: {
         ready: () => void
         expand: () => void
+        initDataUnsafe?: { user?: any }
       }
     }
   }
@@ -21,10 +22,9 @@ export function useTelegram() {
     if (webApp) {
       webApp.ready()
       webApp.expand()
-      setReady(true)
-    } else {
-      setTimeout(() => setReady(true), 300)
     }
+    // Always mark ready so browser fallback works
+    setTimeout(() => setReady(true), 200)
   }, [])
 
   return { ready }
