@@ -40,7 +40,15 @@ export const userRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
       where: { id: request.user!.userId },
       include: { profile: true, subscriptions: { where: { status: 'ACTIVE' }, take: 1 } },
     })
-    return user
+    if (!user) return null
+    return {
+      ...user,
+      telegramId: user.telegramId.toString(),
+      subscriptions: user.subscriptions.map((s: { stripeSubscriptionId: string | null }) => ({
+        ...s,
+        stripeSubscriptionId: s.stripeSubscriptionId ?? undefined,
+      })),
+    }
   })
 
   app.patch('/me/profile', async (request: FastifyRequest) => {
@@ -59,11 +67,17 @@ export const userRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
       })
     }
 
-    return prisma.profile.upsert({
+    const updated = await prisma.profile.upsert({
       where: { userId },
       update: { ...data, dailyCalories },
       create: { userId, ...data, dailyCalories },
     })
+
+    return {
+      ...updated,
+      currentWeightKg: updated.currentWeightKg ? Number(updated.currentWeightKg) : null,
+      targetWeightKg: updated.targetWeightKg ? Number(updated.targetWeightKg) : null,
+    }
   })
 
   app.get('/me/subscription', async (request: FastifyRequest) => {
@@ -81,7 +95,12 @@ export const userRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
       trialEndsAt: user?.trialEndsAt,
       inTrial: !!inTrial,
       isPro: !!activeSub || !!inTrial,
-      subscription: activeSub ?? null,
+      subscription: activeSub
+        ? {
+            ...activeSub,
+            stripeSubscriptionId: activeSub.stripeSubscriptionId ?? undefined,
+          }
+        : null,
     }
   })
 }
