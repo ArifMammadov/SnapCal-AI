@@ -1,7 +1,12 @@
-import type { FastifyInstance, FastifyPluginAsync, FastifyRequest } from 'fastify'
+import type { FastifyInstance, FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify'
 import fp from 'fastify-plugin'
 import { z } from 'zod'
+import fs from 'node:fs'
+import path from 'node:path'
+
+import { pipeline as pump } from 'node:stream/promises'
 import { prisma } from '@snapcal/database'
+import { env } from '../lib/env.js'
 import { requireAuth } from './users.js'
 
 const foodLogSchema = z.object({
@@ -66,6 +71,13 @@ const trackingRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) =>
     })
   })
 
+  app.delete('/food/:id', async (request: FastifyRequest, reply) => {
+    const { id } = request.params as { id: string }
+    const userId = request.user!.userId
+    await prisma.foodLog.deleteMany({ where: { id, userId } })
+    return reply.status(204).send()
+  })
+
   app.post('/activity', async (request: FastifyRequest) => {
     const data = activityLogSchema.parse(request.body)
     const userId = request.user!.userId
@@ -84,6 +96,13 @@ const trackingRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) =>
       },
       orderBy: { startedAt: 'asc' },
     })
+  })
+
+  app.delete('/activity/:id', async (request: FastifyRequest, reply) => {
+    const { id } = request.params as { id: string }
+    const userId = request.user!.userId
+    await prisma.activityLog.deleteMany({ where: { id, userId } })
+    return reply.status(204).send()
   })
 
   app.post('/metric', async (request: FastifyRequest) => {
@@ -106,6 +125,33 @@ const trackingRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) =>
     })
   })
 
+  app.delete('/metric/:id', async (request: FastifyRequest, reply) => {
+    const { id } = request.params as { id: string }
+    const userId = request.user!.userId
+    await prisma.metricLog.deleteMany({ where: { id, userId } })
+    return reply.status(204).send()
+  })
+
+
+  app.post('/upload', async (request: FastifyRequest, reply: FastifyReply) => {
+    const data = await request.file()
+    if (!data) return reply.status(400).send({ error: { code: 'NO_FILE', message: 'No file uploaded' } })
+
+    const ext = (data.filename.split('.').pop() || 'jpg').toLowerCase()
+    const allowed = ['jpg', 'jpeg', 'png', 'webp']
+    if (!allowed.includes(ext)) return reply.status(400).send({ error: { code: 'INVALID_TYPE', message: 'Only images allowed' } })
+
+    const uploadDir = '/opt/snapcal/uploads'
+    fs.mkdirSync(uploadDir, { recursive: true })
+    const filename = request.user!.userId + '_' + Date.now() + '.' + ext
+    const filepath = path.join(uploadDir, filename)
+
+    await pump(data.file, fs.createWriteStream(filepath))
+
+    const url = env.MOBILE_APP_URL + '/uploads/' + filename
+    return { url }
+  })
+
   app.get('/summary', async (request: FastifyRequest) => {
     const { date } = dateQuerySchema.parse(request.query)
     const { start, end } = getDateRange(date)
@@ -123,16 +169,13 @@ const trackingRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) =>
     const carbsG = foodLogs.reduce((s: number, f: { carbsG: number | null }) => s + (f.carbsG ?? 0), 0)
     const fatG = foodLogs.reduce((s: number, f: { fatG: number | null }) => s + (f.fatG ?? 0), 0)
     const waterMl = metrics
-      .filter((m: { metricType: string }) => m.metricType === 'WATER_ML')
-      .reduce((s: number, m: { value: number }) => s + Number(m.value), 0)
-    const sleepH = metrics.find((m: { metricType: string; value: number }) => m.metricType === 'SLEEP_H')?.value ?? 0
+      .filter((m) => m.metricType === 'WATER_ML')
+      .reduce((s, m) => s + Number(m.value), 0)
+    const sleepH = Number(metrics.find((m) => m.metricType === 'SLEEP_H')?.value ?? 0)
     const steps = metrics
-      .filter((m: { metricType: string }) => m.metricType === 'STEPS')
-      .reduce((s: number, m: { value: number }) => s + Number(m.value), 0)
-    const weightKg =
-      metrics.find((m: { metricType: string; value: number }) => m.metricType === 'WEIGHT_KG')?.value ??
-      profile?.currentWeightKg ??
-      0
+      .filter((m) => m.metricType === 'STEPS')
+      .reduce((s, m) => s + Number(m.value), 0)
+    const weightKg = (Number(metrics.find((m) => m.metricType === 'WEIGHT_KG')?.value ?? 0) || (profile?.currentWeightKg ?? 0))
     const activitiesCount = activities.length
     const caloriesBurned = activities.reduce((s: number, a: { caloriesBurned: number | null }) => s + (a.caloriesBurned ?? 0), 0)
 

@@ -3,6 +3,7 @@ import cors from '@fastify/cors'
 import helmet from '@fastify/helmet'
 import jwt from '@fastify/jwt'
 import rateLimit from '@fastify/rate-limit'
+import multipart from '@fastify/multipart'
 import { env } from './lib/env.js'
 import { authRoutes } from './routes/auth.js'
 import { userRoutes } from './routes/users.js'
@@ -45,6 +46,8 @@ export async function buildApp() {
       signed: false,
     },
   })
+
+  await app.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } })
 
   await app.register(rateLimit, {
     max: 100,

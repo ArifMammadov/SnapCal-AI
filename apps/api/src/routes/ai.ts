@@ -86,7 +86,7 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
         data: {
           userId,
           role: 'AI',
-          type: aiResponse.type,
+          type: aiResponse.type as any,
           content: aiResponse.message,
           attachments: aiResponse.foodData ? { foodData: aiResponse.foodData } : undefined,
         },
@@ -96,7 +96,7 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
         message: {
           id: aiMessage.id,
           role: 'ai',
-          type: aiResponse.type,
+          type: aiResponse.type as any,
           content: aiResponse.message,
           foodData: aiResponse.foodData,
           timestamp: aiMessage.createdAt.toISOString(),

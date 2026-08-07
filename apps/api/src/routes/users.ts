@@ -6,6 +6,7 @@ import { calculateCalorieGoal } from '@snapcal/shared'
 import type { JwtPayload } from '../types/auth.js'
 
 export const requireAuth = async (request: FastifyRequest, reply: FastifyReply) => {
+  if (request.url === '/health' || request.url.startsWith('/api/auth/')) return
   try {
     const payload = await request.server.jwt.verify<JwtPayload>(request.headers.authorization?.replace('Bearer ', '') ?? '')
     request.user = payload
@@ -35,13 +36,6 @@ const updateProfileSchema = z.object({
 const userRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
   app.addHook('preHandler', requireAuth)
 
-  app.get('/me', async (request: FastifyRequest) => {
-    const user = await prisma.user.findUnique({
-      where: { id: request.user!.userId },
-      include: { profile: true },
-    })
-    return user
-  })
 
   app.patch('/me/profile', async (request: FastifyRequest) => {
     const data = updateProfileSchema.parse(request.body)
@@ -66,13 +60,6 @@ const userRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
     })
   })
 
-  app.get('/summary', async (request: FastifyRequest) => {
-    const user = await prisma.user.findUnique({
-      where: { id: request.user!.userId },
-      include: { profile: true, activeSubscription: true },
-    })
-    return user
-  })
-}
+  }
 
 export const userRoutes = fp(userRoutesPlugin)
