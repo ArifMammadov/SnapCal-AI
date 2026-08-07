@@ -5,10 +5,9 @@ function slugify(name: string) {
 }
 
 async function main() {
-  // Subscription plans
+  // Subscription plans (upsert by slug because id is UUID)
   const plans = [
     {
-      id: 'free',
       name: 'Free',
       slug: 'free',
       priceUsd: 0,
@@ -17,7 +16,6 @@ async function main() {
       isActive: true,
     },
     {
-      id: 'pro_monthly',
       name: 'Pro Monthly',
       slug: 'pro-monthly',
       priceUsd: 5.00,
@@ -26,7 +24,6 @@ async function main() {
       isActive: true,
     },
     {
-      id: 'pro_6months',
       name: 'Pro 6 Months',
       slug: 'pro-6months',
       priceUsd: 25.00,
@@ -35,7 +32,6 @@ async function main() {
       isActive: true,
     },
     {
-      id: 'pro_annual',
       name: 'Pro Annual',
       slug: 'pro-annual',
       priceUsd: 45.00,
@@ -47,7 +43,7 @@ async function main() {
 
   for (const plan of plans) {
     await prisma.subscriptionPlan.upsert({
-      where: { id: plan.id },
+      where: { slug: plan.slug },
       update: {},
       create: plan,
     })
