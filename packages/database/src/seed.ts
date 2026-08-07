@@ -1,6 +1,4 @@
-import { PrismaClient } from '@prisma/client'
-
-const prisma = new PrismaClient()
+import { prisma } from './index.js'
 
 function slugify(name: string) {
   return name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').slice(0, 60)
@@ -8,57 +6,52 @@ function slugify(name: string) {
 
 async function main() {
   // Subscription plans
-  await prisma.subscriptionPlan.upsert({
-    where: { id: 'free' },
-    update: {},
-    create: {
+  const plans = [
+    {
       id: 'free',
       name: 'Free',
-      description: '1 free scan per day, basic tracking, AI coach limited',
-      priceCents: 0,
-      interval: 'MONTHLY',
+      slug: 'free',
+      priceUsd: 0,
+      interval: 'MONTHLY' as const,
+      features: ['1 free scan per day', 'Basic tracking', 'Limited AI coach'],
       isActive: true,
     },
-  })
-
-  await prisma.subscriptionPlan.upsert({
-    where: { id: 'pro_monthly' },
-    update: {},
-    create: {
+    {
       id: 'pro_monthly',
       name: 'Pro Monthly',
-      description: 'Unlimited AI, photo analysis, full analytics, priority support',
-      priceCents: 500,
-      interval: 'MONTHLY',
+      slug: 'pro-monthly',
+      priceUsd: 5.00,
+      interval: 'MONTHLY' as const,
+      features: ['Unlimited AI', 'Photo analysis', 'Full analytics', 'Priority support'],
       isActive: true,
     },
-  })
-
-  await prisma.subscriptionPlan.upsert({
-    where: { id: 'pro_6months' },
-    update: {},
-    create: {
+    {
       id: 'pro_6months',
       name: 'Pro 6 Months',
-      description: 'All Pro features, billed every 6 months',
-      priceCents: 2500,
-      interval: 'SIX_MONTH',
+      slug: 'pro-6months',
+      priceUsd: 25.00,
+      interval: 'SIX_MONTH' as const,
+      features: ['Unlimited AI', 'Photo analysis', 'Full analytics', 'Priority support', 'Save 17%'],
       isActive: true,
     },
-  })
-
-  await prisma.subscriptionPlan.upsert({
-    where: { id: 'pro_annual' },
-    update: {},
-    create: {
+    {
       id: 'pro_annual',
       name: 'Pro Annual',
-      description: 'All Pro features, best value, 25% savings',
-      priceCents: 4500,
-      interval: 'YEARLY',
+      slug: 'pro-annual',
+      priceUsd: 45.00,
+      interval: 'YEARLY' as const,
+      features: ['Unlimited AI', 'Photo analysis', 'Full analytics', 'Priority support', 'Save 25%'],
       isActive: true,
     },
-  })
+  ]
+
+  for (const plan of plans) {
+    await prisma.subscriptionPlan.upsert({
+      where: { id: plan.id },
+      update: {},
+      create: plan,
+    })
+  }
 
   // Marketplace programs
   const programs = [
