@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyPluginAsync, FastifyRequest } from 'fastify'
+import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'
 import { z } from 'zod'
 import { prisma } from '@snapcal/database'
@@ -18,6 +18,26 @@ const kbArticleSchema = z.object({
   tags: z.array(z.string()).optional(),
   sourceUrl: z.string().url().optional(),
 })
+
+const programSchema = z.object({
+  name: z.string().min(1).max(200),
+  slug: z.string().min(1).max(200).optional(),
+  instructor: z.string().optional(),
+  category: z.string().optional(),
+  description: z.string().min(10),
+  durationWeeks: z.number().int().min(1).optional(),
+  priceUsd: z.number().min(0).optional(),
+  includes: z.array(z.string()).optional(),
+  level: z.string().optional(),
+  emoji: z.string().optional(),
+  gradient: z.string().optional(),
+  tag: z.string().optional(),
+  isActive: z.boolean().default(true),
+})
+
+function slugify(name: string) {
+  return name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').slice(0, 60)
+}
 
 const adminRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
   app.addHook('preHandler', requireAuth)
@@ -91,7 +111,8 @@ const adminRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
 
   app.post('/programs', { preHandler: requireAdmin }, async (request: FastifyRequest) => {
     const data = programSchema.parse(request.body)
-    return prisma.program.create({ data })
+    const slug = data.slug || slugify(data.name)
+    return prisma.program.create({ data: { ...data, slug } })
   })
 
   app.patch('/programs/:id', { preHandler: requireAdmin }, async (request: FastifyRequest, reply) => {
@@ -114,15 +135,5 @@ const adminRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
     return { success: true }
   })
 }
-
-const programSchema = z.object({
-  title: z.string().min(1).max(200),
-  description: z.string().min(10),
-  category: z.string().min(1),
-  priceCents: z.number().int().min(0),
-  discountPercent: z.number().int().min(0).max(100).optional(),
-  durationDays: z.number().int().min(1).optional(),
-  isActive: z.boolean().default(true),
-})
 
 export const adminRoutes = fp(adminRoutesPlugin)

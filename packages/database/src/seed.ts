@@ -2,6 +2,10 @@ import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
+function slugify(name: string) {
+  return name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').slice(0, 60)
+}
+
 async function main() {
   // Subscription plans
   await prisma.subscriptionPlan.upsert({
@@ -59,62 +63,73 @@ async function main() {
   // Marketplace programs
   const programs = [
     {
-      id: 'fat_loss_4w',
-      title: 'Fat Loss 4 Weeks',
+      name: 'Fat Loss 4 Weeks',
       description: 'Balanced meal plan with moderate calorie deficit and daily workouts.',
       category: 'weight_loss',
-      priceCents: 1200,
-      discountPercent: 0,
-      durationDays: 28,
-      isActive: true,
+      durationWeeks: 4,
+      priceUsd: 12.00,
+      includes: ['Meal plan', 'Workouts', 'Shopping list'],
+      level: 'beginner',
+      emoji: '🔥',
+      gradient: 'from-orange-500 to-red-500',
+      tag: 'popular',
     },
     {
-      id: 'muscle_gain_8w',
-      title: 'Muscle Gain 8 Weeks',
+      name: 'Muscle Gain 8 Weeks',
       description: 'High-protein nutrition and progressive strength training.',
       category: 'muscle_gain',
-      priceCents: 2400,
-      discountPercent: 10,
-      durationDays: 56,
-      isActive: true,
+      durationWeeks: 8,
+      priceUsd: 24.00,
+      includes: ['Training split', 'Protein guide', 'Progress tracker'],
+      level: 'intermediate',
+      emoji: '💪',
+      gradient: 'from-blue-500 to-indigo-500',
+      tag: 'pro',
     },
     {
-      id: 'keto_30d',
-      title: 'Keto Reset 30 Days',
+      name: 'Keto Reset 30 Days',
       description: '30-day ketogenic meal plan with macros guidance.',
       category: 'diet',
-      priceCents: 1500,
-      discountPercent: 0,
-      durationDays: 30,
-      isActive: true,
+      durationWeeks: 4,
+      priceUsd: 15.00,
+      includes: ['Keto meals', 'Macros calculator', 'Foods to avoid'],
+      level: 'beginner',
+      emoji: '🥑',
+      gradient: 'from-green-500 to-teal-500',
+      tag: null,
     },
     {
-      id: 'mediterranean_21d',
-      title: 'Mediterranean 21 Days',
+      name: 'Mediterranean 21 Days',
       description: 'Heart-healthy Mediterranean diet plan and recipes.',
       category: 'diet',
-      priceCents: 900,
-      discountPercent: 0,
-      durationDays: 21,
-      isActive: true,
+      durationWeeks: 3,
+      priceUsd: 9.00,
+      includes: ['Recipes', 'Weekly menu', 'Olive oil guide'],
+      level: 'beginner',
+      emoji: '🫒',
+      gradient: 'from-yellow-500 to-orange-500',
+      tag: null,
     },
     {
-      id: 'hiit_home_4w',
-      title: 'Home HIIT 4 Weeks',
+      name: 'Home HIIT 4 Weeks',
       description: 'No-equipment high-intensity interval training plan.',
       category: 'fitness',
-      priceCents: 800,
-      discountPercent: 0,
-      durationDays: 28,
-      isActive: true,
+      durationWeeks: 4,
+      priceUsd: 8.00,
+      includes: ['HIIT videos', 'Timer', 'Calendar'],
+      level: 'intermediate',
+      emoji: '⚡',
+      gradient: 'from-purple-500 to-pink-500',
+      tag: null,
     },
   ]
 
   for (const p of programs) {
+    const slug = slugify(p.name)
     await prisma.program.upsert({
-      where: { id: p.id },
+      where: { slug },
       update: {},
-      create: p,
+      create: { ...p, slug, isActive: true },
     })
   }
 

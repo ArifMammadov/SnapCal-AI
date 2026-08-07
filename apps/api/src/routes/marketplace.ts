@@ -1,8 +1,12 @@
-import type { FastifyInstance, FastifyPluginAsync, FastifyRequest } from 'fastify'
+import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'
 import { z } from 'zod'
 import { prisma } from '@snapcal/database'
 import { requireAuth } from './users.js'
+
+function slugify(name: string) {
+  return name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').slice(0, 60)
+}
 
 const categoryQuerySchema = z.object({
   category: z.string().optional(),
@@ -27,7 +31,7 @@ const marketplaceRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance)
     return prisma.program.findUnique({ where: { id } })
   })
 
-  app.post('/programs/:id/enroll', async (request: FastifyRequest, reply) => {
+  app.post('/programs/:id/enroll', async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string }
     const userId = request.user!.userId
 
@@ -56,3 +60,4 @@ const marketplaceRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance)
 }
 
 export const marketplaceRoutes = fp(marketplaceRoutesPlugin)
+export { slugify }
