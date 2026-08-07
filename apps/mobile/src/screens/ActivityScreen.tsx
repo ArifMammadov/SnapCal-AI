@@ -1,178 +1,431 @@
-import { useEffect, useState } from 'react'
-import { api } from '../lib/api.js'
-
-interface ActivityLog {
+import { useState } from 'react'
+import { Card, Button, PlusIcon, ScreenHeader } from '../components/ui.js'
+interface Activity {
   id: string
   type: string
-  durationMin: number
-  caloriesBurned: number | null
-  startedAt: string
+  icon: string
+  color: string
+  time: string
+  duration: number
+  calories: number
+  detail: string
 }
 
-interface MetricLog {
-  id: string
-  metricType: string
-  value: number
+const activityTypes = [
+  { type: 'Running', icon: '🏃', color: 'var(--rose)' },
+  { type: 'Walking', icon: '🚶', color: 'var(--green)' },
+  { type: 'Gym', icon: '🏋️', color: 'var(--purple)' },
+  { type: 'Cycling', icon: '🚴', color: 'var(--blue)' },
+  { type: 'Swimming', icon: '🏊', color: 'var(--sky-500)' },
+  { type: 'Yoga', icon: '🧘', color: 'var(--amber)' },
+  { type: 'Football', icon: '⚽', color: 'var(--green)' },
+  { type: 'Tennis', icon: '🎾', color: 'var(--orange)' },
+  { type: 'Volleyball', icon: '🏐', color: 'var(--blue)' },
+  { type: 'Water', icon: '💧', color: 'var(--blue)' },
+  { type: 'Sleep', icon: '🌙', color: 'var(--purple)' },
+  { type: 'Weight', icon: '⚖️', color: 'var(--rose)' },
+]
+
+const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const todayIndex = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1
+
+const initialActivities: Activity[] = [
+  { id: '1', type: 'Running', icon: '🏃', color: 'var(--rose)', time: '7:00 AM', duration: 35, calories: 312, detail: '5.2 km • Avg pace 6:44/km' },
+  { id: '2', type: 'Walking', icon: '🚶', color: 'var(--green)', time: '12:30 PM', duration: 20, calories: 94, detail: '1.8 km • 2,840 steps' },
+  { id: '3', type: 'Gym', icon: '🏋️', color: 'var(--purple)', time: '6:00 PM', duration: 55, calories: 280, detail: 'Upper body • Chest & triceps' },
+]
+
+function estimateCalories(type: string, minutes: number) {
+  const multipliers: Record<string, number> = {
+    Running: 9,
+    Gym: 5,
+    Cycling: 6,
+    Swimming: 8,
+    Walking: 4,
+    Yoga: 2.5,
+    Football: 7,
+    Tennis: 6.5,
+    Volleyball: 5,
+    Water: 0,
+    Sleep: 0,
+    Weight: 0,
+  }
+  return Math.round(minutes * (multipliers[type] ?? 4))
 }
 
-export function ActivityScreen() {
-  const [tab, setTab] = useState<'activity' | 'metric'>('activity')
-  const [activities, setActivities] = useState<ActivityLog[]>([])
-  const [metrics, setMetrics] = useState<MetricLog[]>([])
-  const [loading, setLoading] = useState(true)
+function AddActivityModal({ onClose, onAdd }: { onClose: () => void; onAdd: (a: Activity) => void }) {
+  const [selectedType, setSelectedType] = useState(activityTypes[0])
+  const [duration, setDuration] = useState('30')
+  const [time, setTime] = useState('08:00')
 
-  const [activityForm, setActivityForm] = useState({
-    type: '',
-    durationMin: 30,
-    caloriesBurned: 0,
-  })
-
-  const [metricForm, setMetricForm] = useState<{
-    metricType: 'WATER_ML' | 'SLEEP_H' | 'WEIGHT_KG' | 'STEPS'
-    value: number
-  }>({ metricType: 'WATER_ML', value: 0 })
-
-  const load = () => {
-    setLoading(true)
-    Promise.all([
-      api.get<ActivityLog[]>('/tracking/activity'),
-      api.get<MetricLog[]>('/tracking/metric'),
-    ])
-      .then(([a, m]) => {
-        setActivities(a.data)
-        setMetrics(m.data)
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false))
-  }
-
-  useEffect(() => {
-    load()
-  }, [])
-
-  const addActivity = async () => {
-    if (!activityForm.type) return
-    await api.post('/tracking/activity', {
-      ...activityForm,
-      startedAt: new Date().toISOString(),
+  const handleAdd = () => {
+    const d = Number(duration)
+    onAdd({
+      id: Date.now().toString(),
+      type: selectedType.type,
+      icon: selectedType.icon,
+      color: selectedType.color,
+      time,
+      duration: d,
+      calories: estimateCalories(selectedType.type, d),
+      detail: `${d} min session`,
     })
-    setActivityForm({ type: '', durationMin: 30, caloriesBurned: 0 })
-    load()
+    onClose()
   }
-
-  const addMetric = async () => {
-    if (metricForm.value <= 0) return
-    await api.post('/tracking/metric', {
-      ...metricForm,
-      loggedAt: new Date().toISOString(),
-    })
-    setMetricForm({ metricType: 'WATER_ML', value: 0 })
-    load()
-  }
-
-  if (loading) return <div className="p-6 text-slate-400">Loading...</div>
 
   return (
-    <div className="p-5 space-y-5 pb-24">
-      <h1 className="text-2xl font-bold">Активность и метрики</h1>
+    <div
+      className="backdrop-in"
+      style={{
+        position: 'absolute',
+        inset: 0,
+        background: 'rgba(0,0,0,0.7)',
+        zIndex: 50,
+        display: 'flex',
+        alignItems: 'flex-end',
+      }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="slide-up" style={{ width: '100%', background: 'var(--bg-card)', borderRadius: '24px 24px 0 0', padding: '20px 20px 40px', maxHeight: '85%', overflowY: 'auto' }}>
+        <div style={{ width: 36, height: 4, background: 'var(--border)', borderRadius: 2, margin: '0 auto 20px' }} />
 
-      <div className="flex gap-2">
-        <button
-          onClick={() => setTab('activity')}
-          className={`flex-1 py-2 rounded-lg text-sm ${tab === 'activity' ? 'bg-emerald-500 text-white' : 'bg-slate-900'}`}
-        >
-          Активность
-        </button>
-        <button
-          onClick={() => setTab('metric')}
-          className={`flex-1 py-2 rounded-lg text-sm ${tab === 'metric' ? 'bg-emerald-500 text-white' : 'bg-slate-900'}`}
-        >
-          Метрики
-        </button>
-      </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <h2 className="font-display" style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+            Log Activity
+          </h2>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: '50%',
+              background: 'var(--bg-elevated)',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--text-secondary)',
+              fontSize: 16,
+            }}
+          >
+            ✕
+          </button>
+        </div>
 
-      {tab === 'activity' ? (
-        <>
-          <div className="bg-slate-900 rounded-xl p-4 space-y-2">
-            <input
-              value={activityForm.type}
-              onChange={(e) => setActivityForm((f) => ({ ...f, type: e.target.value }))}
-              placeholder="Тип активности (бег, йога...)"
-              className="w-full bg-slate-800 rounded-lg px-3 py-2 text-sm"
-            />
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                type="number"
-                value={activityForm.durationMin}
-                onChange={(e) => setActivityForm((f) => ({ ...f, durationMin: Number(e.target.value) }))}
-                placeholder="Минут"
-                className="w-full bg-slate-800 rounded-lg px-3 py-2 text-sm"
-              />
-              <input
-                type="number"
-                value={activityForm.caloriesBurned || ''}
-                onChange={(e) => setActivityForm((f) => ({ ...f, caloriesBurned: Number(e.target.value) }))}
-                placeholder="Сожжено ккал"
-                className="w-full bg-slate-800 rounded-lg px-3 py-2 text-sm"
-              />
-            </div>
-            <button onClick={addActivity} className="w-full bg-emerald-500 rounded-lg py-2 text-sm text-white">Добавить активность</button>
-          </div>
-
-          <div className="space-y-2">
-            {activities.length === 0 ? (
-              <p className="text-slate-400 text-sm">Нет активности за сегодня.</p>
-            ) : (
-              activities.map((a) => (
-                <div key={a.id} className="bg-slate-900 rounded-xl p-4 flex justify-between">
-                  <div>
-                    <p className="font-medium">{a.type}</p>
-                    <p className="text-xs text-slate-400">{a.durationMin} мин</p>
-                  </div>
-                  <span className="text-sm text-emerald-400">+{a.caloriesBurned ?? 0} ккал</span>
-                </div>
-              ))
-            )}
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="bg-slate-900 rounded-xl p-4 space-y-2">
-            <select
-              value={metricForm.metricType}
-              onChange={(e) => setMetricForm((f) => ({ ...f, metricType: e.target.value as typeof metricForm.metricType }))}
-              className="w-full bg-slate-800 rounded-lg px-3 py-2 text-sm"
+        <p style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.04em', margin: '0 0 10px' }}>
+          ACTIVITY TYPE
+        </p>
+        <div className="no-scrollbar" style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 12, marginBottom: 20 }}>
+          {activityTypes.map((a) => (
+            <button
+              key={a.type}
+              onClick={() => setSelectedType(a)}
+              style={{
+                flexShrink: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 4,
+                padding: '10px 14px',
+                background: selectedType.type === a.type ? a.color : 'var(--bg-elevated)',
+                borderRadius: 14,
+                border: selectedType.type === a.type ? 'none' : '1px solid var(--border)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                color: selectedType.type === a.type ? '#fff' : 'var(--text-secondary)',
+              }}
             >
-              <option value="WATER_ML">Вода (мл)</option>
-              <option value="SLEEP_H">Сон (ч)</option>
-              <option value="WEIGHT_KG">Вес (кг)</option>
-              <option value="STEPS">Шаги</option>
-            </select>
+              <span style={{ fontSize: 20 }}>{a.icon}</span>
+              <span style={{ fontSize: 11, whiteSpace: 'nowrap', fontWeight: selectedType.type === a.type ? 600 : 400 }}>{a.type}</span>
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
+          <div>
+            <p style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.04em', margin: '0 0 8px' }}>DURATION (MIN)</p>
             <input
               type="number"
-              step={metricForm.metricType === 'WEIGHT_KG' ? '0.1' : '1'}
-              value={metricForm.value || ''}
-              onChange={(e) => setMetricForm((f) => ({ ...f, value: Number(e.target.value) }))}
-              placeholder="Значение"
-              className="w-full bg-slate-800 rounded-lg px-3 py-2 text-sm"
+              value={duration}
+              onChange={(e) => setDuration(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '12px 14px',
+                background: 'var(--bg-input)',
+                border: '1px solid var(--border)',
+                borderRadius: 12,
+                color: 'var(--text-primary)',
+                fontSize: 16,
+                fontFamily: 'inherit',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
             />
-            <button onClick={addMetric} className="w-full bg-emerald-500 rounded-lg py-2 text-sm text-white">Добавить метрику</button>
           </div>
+          <div>
+            <p style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.04em', margin: '0 0 8px' }}>TIME</p>
+            <input
+              type="time"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '12px 14px',
+                background: 'var(--bg-input)',
+                border: '1px solid var(--border)',
+                borderRadius: 12,
+                color: 'var(--text-primary)',
+                fontSize: 16,
+                fontFamily: 'inherit',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
+        </div>
 
-          <div className="space-y-2">
-            {metrics.length === 0 ? (
-              <p className="text-slate-400 text-sm">Нет метрик за сегодня.</p>
-            ) : (
-              metrics.map((m) => (
-                <div key={m.id} className="bg-slate-900 rounded-xl p-4 flex justify-between">
-                  <span className="text-sm text-slate-300">{m.metricType}</span>
-                  <span className="font-medium">{m.value}</span>
-                </div>
-              ))
-            )}
+        <div
+          style={{
+            padding: '12px 16px',
+            background: 'var(--green-dim)',
+            borderRadius: 12,
+            border: '1px solid rgba(0,212,138,0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: 20,
+          }}
+        >
+          <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Estimated calories burned</span>
+          <span className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--green)' }}>
+            ~{estimateCalories(selectedType.type, Number(duration))} kcal
+          </span>
+        </div>
+
+        <Button variant="primary" size="lg" fullWidth onClick={handleAdd}>
+          Log Activity
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+const weekSteps = [6200, 8432, 4100, 9800, 7300, 5600, 0]
+
+export function ActivityScreen() {
+  const [selectedDay, setSelectedDay] = useState(todayIndex)
+  const [activities, setActivities] = useState<Activity[]>(initialActivities)
+  const [showModal, setShowModal] = useState(false)
+
+  const totalCalories = activities.reduce((s, a) => s + a.calories, 0)
+  const totalDuration = activities.reduce((s, a) => s + a.duration, 0)
+
+  const weekData = weekDays.map((label, i) => ({
+    label,
+    index: i,
+    active: i <= todayIndex,
+    steps: weekSteps[i],
+  }))
+
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', position: 'relative' }}>
+      <ScreenHeader title="Activity" />
+
+      <div style={{ padding: '12px 20px 16px', background: 'var(--bg-card)', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {weekData.map((d) => (
+            <button
+              key={d.label}
+              onClick={() => setSelectedDay(d.index)}
+              style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 6,
+                padding: '8px 4px',
+                background: selectedDay === d.index ? 'var(--green)' : 'transparent',
+                borderRadius: 12,
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'background 0.2s ease',
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 11,
+                  color: selectedDay === d.index ? '#fff' : 'var(--text-secondary)',
+                  fontWeight: selectedDay === d.index ? 700 : 400,
+                }}
+              >
+                {d.label}
+              </span>
+              <div
+                style={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: 8,
+                  background:
+                    selectedDay === d.index
+                      ? 'rgba(255,255,255,0.2)'
+                      : d.active && d.index !== todayIndex
+                        ? 'var(--green-dim)'
+                        : 'var(--bg-elevated)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <span
+                  className="font-display"
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: selectedDay === d.index ? '#fff' : d.active ? 'var(--text-primary)' : 'var(--text-muted)',
+                  }}
+                >
+                  {d.index + 3}
+                </span>
+              </div>
+              <div style={{ width: '100%', height: 3, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
+                <div
+                  style={{
+                    height: '100%',
+                    width: `${(d.steps / 10000) * 100}%`,
+                    background: selectedDay === d.index ? '#fff' : 'var(--green)',
+                    borderRadius: 2,
+                    opacity: d.active ? 1 : 0.2,
+                  }}
+                />
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div
+        className="no-scrollbar"
+        style={{ display: 'flex', gap: 12, padding: '12px 20px', overflowX: 'auto', flexShrink: 0 }}
+      >
+        {[
+          { label: 'Calories', value: `${totalCalories} kcal`, color: 'var(--orange)' },
+          { label: 'Active Time', value: `${totalDuration} min`, color: 'var(--green)' },
+          { label: 'Steps', value: '8,432', color: 'var(--rose)' },
+          { label: 'Distance', value: '7.0 km', color: 'var(--blue)' },
+        ].map((s) => (
+          <Card key={s.label} style={{ flexShrink: 0, padding: '10px 14px', borderRadius: 14, minWidth: 90 }}>
+            <p style={{ fontSize: 10, color: 'var(--text-secondary)', margin: 0, letterSpacing: '0.04em' }}>{s.label}</p>
+            <p className="font-display" style={{ fontSize: 15, fontWeight: 700, color: s.color, margin: '3px 0 0' }}>
+              {s.value}
+            </p>
+          </Card>
+        ))}
+      </div>
+
+      <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '0 20px 100px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <h2 className="font-display" style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+            Today's Timeline
+          </h2>
+          <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+            {activities.length} {activities.length === 1 ? 'activity' : 'activities'}
+          </span>
+        </div>
+
+        {activities.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>🎯</div>
+            <p className="font-display" style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
+              No activities yet
+            </p>
+            <p style={{ fontSize: 14, color: 'var(--text-muted)', margin: 0 }}>Tap + to log your first activity</p>
           </div>
-        </>
-      )}
+        )}
+
+        <div style={{ position: 'relative' }}>
+          {activities.length > 0 && (
+            <div
+              style={{
+                position: 'absolute',
+                left: 19,
+                top: 20,
+                bottom: 20,
+                width: 2,
+                background: 'var(--border)',
+              }}
+            />
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {activities.map((a) => (
+              <div key={a.id} style={{ display: 'flex', gap: 12 }}>
+                <div style={{ flexShrink: 0, position: 'relative', zIndex: 1 }}>
+                  <div
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: '50%',
+                      background: 'var(--bg-card)',
+                      border: `2px solid ${a.color}`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 18,
+                    }}
+                  >
+                    {a.icon}
+                  </div>
+                </div>
+                <Card style={{ flex: 1, padding: '12px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <p className="font-display" style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+                      {a.type}
+                    </p>
+                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 0' }}>
+                      {a.detail}
+                    </p>
+                    <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '4px 0 0' }}>
+                      {a.time} · {a.duration} min
+                    </p>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <p className="font-display" style={{ fontSize: 16, fontWeight: 700, color: a.color, margin: 0 }}>
+                      {a.calories}
+                    </p>
+                    <p style={{ fontSize: 10, color: 'var(--text-secondary)', margin: 0 }}>kcal</p>
+                  </div>
+                </Card>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <button
+        onClick={() => setShowModal(true)}
+        aria-label="Add activity"
+        style={{
+          position: 'absolute',
+          bottom: 100,
+          right: 20,
+          width: 52,
+          height: 52,
+          borderRadius: '50%',
+          background: 'var(--green)',
+          border: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          boxShadow: '0 8px 24px rgba(0,212,138,0.35)',
+          color: '#fff',
+        }}
+      >
+        <PlusIcon size={24} />
+      </button>
+
+      {showModal && <AddActivityModal onClose={() => setShowModal(false)} onAdd={(a) => setActivities((p) => [...p, a])} />}
     </div>
   )
 }

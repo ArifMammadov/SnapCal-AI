@@ -70,7 +70,7 @@ export async function adminRoutes(app: FastifyInstance) {
       orderBy: { createdAt: 'desc' },
       take: 100,
     })
-    return users.map((u) => ({ ...u, telegramId: u.telegramId.toString() }))
+    return users.map((u: { telegramId: bigint | number | string }) => ({ ...u, telegramId: u.telegramId.toString() }))
   })
 
   app.get('/users/:id', { preHandler: requireAdmin }, async (request: FastifyRequest) => {
@@ -86,7 +86,7 @@ export async function adminRoutes(app: FastifyInstance) {
       orderBy: { createdAt: 'desc' },
       take: 100,
     })
-    return logs.map((l) => ({ ...l, costUsd: l.costUsd ? Number(l.costUsd) : null }))
+    return logs.map((l: { costUsd: { toString: () => string } | null | undefined }) => ({ ...l, costUsd: l.costUsd ? Number(l.costUsd) : null }))
   })
 
   app.get('/kb/articles', async () => {
@@ -122,7 +122,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.get('/programs', { preHandler: requireAdmin }, async () => {
     const programs = await prisma.program.findMany({ orderBy: { createdAt: 'desc' }, take: 100 })
-    return programs.map((p) => ({ ...p, priceUsd: p.priceUsd ? Number(p.priceUsd) : null }))
+    return programs.map((p: { priceUsd: { toString: () => string } | null | undefined }) => ({ ...p, priceUsd: p.priceUsd ? Number(p.priceUsd) : null }))
   })
 
   app.post('/programs', { preHandler: requireAdmin }, async (request: FastifyRequest) => {
