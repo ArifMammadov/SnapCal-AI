@@ -2,12 +2,17 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '@snapcal/database'
 import { requireAuth } from './users.js'
+import { env } from '../lib/env.js'
 
 const requireAdmin = async (request: FastifyRequest, reply: any) => {
   if (request.user?.role !== 'ADMIN') {
     return reply.status(403).send({ error: { code: 'FORBIDDEN', message: 'Admin access required' } })
   }
 }
+
+const loginSchema = z.object({
+  secret: z.string().min(1),
+})
 
 const kbArticleSchema = z.object({
   title: z.string().min(1).max(300),
@@ -39,10 +44,19 @@ function slugify(name: string) {
 }
 
 export async function adminRoutes(app: FastifyInstance) {
+  app.post('/login', async (request: FastifyRequest, reply: FastifyReply) => {
+    const { secret } = loginSchema.parse(request.body)
+    if (secret !== env.ADMIN_SECRET) {
+      return reply.status(401).send({ error: { code: 'INVALID_SECRET', message: 'Invalid admin secret' } })
+    }
+    const token = app.jwt.sign({ userId: 'admin', role: 'ADMIN' }, { expiresIn: '24h' })
+    return { accessToken: token }
+  })
+
   app.addHook('preHandler', requireAuth)
 
   app.get('/users', { preHandler: requireAdmin }, async () => {
-    return prisma.user.findMany({
+    const users = await prisma.user.findMany({
       select: {
         id: true,
         telegramId: true,
@@ -56,6 +70,7 @@ export async function adminRoutes(app: FastifyInstance) {
       orderBy: { createdAt: 'desc' },
       take: 100,
     })
+    return users.map((u) => ({ ...u, telegramId: u.telegramId.toString() }))
   })
 
   app.get('/users/:id', { preHandler: requireAdmin }, async (request: FastifyRequest) => {
@@ -66,11 +81,12 @@ export async function adminRoutes(app: FastifyInstance) {
     })
   })
 
-  app.get('/ai/logs', { preHandler: requireAdmin }, async () => {
-    return prisma.aiAuditLog.findMany({
+  app.get('/audit-logs', { preHandler: requireAdmin }, async () => {
+    const logs = await prisma.aiAuditLog.findMany({
       orderBy: { createdAt: 'desc' },
       take: 100,
     })
+    return logs.map((l) => ({ ...l, costUsd: l.costUsd ? Number(l.costUsd) : null }))
   })
 
   app.get('/kb/articles', async () => {
@@ -105,7 +121,8 @@ export async function adminRoutes(app: FastifyInstance) {
   })
 
   app.get('/programs', { preHandler: requireAdmin }, async () => {
-    return prisma.program.findMany({ orderBy: { createdAt: 'desc' }, take: 100 })
+    const programs = await prisma.program.findMany({ orderBy: { createdAt: 'desc' }, take: 100 })
+    return programs.map((p) => ({ ...p, priceUsd: p.priceUsd ? Number(p.priceUsd) : null }))
   })
 
   app.post('/programs', { preHandler: requireAdmin }, async (request: FastifyRequest) => {

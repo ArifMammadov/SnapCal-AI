@@ -5,12 +5,11 @@ function slugify(name: string) {
 }
 
 async function main() {
-  // Subscription plans (upsert by slug because id is UUID)
   const plans = [
     {
       name: 'Free',
       slug: 'free',
-      priceUsd: 0,
+      priceUsd: '0',
       interval: 'MONTHLY' as const,
       features: ['1 free scan per day', 'Basic tracking', 'Limited AI coach'],
       isActive: true,
@@ -18,7 +17,7 @@ async function main() {
     {
       name: 'Pro Monthly',
       slug: 'pro-monthly',
-      priceUsd: 5.00,
+      priceUsd: '5.00',
       interval: 'MONTHLY' as const,
       features: ['Unlimited AI', 'Photo analysis', 'Full analytics', 'Priority support'],
       isActive: true,
@@ -26,7 +25,7 @@ async function main() {
     {
       name: 'Pro 6 Months',
       slug: 'pro-6months',
-      priceUsd: 25.00,
+      priceUsd: '25.00',
       interval: 'SIX_MONTH' as const,
       features: ['Unlimited AI', 'Photo analysis', 'Full analytics', 'Priority support', 'Save 17%'],
       isActive: true,
@@ -34,7 +33,7 @@ async function main() {
     {
       name: 'Pro Annual',
       slug: 'pro-annual',
-      priceUsd: 45.00,
+      priceUsd: '45.00',
       interval: 'YEARLY' as const,
       features: ['Unlimited AI', 'Photo analysis', 'Full analytics', 'Priority support', 'Save 25%'],
       isActive: true,
@@ -49,14 +48,13 @@ async function main() {
     })
   }
 
-  // Marketplace programs
   const programs = [
     {
       name: 'Fat Loss 4 Weeks',
       description: 'Balanced meal plan with moderate calorie deficit and daily workouts.',
       category: 'weight_loss',
       durationWeeks: 4,
-      priceUsd: 12.00,
+      priceUsd: '12.00',
       includes: ['Meal plan', 'Workouts', 'Shopping list'],
       level: 'beginner',
       emoji: '🔥',
@@ -68,7 +66,7 @@ async function main() {
       description: 'High-protein nutrition and progressive strength training.',
       category: 'muscle_gain',
       durationWeeks: 8,
-      priceUsd: 24.00,
+      priceUsd: '24.00',
       includes: ['Training split', 'Protein guide', 'Progress tracker'],
       level: 'intermediate',
       emoji: '💪',
@@ -80,7 +78,7 @@ async function main() {
       description: '30-day ketogenic meal plan with macros guidance.',
       category: 'diet',
       durationWeeks: 4,
-      priceUsd: 15.00,
+      priceUsd: '15.00',
       includes: ['Keto meals', 'Macros calculator', 'Foods to avoid'],
       level: 'beginner',
       emoji: '🥑',
@@ -92,7 +90,7 @@ async function main() {
       description: 'Heart-healthy Mediterranean diet plan and recipes.',
       category: 'diet',
       durationWeeks: 3,
-      priceUsd: 9.00,
+      priceUsd: '9.00',
       includes: ['Recipes', 'Weekly menu', 'Olive oil guide'],
       level: 'beginner',
       emoji: '🫒',
@@ -104,7 +102,7 @@ async function main() {
       description: 'No-equipment high-intensity interval training plan.',
       category: 'fitness',
       durationWeeks: 4,
-      priceUsd: 8.00,
+      priceUsd: '8.00',
       includes: ['HIIT videos', 'Timer', 'Calendar'],
       level: 'intermediate',
       emoji: '⚡',

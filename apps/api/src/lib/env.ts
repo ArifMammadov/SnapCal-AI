@@ -19,6 +19,7 @@ const envSchema = z.object({
   S3_ENDPOINT: z.string().optional(),
   S3_BUCKET: z.string().optional(),
   S3_ACCESS_KEY: z.string().optional(),
+  ADMIN_SECRET: z.string().min(16),
   S3_SECRET_KEY: z.string().optional(),
 })
 
