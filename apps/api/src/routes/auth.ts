@@ -1,5 +1,4 @@
-import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
-import fp from 'fastify-plugin'
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 import crypto from 'node:crypto'
 import { prisma } from '@snapcal/database'
@@ -41,7 +40,7 @@ function parseUser(userJson: string) {
   }
 }
 
-const authPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
+export async function authRoutes(app: FastifyInstance) {
   app.post('/demo', async (request: FastifyRequest, reply: FastifyReply) => {
     if (env.NODE_ENV === 'production') {
       return reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Demo login only in non-production' } })
@@ -199,5 +198,3 @@ const authPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
     }
   })
 }
-
-export const authRoutes = fp(authPlugin)
