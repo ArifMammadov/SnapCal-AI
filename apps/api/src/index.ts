@@ -58,6 +58,7 @@ export async function buildApp() {
   app.setErrorHandler(errorHandler)
 
   app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }))
+  app.get('/api/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }))
 
   await app.register(authRoutes, { prefix: '/api/auth' })
   await app.register(userRoutes, { prefix: '/api/users' })
