@@ -42,6 +42,58 @@ function parseUser(userJson: string) {
 }
 
 const authPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
+  app.post('/demo', async (request: FastifyRequest, reply: FastifyReply) => {
+    if (env.NODE_ENV === 'production') {
+      return reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Demo login only in non-production' } })
+    }
+
+    const demoTelegramId = 999999999
+    let user = await prisma.user.findUnique({
+      where: { telegramId: BigInt(demoTelegramId) },
+      include: { profile: true },
+    })
+
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          telegramId: BigInt(demoTelegramId),
+          telegramUsername: 'demo_user',
+          firstName: 'Demo',
+          lastName: 'User',
+          avatarUrl: null,
+          languageCode: 'ru',
+          trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          profile: { create: {} },
+        },
+        include: { profile: true },
+      })
+    }
+
+    const accessToken = app.jwt.sign(
+      { userId: user.id, telegramId: user.telegramId.toString(), role: user.role },
+      { expiresIn: '15m' }
+    )
+    const refreshToken = app.jwt.sign(
+      { userId: user.id, type: 'refresh' },
+      { expiresIn: '7d' }
+    )
+
+    return {
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        telegramId: user.telegramId.toString(),
+        firstName: user.firstName,
+        languageCode: user.languageCode,
+        role: user.role,
+        subscriptionStatus: user.subscriptionStatus,
+        trialEndsAt: user.trialEndsAt,
+        profile: user.profile,
+      },
+    }
+  })
+
   app.post('/telegram', async (request: FastifyRequest, reply: FastifyReply) => {
     const { initData } = telegramAuthSchema.parse(request.body)
     const data = verifyTelegramInitData(initData)
