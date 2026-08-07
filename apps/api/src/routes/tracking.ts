@@ -169,13 +169,13 @@ const trackingRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) =>
     const carbsG = foodLogs.reduce((s: number, f: { carbsG: number | null }) => s + (f.carbsG ?? 0), 0)
     const fatG = foodLogs.reduce((s: number, f: { fatG: number | null }) => s + (f.fatG ?? 0), 0)
     const waterMl = metrics
-      .filter((m) => m.metricType === 'WATER_ML')
-      .reduce((s, m) => s + Number(m.value), 0)
-    const sleepH = Number(metrics.find((m) => m.metricType === 'SLEEP_H')?.value ?? 0)
+      .filter((m: { metricType: string; value: { toNumber: () => number } }) => m.metricType === 'WATER_ML')
+      .reduce((s: number, m: { value: { toNumber: () => number } }) => s + m.value.toNumber(), 0)
+    const sleepH = Number(metrics.find((m: { metricType: string }) => m.metricType === 'SLEEP_H')?.value?.toNumber() ?? 0)
     const steps = metrics
-      .filter((m) => m.metricType === 'STEPS')
-      .reduce((s, m) => s + Number(m.value), 0)
-    const weightKg = (Number(metrics.find((m) => m.metricType === 'WEIGHT_KG')?.value ?? 0) || (profile?.currentWeightKg ?? 0))
+      .filter((m: { metricType: string; value: { toNumber: () => number } }) => m.metricType === 'STEPS')
+      .reduce((s: number, m: { value: { toNumber: () => number } }) => s + m.value.toNumber(), 0)
+    const weightKg = (Number(metrics.find((m: { metricType: string }) => m.metricType === 'WEIGHT_KG')?.value?.toNumber() ?? 0) || (profile?.currentWeightKg ?? 0))
     const activitiesCount = activities.length
     const caloriesBurned = activities.reduce((s: number, a: { caloriesBurned: number | null }) => s + (a.caloriesBurned ?? 0), 0)
 

@@ -84,6 +84,45 @@ const adminRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
     await prisma.knowledgeArticle.delete({ where: { id } })
     return { success: true }
   })
+
+  app.get('/programs', { preHandler: requireAdmin }, async () => {
+    return prisma.program.findMany({ orderBy: { createdAt: 'desc' }, take: 100 })
+  })
+
+  app.post('/programs', { preHandler: requireAdmin }, async (request: FastifyRequest) => {
+    const data = programSchema.parse(request.body)
+    return prisma.program.create({ data })
+  })
+
+  app.patch('/programs/:id', { preHandler: requireAdmin }, async (request: FastifyRequest, reply) => {
+    const { id } = request.params as { id: string }
+    const data = programSchema.partial().parse(request.body)
+    const program = await prisma.program.findUnique({ where: { id } })
+    if (!program) {
+      return reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Program not found' } })
+    }
+    return prisma.program.update({ where: { id }, data })
+  })
+
+  app.delete('/programs/:id', { preHandler: requireAdmin }, async (request: FastifyRequest, reply) => {
+    const { id } = request.params as { id: string }
+    const program = await prisma.program.findUnique({ where: { id } })
+    if (!program) {
+      return reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Program not found' } })
+    }
+    await prisma.program.update({ where: { id }, data: { isActive: false } })
+    return { success: true }
+  })
 }
+
+const programSchema = z.object({
+  title: z.string().min(1).max(200),
+  description: z.string().min(10),
+  category: z.string().min(1),
+  priceCents: z.number().int().min(0),
+  discountPercent: z.number().int().min(0).max(100).optional(),
+  durationDays: z.number().int().min(1).optional(),
+  isActive: z.boolean().default(true),
+})
 
 export const adminRoutes = fp(adminRoutesPlugin)

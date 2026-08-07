@@ -36,6 +36,13 @@ const updateProfileSchema = z.object({
 const userRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
   app.addHook('preHandler', requireAuth)
 
+  app.get('/me', async (request: FastifyRequest) => {
+    const user = await prisma.user.findUnique({
+      where: { id: request.user!.userId },
+      include: { profile: true, subscriptions: { where: { status: 'ACTIVE' }, take: 1 } },
+    })
+    return user
+  })
 
   app.patch('/me/profile', async (request: FastifyRequest) => {
     const data = updateProfileSchema.parse(request.body)
@@ -60,6 +67,24 @@ const userRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
     })
   })
 
-  }
+  app.get('/me/subscription', async (request: FastifyRequest) => {
+    const user = await prisma.user.findUnique({
+      where: { id: request.user!.userId },
+      include: { subscriptions: { where: { status: 'ACTIVE' }, take: 1 } },
+    })
+
+    const now = new Date()
+    const inTrial = user?.trialEndsAt && user.trialEndsAt > now
+    const activeSub = user?.subscriptions[0]
+
+    return {
+      subscriptionStatus: user?.subscriptionStatus ?? 'FREE',
+      trialEndsAt: user?.trialEndsAt,
+      inTrial: !!inTrial,
+      isPro: !!activeSub || !!inTrial,
+      subscription: activeSub ?? null,
+    }
+  })
+}
 
 export const userRoutes = fp(userRoutesPlugin)
