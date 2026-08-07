@@ -6,7 +6,7 @@ import { calculateCalorieGoal } from '@snapcal/shared'
 import type { JwtPayload } from '../types/auth.js'
 
 export const requireAuth = async (request: FastifyRequest, reply: FastifyReply) => {
-  if (request.url === '/health' || request.url.startsWith('/api/auth/')) return
+  if (request.url === '/health' || request.url === '/api/health' || request.url.startsWith('/api/auth/')) return
   try {
     const payload = await request.server.jwt.verify<JwtPayload>(request.headers.authorization?.replace('Bearer ', '') ?? '')
     request.user = payload

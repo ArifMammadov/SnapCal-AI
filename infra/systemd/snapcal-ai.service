@@ -1,0 +1,13 @@
+[Unit]
+Description=SnapCal AI Agent
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/snapcal/apps/ai-agent
+ExecStart=/usr/bin/pnpm start
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
