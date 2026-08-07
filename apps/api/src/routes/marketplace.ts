@@ -1,5 +1,4 @@
 import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
-import fp from 'fastify-plugin'
 import { z } from 'zod'
 import { prisma } from '@snapcal/database'
 import { requireAuth } from './users.js'

@@ -1,5 +1,4 @@
 import type { FastifyInstance, FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify'
-import fp from 'fastify-plugin'
 import { z } from 'zod'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -223,4 +222,4 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max)
 }
 
-export const trackingRoutes = fp(trackingRoutesPlugin)
+export const trackingRoutes = trackingRoutesPlugin

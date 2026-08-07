@@ -1,5 +1,4 @@
 import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
-import fp from 'fastify-plugin'
 import { z } from 'zod'
 import { prisma } from '@snapcal/database'
 import { calculateCalorieGoal } from '@snapcal/shared'
@@ -33,7 +32,7 @@ const updateProfileSchema = z.object({
   units: z.enum(['metric', 'imperial']).optional(),
 })
 
-const userRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
+export const userRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
   app.addHook('preHandler', requireAuth)
 
   app.get('/me', async (request: FastifyRequest) => {
@@ -86,5 +85,3 @@ const userRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
     }
   })
 }
-
-export const userRoutes = fp(userRoutesPlugin)
