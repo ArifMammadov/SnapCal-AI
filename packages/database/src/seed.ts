@@ -1,4 +1,6 @@
-import { prisma, PrismaClient } from '@snapcal/database'
+import { PrismaClient } from '@prisma/client'
+
+const prisma = new PrismaClient()
 
 function slugify(name: string) {
   return name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').slice(0, 60)
@@ -14,7 +16,7 @@ async function main() {
       name: 'Free',
       description: '1 free scan per day, basic tracking, AI coach limited',
       priceCents: 0,
-      interval: 'month',
+      interval: 'MONTHLY',
       isActive: true,
     },
   })
@@ -27,7 +29,7 @@ async function main() {
       name: 'Pro Monthly',
       description: 'Unlimited AI, photo analysis, full analytics, priority support',
       priceCents: 500,
-      interval: 'month',
+      interval: 'MONTHLY',
       isActive: true,
     },
   })
@@ -40,7 +42,7 @@ async function main() {
       name: 'Pro 6 Months',
       description: 'All Pro features, billed every 6 months',
       priceCents: 2500,
-      interval: 'six_months',
+      interval: 'SIX_MONTH',
       isActive: true,
     },
   })
@@ -53,7 +55,7 @@ async function main() {
       name: 'Pro Annual',
       description: 'All Pro features, best value, 25% savings',
       priceCents: 4500,
-      interval: 'year',
+      interval: 'YEARLY',
       isActive: true,
     },
   })
