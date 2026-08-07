@@ -12,7 +12,7 @@ const categoryQuerySchema = z.object({
   category: z.string().optional(),
 })
 
-const marketplaceRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
+export async function marketplaceRoutes(app: FastifyInstance) {
   app.addHook('preHandler', requireAuth)
 
   app.get('/programs', async (request: FastifyRequest) => {
@@ -59,5 +59,4 @@ const marketplaceRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance)
   })
 }
 
-export const marketplaceRoutes = fp(marketplaceRoutesPlugin)
 export { slugify }

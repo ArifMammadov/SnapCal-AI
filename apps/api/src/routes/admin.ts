@@ -1,5 +1,4 @@
-import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
-import fp from 'fastify-plugin'
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '@snapcal/database'
 import { requireAuth } from './users.js'
@@ -39,7 +38,7 @@ function slugify(name: string) {
   return name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').slice(0, 60)
 }
 
-const adminRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
+export async function adminRoutes(app: FastifyInstance) {
   app.addHook('preHandler', requireAuth)
 
   app.get('/users', { preHandler: requireAdmin }, async () => {
@@ -135,5 +134,3 @@ const adminRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
     return { success: true }
   })
 }
-
-export const adminRoutes = fp(adminRoutesPlugin)
