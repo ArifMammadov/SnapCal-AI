@@ -1,5 +1,4 @@
 import type { FastifyInstance, FastifyPluginAsync, FastifyRequest } from 'fastify'
-import fp from 'fastify-plugin'
 import { z } from 'zod'
 import axios from 'axios'
 import { prisma } from '@snapcal/database'
@@ -7,7 +6,7 @@ import { requireAuth } from './users.js'
 import { env } from '../lib/env.js'
 import { DEFAULT_FREE_AI_DAILY_LIMIT } from '@snapcal/shared'
 
-const chatSchema = z.object({
+  const chatSchema = z.object({
   message: z.string().max(4000),
   attachments: z.array(z.object({ type: z.enum(['image', 'audio']), url: z.string().url() })).optional(),
 })
@@ -172,4 +171,4 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
   })
 }
 
-export const aiRoutes = fp(aiRoutesPlugin)
+export const aiRoutes = aiRoutesPlugin

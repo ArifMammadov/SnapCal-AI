@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   AreaChart,
   Area,
@@ -13,137 +13,117 @@ import {
   CartesianGrid,
 } from 'recharts'
 import { Card, ScreenHeader } from '../components/ui.js'
+import { api } from '../lib/api.js'
+import type { TrackingSummary } from '../lib/data.js'
 
 type Period = '7D' | '30D' | '6M'
 
-const data7D = {
-  calories: [
-    { label: 'Mon', value: 2100 },
-    { label: 'Tue', value: 1980 },
-    { label: 'Wed', value: 2250 },
-    { label: 'Thu', value: 1850 },
-    { label: 'Fri', value: 2050 },
-    { label: 'Sat', value: 2180 },
-    { label: 'Sun', value: 1847 },
-  ],
-  weight: [
-    { label: 'Mon', value: 86.2 },
-    { label: 'Tue', value: 85.9 },
-    { label: 'Wed', value: 86.1 },
-    { label: 'Thu', value: 85.7 },
-    { label: 'Fri', value: 85.4 },
-    { label: 'Sat', value: 85.2 },
-    { label: 'Sun', value: 85.0 },
-  ],
-  steps: [
-    { label: 'Mon', value: 6200 },
-    { label: 'Tue', value: 8432 },
-    { label: 'Wed', value: 7100 },
-    { label: 'Thu', value: 9800 },
-    { label: 'Fri', value: 7300 },
-    { label: 'Sat', value: 10400 },
-    { label: 'Sun', value: 5600 },
-  ],
-  water: [
-    { label: 'Mon', value: 2.4 },
-    { label: 'Tue', value: 1.8 },
-    { label: 'Wed', value: 2.8 },
-    { label: 'Thu', value: 2.1 },
-    { label: 'Fri', value: 2.5 },
-    { label: 'Sat', value: 3.0 },
-    { label: 'Sun', value: 2.2 },
-  ],
-  sleep: [
-    { label: 'Mon', value: 7.5 },
-    { label: 'Tue', value: 7.2 },
-    { label: 'Wed', value: 6.8 },
-    { label: 'Thu', value: 8.0 },
-    { label: 'Fri', value: 7.1 },
-    { label: 'Sat', value: 8.3 },
-    { label: 'Sun', value: 6.9 },
-  ],
-  protein: [
-    { label: 'Mon', value: 128 },
-    { label: 'Tue', value: 112 },
-    { label: 'Wed', value: 135 },
-    { label: 'Thu', value: 98 },
-    { label: 'Fri', value: 142 },
-    { label: 'Sat', value: 118 },
-    { label: 'Sun', value: 125 },
-  ],
+interface SeriesPoint {
+  label: string
+  value: number
 }
 
-const data30D = {
-  calories: Array.from({ length: 30 }, (_, i) => ({ label: `${i + 1}`, value: 1800 + Math.round(Math.random() * 500) })),
-  weight: Array.from({ length: 30 }, (_, i) => ({ label: `${i + 1}`, value: +(87.5 - i * 0.08 + Math.random() * 0.4 - 0.2).toFixed(1) })),
-  steps: Array.from({ length: 30 }, (_, i) => ({ label: `${i + 1}`, value: 5000 + Math.round(Math.random() * 7000) })),
-  water: Array.from({ length: 30 }, (_, i) => ({ label: `${i + 1}`, value: +(1.5 + Math.random() * 2).toFixed(1) })),
-  sleep: Array.from({ length: 30 }, (_, i) => ({ label: `${i + 1}`, value: +(6.5 + Math.random() * 2).toFixed(1) })),
-  protein: Array.from({ length: 30 }, (_, i) => ({ label: `${i + 1}`, value: 90 + Math.round(Math.random() * 80) })),
+interface StatsData {
+  calories: SeriesPoint[]
+  weight: SeriesPoint[]
+  steps: SeriesPoint[]
+  water: SeriesPoint[]
+  sleep: SeriesPoint[]
+  protein: SeriesPoint[]
 }
 
-const data6M = {
-  calories: [
-    { label: 'Mar', value: 2300 },
-    { label: 'Apr', value: 2150 },
-    { label: 'May', value: 2050 },
-    { label: 'Jun', value: 1980 },
-    { label: 'Jul', value: 1920 },
-    { label: 'Aug', value: 1880 },
-  ],
-  weight: [
-    { label: 'Mar', value: 87 },
-    { label: 'Apr', value: 85.5 },
-    { label: 'May', value: 84.1 },
-    { label: 'Jun', value: 82.8 },
-    { label: 'Jul', value: 81.3 },
-    { label: 'Aug', value: 85.0 },
-  ],
-  steps: [
-    { label: 'Mar', value: 6800 },
-    { label: 'Apr', value: 7200 },
-    { label: 'May', value: 7900 },
-    { label: 'Jun', value: 8400 },
-    { label: 'Jul', value: 8800 },
-    { label: 'Aug', value: 8200 },
-  ],
-  water: [
-    { label: 'Mar', value: 1.8 },
-    { label: 'Apr', value: 2.0 },
-    { label: 'May', value: 2.2 },
-    { label: 'Jun', value: 2.4 },
-    { label: 'Jul', value: 2.6 },
-    { label: 'Aug', value: 2.3 },
-  ],
-  sleep: [
-    { label: 'Mar', value: 6.8 },
-    { label: 'Apr', value: 7.0 },
-    { label: 'May', value: 7.2 },
-    { label: 'Jun', value: 7.5 },
-    { label: 'Jul', value: 7.4 },
-    { label: 'Aug', value: 7.2 },
-  ],
-  protein: [
-    { label: 'Mar', value: 95 },
-    { label: 'Apr', value: 108 },
-    { label: 'May', value: 118 },
-    { label: 'Jun', value: 125 },
-    { label: 'Jul', value: 132 },
-    { label: 'Aug', value: 120 },
-  ],
+function weekDayLabel(d: Date) {
+  return d.toLocaleDateString('en-US', { weekday: 'short' })
 }
 
-const allData = { '7D': data7D, '30D': data30D, '6M': data6M }
+function monthDayLabel(d: Date) {
+  return `${d.getMonth() + 1}/${d.getDate()}`
+}
 
-interface ChartCardProps {
-  title: string
-  value: string
-  delta: string
-  positive: boolean
-  color: string
-  data: { label: string; value: number }[]
-  unit: string
-  type?: 'area' | 'bar' | 'line'
+function monthLabel(d: Date) {
+  return d.toLocaleDateString('en-US', { month: 'short' })
+}
+
+function avg(arr: number[]) {
+  if (!arr.length) return 0
+  return arr.reduce((a, b) => a + b, 0) / arr.length
+}
+
+function buildPeriodData(period: Period, summaries: TrackingSummary[]): StatsData {
+  const sorted = [...summaries].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+  const labels: string[] = []
+  const calories: SeriesPoint[] = []
+  const weight: SeriesPoint[] = []
+  const steps: SeriesPoint[] = []
+  const water: SeriesPoint[] = []
+  const sleep: SeriesPoint[] = []
+  const protein: SeriesPoint[] = []
+
+  if (period === '7D') {
+    const today = new Date()
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today)
+      d.setDate(d.getDate() - i)
+      const iso = d.toISOString().split('T')[0]
+      const s = sorted.find((x) => x.date === iso)
+      labels.push(weekDayLabel(d))
+      calories.push({ label: weekDayLabel(d), value: s?.caloriesConsumed ?? 0 })
+      weight.push({ label: weekDayLabel(d), value: s?.weightKg ?? 0 })
+      steps.push({ label: weekDayLabel(d), value: s?.steps ?? 0 })
+      water.push({ label: weekDayLabel(d), value: (s?.waterMl ?? 0) / 1000 })
+      sleep.push({ label: weekDayLabel(d), value: s?.sleepH ?? 0 })
+      protein.push({ label: weekDayLabel(d), value: s?.proteinG ?? 0 })
+    }
+  } else if (period === '30D') {
+    const today = new Date()
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(today)
+      d.setDate(d.getDate() - i)
+      const iso = d.toISOString().split('T')[0]
+      const s = sorted.find((x) => x.date === iso)
+      const label = monthDayLabel(d)
+      labels.push(label)
+      calories.push({ label, value: s?.caloriesConsumed ?? 0 })
+      weight.push({ label, value: s?.weightKg ?? 0 })
+      steps.push({ label, value: s?.steps ?? 0 })
+      water.push({ label, value: (s?.waterMl ?? 0) / 1000 })
+      sleep.push({ label, value: s?.sleepH ?? 0 })
+      protein.push({ label, value: s?.proteinG ?? 0 })
+    }
+  } else {
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date()
+      d.setMonth(d.getMonth() - i)
+      const key = monthLabel(d)
+      labels.push(key)
+      const monthEntries = sorted.filter((x) => monthLabel(new Date(x.date)) === key)
+      const caloriesValues = monthEntries.map((x) => x.caloriesConsumed)
+      const weightValues = monthEntries.map((x) => x.weightKg)
+      const stepsValues = monthEntries.map((x) => x.steps)
+      const waterValues = monthEntries.map((x) => x.waterMl / 1000)
+      const sleepValues = monthEntries.map((x) => x.sleepH)
+      const proteinValues = monthEntries.map((x) => x.proteinG)
+      calories.push({ label: key, value: Math.round(avg(caloriesValues)) })
+      weight.push({ label: key, value: +(avg(weightValues).toFixed(1)) })
+      steps.push({ label: key, value: Math.round(avg(stepsValues)) })
+      water.push({ label: key, value: +(avg(waterValues).toFixed(1)) })
+      sleep.push({ label: key, value: +(avg(sleepValues).toFixed(1)) })
+      protein.push({ label: key, value: Math.round(avg(proteinValues)) })
+    }
+  }
+
+  return { calories, weight, steps, water, sleep, protein }
+}
+
+function aggregateStats(data: StatsData) {
+  const avgPoints = (arr: SeriesPoint[]) => arr.reduce((a, b) => a + b.value, 0) / (arr.length || 1)
+  return {
+    avgCalories: Math.round(avgPoints(data.calories)),
+    avgProtein: Math.round(avgPoints(data.protein)),
+    avgWater: +(avgPoints(data.water).toFixed(1)),
+    avgSteps: Math.round(avgPoints(data.steps)),
+    avgSleep: +(avgPoints(data.sleep).toFixed(1)),
+  }
 }
 
 function CustomTooltip({ active, payload, label, unit }: { active?: boolean; payload?: Array<{ value: number }>; label?: string; unit: string }) {
@@ -165,6 +145,17 @@ function CustomTooltip({ active, payload, label, unit }: { active?: boolean; pay
       </p>
     </div>
   )
+}
+
+interface ChartCardProps {
+  title: string
+  value: string
+  delta: string
+  positive: boolean
+  color: string
+  data: SeriesPoint[]
+  unit: string
+  type?: 'area' | 'bar' | 'line'
 }
 
 function ChartCard({ title, value, delta, positive, color, data, unit, type = 'area' }: ChartCardProps) {
@@ -232,15 +223,39 @@ function ChartCard({ title, value, delta, positive, color, data, unit, type = 'a
 
 export function StatisticsScreen() {
   const [period, setPeriod] = useState<Period>('7D')
-  const d = allData[period]
+  const [raw, setRaw] = useState<TrackingSummary[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    const today = new Date()
+    const start = new Date(today)
+    start.setDate(start.getDate() - 90)
+    const startStr = start.toISOString().split('T')[0]
+    const endStr = today.toISOString().split('T')[0]
+    api.get<TrackingSummary[]>(`/tracking/summaries?start=${startStr}&end=${endStr}`)
+      .then((res) => {
+        if (!cancelled) setRaw(res.data)
+      })
+      .catch((err) => {
+        if (!cancelled) console.error('Failed to load stats:', err)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [])
+
+  const d = useMemo(() => buildPeriodData(period, raw), [period, raw])
+  const agg = useMemo(() => aggregateStats(d), [d])
 
   const chartConfigs: ChartCardProps[] = [
-    { title: 'Calories', value: '2,047 kcal', delta: '↓ 6.1%', positive: true, color: 'var(--orange)', data: d.calories, unit: 'kcal', type: 'area' },
-    { title: 'Weight', value: '85.0 kg', delta: '↓ 2.3 kg', positive: true, color: 'var(--rose)', data: d.weight, unit: 'kg', type: 'line' },
-    { title: 'Protein', value: '122 g / day', delta: '↑ 8.2%', positive: true, color: 'var(--green)', data: d.protein, unit: 'g', type: 'area' },
-    { title: 'Water Intake', value: '2.4 L / day', delta: '↑ 15%', positive: true, color: 'var(--blue)', data: d.water, unit: 'L', type: 'bar' },
-    { title: 'Sleep', value: '7.4 hrs / night', delta: '+0.4h', positive: true, color: 'var(--purple)', data: d.sleep, unit: 'hrs', type: 'area' },
-    { title: 'Daily Steps', value: '7,976 steps', delta: '↑ 12%', positive: true, color: 'var(--amber)', data: d.steps, unit: 'steps', type: 'bar' },
+    { title: 'Calories', value: `${agg.avgCalories.toLocaleString()} kcal`, delta: '↔', positive: true, color: 'var(--orange)', data: d.calories, unit: 'kcal', type: 'area' },
+    { title: 'Protein', value: `${agg.avgProtein} g / day`, delta: '↔', positive: true, color: 'var(--green)', data: d.protein, unit: 'g', type: 'area' },
+    { title: 'Water Intake', value: `${agg.avgWater} L / day`, delta: '↔', positive: true, color: 'var(--blue)', data: d.water, unit: 'L', type: 'bar' },
+    { title: 'Sleep', value: `${agg.avgSleep} hrs / night`, delta: '↔', positive: true, color: 'var(--purple)', data: d.sleep, unit: 'hrs', type: 'area' },
+    { title: 'Daily Steps', value: `${agg.avgSteps.toLocaleString()} steps`, delta: '↔', positive: true, color: 'var(--amber)', data: d.steps, unit: 'steps', type: 'bar' },
   ]
 
   return (
@@ -284,57 +299,73 @@ export function StatisticsScreen() {
       </div>
 
       <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 24px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 16 }}>
-          {[
-            { label: 'Avg Calories', value: '2,047', color: 'var(--orange)' },
-            { label: 'Weight Lost', value: '2.3 kg', color: 'var(--green)' },
-            { label: 'Streak', value: '18 days', color: 'var(--purple)' },
-          ].map((s) => (
-            <Card key={s.label} style={{ padding: '12px 10px', textAlign: 'center' }}>
-              <p className="font-display" style={{ fontSize: 18, fontWeight: 700, color: s.color, margin: 0, lineHeight: 1 }}>
-                {s.value}
-              </p>
-              <p style={{ fontSize: 10, color: 'var(--text-secondary)', margin: '4px 0 0' }}>{s.label}</p>
-            </Card>
-          ))}
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
-          {chartConfigs.map((c) => (
-            <ChartCard key={c.title} {...c} />
-          ))}
-        </div>
-
-        <div
-          style={{
-            background: 'linear-gradient(135deg, #1a1040 0%, #0d1a2e 100%)',
-            borderRadius: 20,
-            border: '1px solid rgba(123,110,246,0.3)',
-            padding: '18px',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-            <span style={{ fontSize: 18 }}>✨</span>
-            <span className="font-display" style={{ fontSize: 15, fontWeight: 700, color: '#f0f4ff' }}>
-              AI Progress Insights
-            </span>
+        {loading && (
+          <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
+            <p>Loading statistics...</p>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {[
-              { icon: '📉', text: "Weight trend is excellent — you're averaging 0.54 kg/week loss, perfectly within the healthy 0.5–1 kg range." },
-              { icon: '🥩', text: 'Protein intake improved 8.2% this week. Hitting 120g+ consistently will accelerate muscle preservation.' },
-              { icon: '😴', text: 'Sleep quality correlates with your best calorie-burning days. Prioritize 8h on workout nights.' },
-              { icon: '🔥', text: "At this rate, you'll hit your 75 kg goal in approximately 11 more weeks. Keep the momentum!" },
-            ].map((insight, i) => (
-              <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                <span style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>{insight.icon}</span>
-                <p style={{ fontSize: 13, color: 'rgba(240,244,255,0.75)', margin: 0, lineHeight: 1.5 }}>
-                  {insight.text}
-                </p>
+        )}
+
+        {!loading && raw.length === 0 && (
+          <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
+            <p>No tracking data yet. Start logging meals and activities to see trends.</p>
+          </div>
+        )}
+
+        {!loading && raw.length > 0 && (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 16 }}>
+              {[
+                { label: 'Avg Calories', value: agg.avgCalories.toLocaleString(), color: 'var(--orange)' },
+                { label: 'Avg Water', value: `${agg.avgWater} L`, color: 'var(--blue)' },
+                { label: 'Avg Sleep', value: `${agg.avgSleep} h`, color: 'var(--purple)' },
+              ].map((s) => (
+                <Card key={s.label} style={{ padding: '12px 10px', textAlign: 'center' }}>
+                  <p className="font-display" style={{ fontSize: 18, fontWeight: 700, color: s.color, margin: 0, lineHeight: 1 }}>
+                    {s.value}
+                  </p>
+                  <p style={{ fontSize: 10, color: 'var(--text-secondary)', margin: '4px 0 0' }}>{s.label}</p>
+                </Card>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
+              {chartConfigs.map((c) => (
+                <ChartCard key={c.title} {...c} />
+              ))}
+            </div>
+
+            <div
+              style={{
+                background: 'linear-gradient(135deg, #1a1040 0%, #0d1a2e 100%)',
+                borderRadius: 20,
+                border: '1px solid rgba(123,110,246,0.3)',
+                padding: '18px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                <span style={{ fontSize: 18 }}>✨</span>
+                <span className="font-display" style={{ fontSize: 15, fontWeight: 700, color: '#f0f4ff' }}>
+                  AI Progress Insights
+                </span>
               </div>
-            ))}
-          </div>
-        </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {[
+                  { icon: '📉', text: `Your average calorie intake is ${agg.avgCalories.toLocaleString()} kcal over the selected period.` },
+                  { icon: '💧', text: `Hydration average ${agg.avgWater} L/day. Aim for 2.5–3 L for optimal metabolism.` },
+                  { icon: '😴', text: `Sleep average ${agg.avgSleep} hours. Consistent 7–8h improves recovery and appetite control.` },
+                  { icon: '🔥', text: 'Keep logging daily to unlock personalized AI trend predictions next week.' },
+                ].map((insight, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                    <span style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>{insight.icon}</span>
+                    <p style={{ fontSize: 13, color: 'rgba(240,244,255,0.75)', margin: 0, lineHeight: 1.5 }}>
+                      {insight.text}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

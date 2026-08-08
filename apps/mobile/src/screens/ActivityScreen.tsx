@@ -1,6 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, Button, PlusIcon, ScreenHeader } from '../components/ui.js'
-interface Activity {
+import { api } from '../lib/api.js'
+import type { ActivityLog } from '../lib/data.js'
+import { useAppStore } from '../store/index.js'
+
+interface ActivityDisplay {
   id: string
   type: string
   icon: string
@@ -29,12 +33,6 @@ const activityTypes = [
 const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const todayIndex = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1
 
-const initialActivities: Activity[] = [
-  { id: '1', type: 'Running', icon: '🏃', color: 'var(--rose)', time: '7:00 AM', duration: 35, calories: 312, detail: '5.2 km • Avg pace 6:44/km' },
-  { id: '2', type: 'Walking', icon: '🚶', color: 'var(--green)', time: '12:30 PM', duration: 20, calories: 94, detail: '1.8 km • 2,840 steps' },
-  { id: '3', type: 'Gym', icon: '🏋️', color: 'var(--purple)', time: '6:00 PM', duration: 55, calories: 280, detail: 'Upper body • Chest & triceps' },
-]
-
 function estimateCalories(type: string, minutes: number) {
   const multipliers: Record<string, number> = {
     Running: 9,
@@ -53,24 +51,55 @@ function estimateCalories(type: string, minutes: number) {
   return Math.round(minutes * (multipliers[type] ?? 4))
 }
 
-function AddActivityModal({ onClose, onAdd }: { onClose: () => void; onAdd: (a: Activity) => void }) {
-  const [selectedType, setSelectedType] = useState(activityTypes[0])
+function toActivityDisplay(log: ActivityLog): ActivityDisplay {
+  const meta = activityTypes.find((a) => a.type === log.type) || { icon: '🔥', color: 'var(--orange)', type: log.type }
+  const date = new Date(log.startedAt)
+  const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return {
+    id: log.id,
+    type: log.type,
+    icon: meta.icon,
+    color: meta.color,
+    time,
+    duration: log.durationMin,
+    calories: log.caloriesBurned ?? estimateCalories(log.type, log.durationMin),
+    detail: log.notes || `${log.durationMin} min session`,
+  }
+}
+
+function formatDateISO(d: Date) {
+  return d.toISOString().split('T')[0]
+}
+
+function AddActivityModal({ onClose, onAdd }: { onClose: () => void; onAdd: (a: ActivityDisplay) => void }) {
+  const [selectedType, setSelectedType] = useState(activityTypes[2])
   const [duration, setDuration] = useState('30')
   const [time, setTime] = useState('08:00')
+  const [submitting, setSubmitting] = useState(false)
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     const d = Number(duration)
-    onAdd({
-      id: Date.now().toString(),
-      type: selectedType.type,
-      icon: selectedType.icon,
-      color: selectedType.color,
-      time,
-      duration: d,
-      calories: estimateCalories(selectedType.type, d),
-      detail: `${d} min session`,
-    })
-    onClose()
+    setSubmitting(true)
+    try {
+      const [hours, minutes] = time.split(':').map(Number)
+      const startedAt = new Date()
+      startedAt.setHours(hours, minutes, 0, 0)
+      const calories = estimateCalories(selectedType.type, d)
+
+      const res = await api.post<ActivityLog>('/tracking/activity', {
+        type: selectedType.type,
+        durationMin: d,
+        caloriesBurned: calories,
+        startedAt: startedAt.toISOString(),
+      })
+
+      onAdd(toActivityDisplay(res.data))
+      onClose()
+    } catch (err: any) {
+      alert(err.message || 'Failed to log activity')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -204,8 +233,8 @@ function AddActivityModal({ onClose, onAdd }: { onClose: () => void; onAdd: (a: 
           </span>
         </div>
 
-        <Button variant="primary" size="lg" fullWidth onClick={handleAdd}>
-          Log Activity
+        <Button variant="primary" size="lg" fullWidth onClick={handleAdd} disabled={submitting}>
+          {submitting ? 'Saving...' : 'Log Activity'}
         </Button>
       </div>
     </div>
@@ -216,11 +245,34 @@ const weekSteps = [6200, 8432, 4100, 9800, 7300, 5600, 0]
 
 export function ActivityScreen() {
   const [selectedDay, setSelectedDay] = useState(todayIndex)
-  const [activities, setActivities] = useState<Activity[]>(initialActivities)
+  const [activities, setActivities] = useState<ActivityDisplay[]>([])
+  const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const profile = useAppStore((s) => s.user?.profile)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    const date = new Date()
+    date.setDate(date.getDate() - (todayIndex - selectedDay))
+    api.get<ActivityLog[]>(`/tracking/activity?date=${formatDateISO(date)}`)
+      .then((res) => {
+        if (!cancelled) setActivities(res.data.map(toActivityDisplay))
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.error('Failed to load activities:', err)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [selectedDay])
 
   const totalCalories = activities.reduce((s, a) => s + a.calories, 0)
   const totalDuration = activities.reduce((s, a) => s + a.duration, 0)
+  const stepsToday = profile?.dailySteps ?? 10000
 
   const weekData = weekDays.map((label, i) => ({
     label,
@@ -312,8 +364,8 @@ export function ActivityScreen() {
         {[
           { label: 'Calories', value: `${totalCalories} kcal`, color: 'var(--orange)' },
           { label: 'Active Time', value: `${totalDuration} min`, color: 'var(--green)' },
-          { label: 'Steps', value: '8,432', color: 'var(--rose)' },
-          { label: 'Distance', value: '7.0 km', color: 'var(--blue)' },
+          { label: 'Steps', value: stepsToday.toLocaleString(), color: 'var(--rose)' },
+          { label: 'Distance', value: `${(stepsToday * 0.0008).toFixed(1)} km`, color: 'var(--blue)' },
         ].map((s) => (
           <Card key={s.label} style={{ flexShrink: 0, padding: '10px 14px', borderRadius: 14, minWidth: 90 }}>
             <p style={{ fontSize: 10, color: 'var(--text-secondary)', margin: 0, letterSpacing: '0.04em' }}>{s.label}</p>
@@ -327,14 +379,20 @@ export function ActivityScreen() {
       <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '0 20px 100px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
           <h2 className="font-display" style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-            Today's Timeline
+            {selectedDay === todayIndex ? "Today's Timeline" : `${weekDays[selectedDay]}'s Timeline`}
           </h2>
           <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
             {activities.length} {activities.length === 1 ? 'activity' : 'activities'}
           </span>
         </div>
 
-        {activities.length === 0 && (
+        {loading && (
+          <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
+            <p>Loading activities...</p>
+          </div>
+        )}
+
+        {!loading && activities.length === 0 && (
           <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
             <div style={{ fontSize: 40, marginBottom: 12 }}>🎯</div>
             <p className="font-display" style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-secondary)', margin: '0 0 8px' }}>

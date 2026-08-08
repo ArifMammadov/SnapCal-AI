@@ -268,7 +268,7 @@ model Program {
   id            String   @id @default(uuid()) @db.Uuid
   name          String
   slug          String   @unique
-  instructor    String?
+  instructor    String   @default("SnapCal Expert")
   category      String?
   description   String?
   durationWeeks Int?
@@ -280,6 +280,7 @@ model Program {
   emoji         String?
   gradient      String?
   tag           String?
+  enrolledCount Int      @default(0)
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

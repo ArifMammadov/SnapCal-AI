@@ -2,22 +2,39 @@ import { create } from 'zustand'
 
 export interface User {
   id: string
-  telegramId: string
+  telegramId?: string
   firstName: string
-  languageCode: string
+  lastName?: string | null
+  username?: string | null
+  email?: string | null
+  phone?: string | null
+  avatarUrl?: string | null
+  languageCode?: string
   role: string
-  subscriptionStatus: string
-  trialEndsAt?: string
+  plan?: string
+  subscriptionStatus?: string
+  trialEndsAt?: string | null
+  createdAt?: string
   profile?: {
     id: string
     birthDate?: string | null
+    dateOfBirth?: string | null
     gender?: string | null
     heightCm?: number | null
     currentWeightKg?: number | null
+    weightKg?: number | null
     targetWeightKg?: number | null
     primaryGoal?: string | null
     activityLevel?: string | null
     dailyCalories?: number | null
+    dailyProteinG?: number | null
+    dailyWaterMl?: number | null
+    dailySleepH?: number | null
+    sleepGoalH?: number | null
+    dailySteps?: number | null
+    workoutsPerWeek?: number | null
+    dietaryPreferences?: string[]
+    allergies?: string[]
     timezone?: string
     units?: string
   } | null

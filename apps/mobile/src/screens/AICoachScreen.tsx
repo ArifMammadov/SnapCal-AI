@@ -1,32 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Button } from '../components/ui.js'
-
-interface Message {
-  id: string
-  role: 'user' | 'ai'
-  content: string
-  type?: 'text' | 'food-analysis' | 'macro-card'
-  timestamp: string
-  foodData?: {
-    name: string
-    image: string
-    calories: number
-    protein: number
-    carbs: number
-    fat: number
-    serving: string
-  }
-}
-
-const initialMessages: Message[] = [
-  {
-    id: '1',
-    role: 'ai',
-    type: 'text',
-    timestamp: '8:30 AM',
-    content: "Good morning! 👋 I'm your AI nutrition coach. I've analyzed your stats — you're doing great this week. How can I help you today?",
-  },
-]
+import { useChat, type ChatMessage } from '../lib/data.js'
 
 const suggestedPrompts = [
   '📸 Analyze a food photo',
@@ -37,10 +11,13 @@ const suggestedPrompts = [
   '💧 Am I drinking enough water?',
 ]
 
+function formatTime(iso: string) {
+  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
 export function AICoachScreen() {
-  const [messages, setMessages] = useState<Message[]>(initialMessages)
+  const { messages, sending, sendMessage } = useChat()
   const [input, setInput] = useState('')
-  const [isTyping, setIsTyping] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -48,32 +25,109 @@ export function AICoachScreen() {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [messages, isTyping])
+  }, [messages, sending])
 
-  const sendMessage = (text: string) => {
-    if (!text.trim()) return
-    const userMsg: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      type: 'text',
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      content: text.trim(),
-    }
-    setMessages((prev) => [...prev, userMsg])
+  const handleSend = () => {
+    const text = input.trim()
+    if (!text || sending) return
     setInput('')
-    setIsTyping(true)
+    sendMessage(text)
+  }
 
-    setTimeout(() => {
-      setIsTyping(false)
-      const aiMsg: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'ai',
-        type: 'text',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        content: "I'm your AI coach. I can analyze food photos, plan meals, and answer nutrition questions. (Backend integration coming next.)",
-      }
-      setMessages((prev) => [...prev, aiMsg])
-    }, 1500)
+  const renderMessage = (msg: ChatMessage) => {
+    const isUser = msg.role === 'USER'
+    const foodData = msg.attachments?.foodData
+
+    if (foodData) {
+      return (
+        <div
+          style={{
+            background: 'var(--bg-card)',
+            borderRadius: 18,
+            border: '1px solid var(--border)',
+            overflow: 'hidden',
+            boxShadow: 'var(--shadow-card)',
+          }}
+        >
+          <div style={{ padding: '12px 14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <div>
+                <p className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+                  {foodData.name}
+                </p>
+                <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '2px 0 0' }}>
+                  {foodData.serving}
+                </p>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <p className="font-display" style={{ fontSize: 22, fontWeight: 700, color: 'var(--orange)', margin: 0, lineHeight: 1 }}>
+                  {foodData.calories}
+                </p>
+                <p style={{ fontSize: 10, color: 'var(--text-secondary)', margin: 0 }}>kcal</p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              {[
+                { label: 'Protein', value: foodData.proteinG, unit: 'g', color: 'var(--green)' },
+                { label: 'Carbs', value: foodData.carbsG, unit: 'g', color: 'var(--amber)' },
+                { label: 'Fat', value: foodData.fatG, unit: 'g', color: 'var(--orange)' },
+              ].map((m) => (
+                <div
+                  key={m.label}
+                  style={{
+                    flex: 1,
+                    padding: '8px',
+                    background: 'var(--bg-elevated)',
+                    borderRadius: 10,
+                    textAlign: 'center',
+                  }}
+                >
+                  <p className="font-display" style={{ fontSize: 16, fontWeight: 700, color: m.color, margin: 0 }}>
+                    {m.value}
+                    {m.unit}
+                  </p>
+                  <p style={{ fontSize: 10, color: 'var(--text-muted)', margin: '2px 0 0' }}>{m.label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <div
+        style={{
+          padding: '12px 14px',
+          background: isUser ? 'var(--green)' : 'var(--bg-card)',
+          borderRadius: isUser ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+          border: isUser ? 'none' : '1px solid var(--border)',
+          boxShadow: 'var(--shadow-card)',
+        }}
+      >
+        <p
+          style={{
+            fontSize: 14,
+            color: isUser ? '#fff' : 'var(--text-primary)',
+            margin: 0,
+            lineHeight: 1.5,
+            whiteSpace: 'pre-wrap',
+          }}
+        >
+          {msg.content}
+        </p>
+        <p
+          style={{
+            fontSize: 10,
+            color: isUser ? 'rgba(255,255,255,0.6)' : 'var(--text-muted)',
+            margin: '6px 0 0',
+            textAlign: isUser ? 'right' : 'left',
+          }}
+        >
+          {formatTime(msg.createdAt)}
+        </p>
+      </div>
+    )
   }
 
   return (
@@ -141,7 +195,10 @@ export function AICoachScreen() {
         {suggestedPrompts.map((p) => (
           <button
             key={p}
-            onClick={() => sendMessage(p)}
+            onClick={() => {
+              setInput('')
+              sendMessage(p)
+            }}
             className="chip"
             style={{
               flexShrink: 0,
@@ -163,18 +220,51 @@ export function AICoachScreen() {
 
       <div ref={scrollRef} className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '16px 16px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {messages.length === 0 && (
+            <div className="fade-in" style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+              <div
+                style={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: '50%',
+                  background: 'linear-gradient(135deg, var(--purple), var(--blue))',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 14,
+                  flexShrink: 0,
+                }}
+              >
+                🤖
+              </div>
+              <div
+                style={{
+                  padding: '12px 14px',
+                  background: 'var(--bg-card)',
+                  borderRadius: '18px 18px 18px 4px',
+                  border: '1px solid var(--border)',
+                  boxShadow: 'var(--shadow-card)',
+                }}
+              >
+                <p style={{ fontSize: 14, color: 'var(--text-primary)', margin: 0, lineHeight: 1.5 }}>
+                  Good morning! 👋 I'm your AI nutrition coach. I've analyzed your stats — you're doing great this week. How can I help you today?
+                </p>
+              </div>
+            </div>
+          )}
+
           {messages.map((msg) => (
             <div
               key={msg.id}
               className="fade-in"
               style={{
                 display: 'flex',
-                flexDirection: msg.role === 'user' ? 'row-reverse' : 'row',
+                flexDirection: msg.role === 'USER' ? 'row-reverse' : 'row',
                 gap: 8,
                 alignItems: 'flex-end',
               }}
             >
-              {msg.role === 'ai' && (
+              {msg.role === 'AI' && (
                 <div
                   style={{
                     width: 30,
@@ -192,106 +282,11 @@ export function AICoachScreen() {
                 </div>
               )}
 
-              <div style={{ maxWidth: '80%', minWidth: 60 }}>
-                {msg.type === 'macro-card' && msg.foodData ? (
-                  <div
-                    style={{
-                      background: 'var(--bg-card)',
-                      borderRadius: 18,
-                      border: '1px solid var(--border)',
-                      overflow: 'hidden',
-                      boxShadow: 'var(--shadow-card)',
-                    }}
-                  >
-                    <img
-                      src={msg.foodData.image}
-                      alt={msg.foodData.name}
-                      style={{ width: '100%', height: 140, objectFit: 'cover' }}
-                    />
-                    <div style={{ padding: '12px 14px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                        <div>
-                          <p className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-                            {msg.foodData.name}
-                          </p>
-                          <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '2px 0 0' }}>
-                            {msg.foodData.serving}
-                          </p>
-                        </div>
-                        <div style={{ textAlign: 'right' }}>
-                          <p className="font-display" style={{ fontSize: 22, fontWeight: 700, color: 'var(--orange)', margin: 0, lineHeight: 1 }}>
-                            {msg.foodData.calories}
-                          </p>
-                          <p style={{ fontSize: 10, color: 'var(--text-secondary)', margin: 0 }}>kcal</p>
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                        {[
-                          { label: 'Protein', value: msg.foodData.protein, unit: 'g', color: 'var(--green)' },
-                          { label: 'Carbs', value: msg.foodData.carbs, unit: 'g', color: 'var(--amber)' },
-                          { label: 'Fat', value: msg.foodData.fat, unit: 'g', color: 'var(--orange)' },
-                        ].map((m) => (
-                          <div
-                            key={m.label}
-                            style={{
-                              flex: 1,
-                              padding: '8px',
-                              background: 'var(--bg-elevated)',
-                              borderRadius: 10,
-                              textAlign: 'center',
-                            }}
-                          >
-                            <p className="font-display" style={{ fontSize: 16, fontWeight: 700, color: m.color, margin: 0 }}>
-                              {m.value}
-                              {m.unit}
-                            </p>
-                            <p style={{ fontSize: 10, color: 'var(--text-muted)', margin: '2px 0 0' }}>{m.label}</p>
-                          </div>
-                        ))}
-                      </div>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <Button variant="primary" size="sm" style={{ flex: 1 }}>✓ Save to Log</Button>
-                        <Button variant="secondary" size="sm">✏️ Edit</Button>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div
-                    style={{
-                      padding: '12px 14px',
-                      background: msg.role === 'user' ? 'var(--green)' : 'var(--bg-card)',
-                      borderRadius: msg.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                      border: msg.role === 'user' ? 'none' : '1px solid var(--border)',
-                      boxShadow: 'var(--shadow-card)',
-                    }}
-                  >
-                    <p
-                      style={{
-                        fontSize: 14,
-                        color: msg.role === 'user' ? '#fff' : 'var(--text-primary)',
-                        margin: 0,
-                        lineHeight: 1.5,
-                      }}
-                    >
-                      {msg.content}
-                    </p>
-                    <p
-                      style={{
-                        fontSize: 10,
-                        color: msg.role === 'user' ? 'rgba(255,255,255,0.6)' : 'var(--text-muted)',
-                        margin: '6px 0 0',
-                        textAlign: msg.role === 'user' ? 'right' : 'left',
-                      }}
-                    >
-                      {msg.timestamp}
-                    </p>
-                  </div>
-                )}
-              </div>
+              <div style={{ maxWidth: '80%', minWidth: 60 }}>{renderMessage(msg)}</div>
             </div>
           ))}
 
-          {isTyping && (
+          {sending && (
             <div className="fade-in" style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
               <div
                 style={{
@@ -383,7 +378,7 @@ export function AICoachScreen() {
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && sendMessage(input)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
               placeholder="Ask about nutrition or fitness..."
               style={{
                 flex: 1,
@@ -399,7 +394,7 @@ export function AICoachScreen() {
           </div>
 
           <button
-            onClick={() => (input.trim() ? sendMessage(input) : null)}
+            onClick={handleSend}
             aria-label={input.trim() ? 'Send message' : 'Voice message'}
             style={{
               width: 42,

@@ -1,8 +1,11 @@
-import { useState, useMemo } from 'react'
-import { Button, Card, CircularRing, MiniProgressBar, ArrowRightIcon, ChevronDownIcon } from '../components/ui.js'
+import { useState, useMemo, useEffect } from 'react'
+import { Button, Card, CircularRing, MiniProgressBar, ArrowRightIcon, ChevronDownIcon, Avatar } from '../components/ui.js'
 import { useApp } from '../App.js'
+import { useAppStore } from '../store/index.js'
 import { GoalPlanScreen } from './GoalPlanScreen.js'
 import { MarketplaceScreen } from './MarketplaceScreen.js'
+import { useTrackingSummary, usePrograms } from '../lib/data.js'
+import type { FoodLog, ActivityLog } from '../lib/data.js'
 
 interface CircularRingPropsLocal {
   value: number
@@ -16,70 +19,103 @@ function AnimatedRing({ value, max, size, strokeWidth, color }: CircularRingProp
   return <CircularRing value={value} max={max} size={size} strokeWidth={strokeWidth} color={color} />
 }
 
-const metrics = [
-  { label: 'Water', value: 1.8, max: 3.0, unit: 'L', color: 'var(--blue)', icon: '💧', key: 'water' },
-  { label: 'Sleep', value: 7.2, max: 8, unit: 'h', color: 'var(--purple)', icon: '🌙', key: 'sleep' },
-  { label: 'Protein', value: 112, max: 150, unit: 'g', color: 'var(--green)', icon: '🥩', key: 'protein' },
-  { label: 'Carbs', value: 198, max: 250, unit: 'g', color: 'var(--amber)', icon: '🌾', key: 'carbs' },
-  { label: 'Fat', value: 64, max: 73, unit: 'g', color: 'var(--orange)', icon: '🥑', key: 'fat' },
-  { label: 'Steps', value: 8432, max: 10000, unit: '', color: 'var(--rose)', icon: '👟', key: 'steps' },
+const mealTypeLabel: Record<string, string> = {
+  BREAKFAST: 'Breakfast',
+  LUNCH: 'Lunch',
+  DINNER: 'Dinner',
+  SNACK: 'Snacks',
+}
+
+const mealIcons: Record<string, string> = {
+  BREAKFAST: '☀️',
+  LUNCH: '🌤',
+  DINNER: '🌙',
+  SNACK: '🍎',
+}
+
+const metricConfig = [
+  { key: 'water', label: 'Water', unit: 'L', max: 3, color: 'var(--blue)', icon: '💧', get: (s: any) => (s?.waterMl ?? 0) / 1000 },
+  { key: 'sleep', label: 'Sleep', unit: 'h', max: 8, color: 'var(--purple)', icon: '🌙', get: (s: any) => s?.sleepH ?? 0 },
+  { key: 'protein', label: 'Protein', unit: 'g', max: 150, color: 'var(--green)', icon: '🥩', get: (s: any) => s?.proteinG ?? 0 },
+  { key: 'carbs', label: 'Carbs', unit: 'g', max: 250, color: 'var(--amber)', icon: '🌾', get: (s: any) => s?.carbsG ?? 0 },
+  { key: 'fat', label: 'Fat', unit: 'g', max: 73, color: 'var(--orange)', icon: '🥑', get: (s: any) => s?.fatG ?? 0 },
+  { key: 'steps', label: 'Steps', unit: '', max: 10000, color: 'var(--rose)', icon: '👟', get: (s: any) => s?.steps ?? 0 },
 ]
 
-const meals = [
-  {
-    type: 'Breakfast',
-    time: '8:30 AM',
-    calories: 420,
-    icon: '☀️',
-    items: ['Oatmeal with blueberries', 'Greek yogurt', 'Black coffee'],
-    macros: { p: 28, c: 62, f: 12 },
-    logged: true,
-  },
-  {
-    type: 'Lunch',
-    time: '12:45 PM',
-    calories: 680,
-    icon: '🌤',
-    items: ['Grilled chicken salad', 'Quinoa', 'Lemon dressing'],
-    macros: { p: 52, c: 58, f: 22 },
-    logged: true,
-  },
-  {
-    type: 'Dinner',
-    time: '7:00 PM',
-    calories: 590,
-    icon: '🌙',
-    items: ['Salmon fillet', 'Steamed broccoli', 'Brown rice'],
-    macros: { p: 48, c: 54, f: 18 },
-    logged: true,
-  },
-  {
-    type: 'Snacks',
-    time: 'Throughout day',
-    calories: 157,
-    icon: '🍎',
-    items: ['Apple', 'Almonds (20g)', 'Protein bar'],
-    macros: { p: 12, c: 24, f: 8 },
-    logged: false,
-  },
-]
+function groupFoodLogsByMeal(logs: FoodLog[]) {
+  const grouped: Record<string, FoodLog[]> = { BREAKFAST: [], LUNCH: [], DINNER: [], SNACK: [] }
+  for (const log of logs) {
+    if (!grouped[log.mealType]) grouped[log.mealType] = []
+    grouped[log.mealType].push(log)
+  }
+  return Object.entries(grouped)
+    .filter(([, items]) => items.length > 0)
+    .map(([type, items]) => {
+      const total = items.reduce(
+        (acc, i) => ({
+          calories: acc.calories + i.calories,
+          proteinG: acc.proteinG + (i.proteinG ?? 0),
+          carbsG: acc.carbsG + (i.carbsG ?? 0),
+          fatG: acc.fatG + (i.fatG ?? 0),
+        }),
+        { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 }
+      )
+      return {
+        type,
+        items,
+        total,
+      }
+    })
+}
 
-const featuredPrograms = [
-  { name: 'Fat Burn Elite', duration: 12, price: 29, rating: '4.9', emoji: '🔥', gradient: 'linear-gradient(135deg,#ff4d6d,#ff7a45)' },
-  { name: 'Yoga Flow Series', duration: 8, price: 19, rating: '4.8', emoji: '🧘', gradient: 'linear-gradient(135deg,#7b6ef6,#3dbbf7)' },
-  { name: 'Muscle Builder', duration: 16, price: 39, rating: '4.7', emoji: '💪', gradient: 'linear-gradient(135deg,#00d48a,#0da8ed)' },
-  { name: 'Home Shred', duration: 6, price: 14, rating: '4.6', emoji: '🏠', gradient: 'linear-gradient(135deg,#ffbe0b,#ff7a45)' },
-]
+function formatMealTime(iso: string) {
+  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+const emptySummary = {
+  caloriesConsumed: 0,
+  calorieGoal: 2200,
+  proteinG: 0,
+  carbsG: 0,
+  fatG: 0,
+  waterMl: 0,
+  sleepH: 0,
+  steps: 0,
+  healthScore: 0,
+  foodLogs: [] as FoodLog[],
+  activities: [] as ActivityLog[],
+}
 
 export function HomeScreen() {
   const { setActiveTab, setShowMarketplace } = useApp()
+  const user = useAppStore((s) => s.user)
+  const { data: summary, loading } = useTrackingSummary()
+  const { data: programs } = usePrograms()
   const [expandedMeal, setExpandedMeal] = useState<string | null>(null)
   const [showGoalPlan, setShowGoalPlan] = useState(false)
 
-  const totalCalories = 1847
-  const calorieGoal = 2200
-  const healthScore = 84
+  const s = summary ?? emptySummary
+  const calorieGoal = s.calorieGoal || 2200
+  const totalCalories = s.caloriesConsumed || 0
+  const healthScore = s.healthScore || 0
+  const proteinG = s.proteinG || 0
+  const carbsG = s.carbsG || 0
+  const fatG = s.fatG || 0
+  const steps = s.steps || 0
+  const waterL = (s.waterMl || 0) / 1000
+
+  const meals = useMemo(() => groupFoodLogsByMeal(s.foodLogs || []), [s.foodLogs])
+  const featuredPrograms = programs.slice(0, 4)
   const today = useMemo(() => new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }), [])
+
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours()
+    if (hour < 12) return 'Good morning'
+    if (hour < 18) return 'Good afternoon'
+    return 'Good evening'
+  }, [])
+
+  const firstName = user?.firstName || 'Friend'
 
   if (showGoalPlan) return <GoalPlanScreen onBack={() => setShowGoalPlan(false)} />
 
@@ -102,7 +138,7 @@ export function HomeScreen() {
             className="font-display"
             style={{ fontSize: 26, fontWeight: 700, color: 'var(--text-primary)', margin: '2px 0 0', letterSpacing: '-0.5px' }}
           >
-            Good morning, Alex 👋
+            {greeting}, {firstName} 👋
           </h1>
         </div>
         <button
@@ -121,11 +157,7 @@ export function HomeScreen() {
             padding: 0,
           }}
         >
-          <img
-            src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=84&h=84&fit=crop&auto=format"
-            alt="Profile"
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          />
+          <Avatar src={user?.avatarUrl || undefined} fallback={firstName[0] || '👤'} size={42} />
         </button>
       </header>
 
@@ -136,63 +168,71 @@ export function HomeScreen() {
           borderRadius: 24,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-          <div style={{ position: 'relative', flexShrink: 0 }}>
-            <AnimatedRing value={totalCalories} max={calorieGoal} size={140} strokeWidth={12} color="var(--green)" />
-            <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }}>
-              <AnimatedRing value={112} max={150} size={108} strokeWidth={8} color="var(--purple)" />
-            </div>
-            <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }}>
-              <AnimatedRing value={8432} max={10000} size={80} strokeWidth={6} color="var(--rose)" />
-            </div>
-            <div
-              style={{
-                position: 'absolute',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%,-50%)',
-                textAlign: 'center',
-              }}
-            >
-              <p className="font-display" style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-                {totalCalories.toLocaleString()}
-              </p>
-              <p style={{ fontSize: 10, color: 'var(--text-secondary)', margin: 0 }}>kcal</p>
-            </div>
+        {loading && (
+          <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-secondary)', fontSize: 14 }}>
+            Loading your day...
           </div>
+        )}
 
-          <div style={{ flex: 1 }}>
-            <div style={{ marginBottom: 16 }}>
-              <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 2px' }}>Calorie Goal</p>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                <span className="font-display" style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1 }}>
-                  {totalCalories.toLocaleString()}
-                </span>
-                <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>/ {calorieGoal.toLocaleString()}</span>
+        {!loading && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+              <AnimatedRing value={totalCalories} max={calorieGoal} size={140} strokeWidth={12} color="var(--green)" />
+              <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }}>
+                <AnimatedRing value={proteinG} max={150} size={108} strokeWidth={8} color="var(--purple)" />
               </div>
-              <MiniProgressBar value={totalCalories} max={calorieGoal} color="var(--green)" />
+              <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }}>
+                <AnimatedRing value={steps} max={10000} size={80} strokeWidth={6} color="var(--rose)" />
+              </div>
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%,-50%)',
+                  textAlign: 'center',
+                }}
+              >
+                <p className="font-display" style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+                  {totalCalories.toLocaleString()}
+                </p>
+                <p style={{ fontSize: 10, color: 'var(--text-secondary)', margin: 0 }}>kcal</p>
+              </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              {[
-                { label: 'Protein', value: '112g', color: 'var(--purple)' },
-                { label: 'Carbs', value: '198g', color: 'var(--amber)' },
-                { label: 'Fat', value: '64g', color: 'var(--orange)' },
-                { label: 'Steps', value: '8,432', color: 'var(--rose)' },
-              ].map((s) => (
-                <div key={s.label}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: s.color, flexShrink: 0 }} />
-                    <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{s.label}</span>
-                  </div>
-                  <p className="font-display" style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', margin: '2px 0 0 14px' }}>
-                    {s.value}
-                  </p>
+            <div style={{ flex: 1 }}>
+              <div style={{ marginBottom: 16 }}>
+                <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 2px' }}>Calorie Goal</p>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                  <span className="font-display" style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1 }}>
+                    {totalCalories.toLocaleString()}
+                  </span>
+                  <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>/ {calorieGoal.toLocaleString()}</span>
                 </div>
-              ))}
+                <MiniProgressBar value={totalCalories} max={calorieGoal} color="var(--green)" />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                {[
+                  { label: 'Protein', value: `${Math.round(proteinG)}g`, color: 'var(--purple)' },
+                  { label: 'Carbs', value: `${Math.round(carbsG)}g`, color: 'var(--amber)' },
+                  { label: 'Fat', value: `${Math.round(fatG)}g`, color: 'var(--orange)' },
+                  { label: 'Steps', value: steps.toLocaleString(), color: 'var(--rose)' },
+                ].map((s) => (
+                  <div key={s.label}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: s.color, flexShrink: 0 }} />
+                      <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{s.label}</span>
+                    </div>
+                    <p className="font-display" style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', margin: '2px 0 0 14px' }}>
+                      {s.value}
+                    </p>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         <div
           style={{
@@ -268,30 +308,33 @@ export function HomeScreen() {
           </h2>
         </div>
         <div className="no-scrollbar" style={{ display: 'flex', gap: 12, overflowX: 'auto', padding: '0 20px' }}>
-          {metrics.map((m) => (
-            <Card
-              key={m.key}
-              onClick={() => setActiveTab('activity')}
-              style={{
-                flexShrink: 0,
-                width: 110,
-                padding: '14px 14px 12px',
-                borderRadius: 18,
-              }}
-            >
-              <div style={{ fontSize: 20, marginBottom: 8 }}>{m.icon}</div>
-              <p className="font-display" style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', margin: 0, lineHeight: 1 }}>
-                {m.value.toLocaleString()}
-                <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-secondary)' }}>{m.unit}</span>
-              </p>
-              <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '4px 0 8px' }}>{m.label}</p>
-              <MiniProgressBar value={m.value} max={m.max} color={m.color} />
-              <p style={{ fontSize: 10, color: 'var(--text-muted)', margin: '4px 0 0', textAlign: 'right' }}>
-                / {m.max}
-                {m.unit}
-              </p>
-            </Card>
-          ))}
+          {metricConfig.map((m) => {
+            const value = m.get(s)
+            return (
+              <Card
+                key={m.key}
+                onClick={() => setActiveTab('activity')}
+                style={{
+                  flexShrink: 0,
+                  width: 110,
+                  padding: '14px 14px 12px',
+                  borderRadius: 18,
+                }}
+              >
+                <div style={{ fontSize: 20, marginBottom: 8 }}>{m.icon}</div>
+                <p className="font-display" style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', margin: 0, lineHeight: 1 }}>
+                  {value.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                  <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-secondary)' }}>{m.unit}</span>
+                </p>
+                <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '4px 0 8px' }}>{m.label}</p>
+                <MiniProgressBar value={value} max={m.max} color={m.color} />
+                <p style={{ fontSize: 10, color: 'var(--text-muted)', margin: '4px 0 0', textAlign: 'right' }}>
+                  / {m.max}
+                  {m.unit}
+                </p>
+              </Card>
+            )
+          })}
         </div>
       </section>
 
@@ -305,10 +348,15 @@ export function HomeScreen() {
           </button>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {meals.map((meal) => (
+          {meals.length === 0 && (
+            <Card style={{ padding: 20, textAlign: 'center' }}>
+              <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0 }}>No meals logged yet today.</p>
+            </Card>
+          )}
+          {meals.map(({ type, items, total }) => (
             <Card
-              key={meal.type}
-              onClick={() => setExpandedMeal(expandedMeal === meal.type ? null : meal.type)}
+              key={type}
+              onClick={() => setExpandedMeal(expandedMeal === type ? null : type)}
               style={{ overflow: 'hidden' }}
             >
               <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -318,26 +366,28 @@ export function HomeScreen() {
                       width: 40,
                       height: 40,
                       borderRadius: 12,
-                      background: meal.logged ? 'var(--green-dim)' : 'var(--bg-elevated)',
+                      background: 'var(--green-dim)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       fontSize: 18,
                     }}
                   >
-                    {meal.icon}
+                    {mealIcons[type] || '🍽️'}
                   </div>
                   <div>
                     <p className="font-display" style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-                      {meal.type}
+                      {mealTypeLabel[type] || type}
                     </p>
-                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 0' }}>{meal.time}</p>
+                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 0' }}>
+                      {items.length} item{items.length !== 1 ? 's' : ''}
+                    </p>
                   </div>
                 </div>
                 <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div>
                     <p className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-                      {meal.calories}
+                      {Math.round(total.calories)}
                     </p>
                     <p style={{ fontSize: 10, color: 'var(--text-secondary)', margin: 0 }}>kcal</p>
                   </div>
@@ -345,20 +395,20 @@ export function HomeScreen() {
                     size={16}
                     style={{
                       color: 'var(--text-muted)',
-                      transform: expandedMeal === meal.type ? 'rotate(180deg)' : 'rotate(0)',
+                      transform: expandedMeal === type ? 'rotate(180deg)' : 'rotate(0)',
                       transition: 'transform 0.3s ease',
                     }}
                   />
                 </div>
               </div>
 
-              {expandedMeal === meal.type && (
+              {expandedMeal === type && (
                 <div style={{ borderTop: '1px solid var(--border)', padding: '12px 16px' }} className="fade-in">
                   <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
                     {[
-                      { label: 'P', value: meal.macros.p + 'g', color: 'var(--green)' },
-                      { label: 'C', value: meal.macros.c + 'g', color: 'var(--amber)' },
-                      { label: 'F', value: meal.macros.f + 'g', color: 'var(--orange)' },
+                      { label: 'P', value: `${Math.round(total.proteinG)}g`, color: 'var(--green)' },
+                      { label: 'C', value: `${Math.round(total.carbsG)}g`, color: 'var(--amber)' },
+                      { label: 'F', value: `${Math.round(total.fatG)}g`, color: 'var(--orange)' },
                     ].map((m) => (
                       <div
                         key={m.label}
@@ -377,10 +427,13 @@ export function HomeScreen() {
                       </div>
                     ))}
                   </div>
-                  {meal.items.map((item) => (
-                    <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                      <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--green)', flexShrink: 0 }} />
-                      <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{item}</span>
+                  {items.map((item) => (
+                    <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--green)', flexShrink: 0 }} />
+                        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{item.name}</span>
+                      </div>
+                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{item.calories} kcal</span>
                     </div>
                   ))}
                 </div>
@@ -432,7 +485,7 @@ export function HomeScreen() {
             <span style={{ fontSize: 11, color: 'var(--purple)', fontWeight: 600, letterSpacing: '0.06em' }}>AI INSIGHT</span>
           </div>
           <p className="font-display" style={{ fontSize: 15, fontWeight: 600, color: '#f0f4ff', margin: '0 0 8px', lineHeight: 1.4 }}>
-            You're 353 kcal under goal today
+            You're {Math.max(0, calorieGoal - totalCalories)} kcal under goal today
           </p>
           <p style={{ fontSize: 13, color: 'rgba(240,244,255,0.6)', margin: '0 0 14px', lineHeight: 1.5 }}>
             Add a protein-rich evening snack — try cottage cheese with walnuts (≈180 kcal, 20g protein) to hit your macros.
@@ -464,9 +517,14 @@ export function HomeScreen() {
           </button>
         </div>
         <div className="no-scrollbar" style={{ display: 'flex', gap: 12, overflowX: 'auto', padding: '0 20px' }}>
+          {featuredPrograms.length === 0 && (
+            <Card style={{ flexShrink: 0, width: 180, padding: 20, textAlign: 'center' }}>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>No programs available</p>
+            </Card>
+          )}
           {featuredPrograms.map((p) => (
             <Card
-              key={p.name}
+              key={p.id}
               style={{
                 flexShrink: 0,
                 width: 180,
@@ -507,7 +565,7 @@ export function HomeScreen() {
                 <p className="font-display" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
                   {p.name}
                 </p>
-                <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '3px 0 0' }}>{p.duration} weeks</p>
+                <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '3px 0 0' }}>{p.durationWeeks} weeks</p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginTop: 6 }}>
                   <span style={{ color: 'var(--amber)', fontSize: 12 }}>★</span>
                   <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{p.rating}</span>

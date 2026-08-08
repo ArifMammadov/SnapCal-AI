@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useApp } from '../App.js'
-import { Card, Button, BackIcon } from '../components/ui.js'
+import { Card, Button, BackIcon, Avatar } from '../components/ui.js'
 import { useAppStore } from '../store/index.js'
+import { api } from '../lib/api.js'
+import type { TrackingSummary } from '../lib/data.js'
 
 type ProfileSection = 'main' | 'personal' | 'goals' | 'subscription' | 'settings' | 'faq' | 'support' | 'privacy' | 'terms'
 
@@ -30,15 +32,18 @@ function BackButton({ onBack }: { onBack: () => void }) {
 }
 
 function PersonalInfoSection({ onBack }: { onBack: () => void }) {
+  const user = useAppStore((s) => s.user)
+  const profile = user?.profile
+
   const fields = [
-    { label: 'Full Name', value: 'Alex Johnson' },
-    { label: 'Date of Birth', value: 'March 12, 1992' },
-    { label: 'Gender', value: 'Male' },
-    { label: 'Height', value: '178 cm' },
-    { label: 'Current Weight', value: '85.0 kg' },
-    { label: 'Target Weight', value: '75.0 kg' },
-    { label: 'Email', value: 'alex.johnson@gmail.com' },
-    { label: 'Phone', value: '+1 (555) 234-5678' },
+    { label: 'Full Name', value: `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || '—' },
+    { label: 'Date of Birth', value: profile?.dateOfBirth ? new Date(profile.dateOfBirth).toLocaleDateString() : '—' },
+    { label: 'Gender', value: profile?.gender || '—' },
+    { label: 'Height', value: profile?.heightCm ? `${profile.heightCm} cm` : '—' },
+    { label: 'Current Weight', value: profile?.weightKg ? `${profile.weightKg} kg` : '—' },
+    { label: 'Target Weight', value: profile?.targetWeightKg ? `${profile.targetWeightKg} kg` : '—' },
+    { label: 'Email', value: user?.email || '—' },
+    { label: 'Phone', value: user?.phone || '—' },
   ]
   return (
     <div className="no-scrollbar" style={{ height: '100%', overflowY: 'auto', background: 'var(--bg)', padding: '56px 20px 24px' }}>
@@ -59,14 +64,16 @@ function PersonalInfoSection({ onBack }: { onBack: () => void }) {
 }
 
 function GoalsSection({ onBack }: { onBack: () => void }) {
+  const profile = useAppStore((s) => s.user?.profile)
+
   const goals = [
-    { label: 'Primary Goal', value: 'Fat Loss', icon: '🎯', color: 'var(--rose)' },
-    { label: 'Daily Calories', value: '2,200 kcal', icon: '🔥', color: 'var(--orange)' },
-    { label: 'Protein Target', value: '150g / day', icon: '🥩', color: 'var(--green)' },
-    { label: 'Water Goal', value: '3.0 L / day', icon: '💧', color: 'var(--blue)' },
-    { label: 'Sleep Target', value: '8 hours', icon: '🌙', color: 'var(--purple)' },
-    { label: 'Steps Goal', value: '10,000 / day', icon: '👟', color: 'var(--amber)' },
-    { label: 'Workout Frequency', value: '5× / week', icon: '💪', color: 'var(--rose)' },
+    { label: 'Primary Goal', value: profile?.primaryGoal || '—', icon: '🎯', color: 'var(--rose)' },
+    { label: 'Daily Calories', value: `${profile?.dailyCalories || '—'} kcal`, icon: '🔥', color: 'var(--orange)' },
+    { label: 'Protein Target', value: `${profile?.dailyProteinG || '—'}g / day`, icon: '🥩', color: 'var(--green)' },
+    { label: 'Water Goal', value: `${((profile?.dailyWaterMl || 0) / 1000).toFixed(1)} L / day`, icon: '💧', color: 'var(--blue)' },
+    { label: 'Sleep Target', value: `${profile?.sleepGoalH || '—'} hours`, icon: '🌙', color: 'var(--purple)' },
+    { label: 'Steps Goal', value: `${profile?.dailySteps || '—'} / day`, icon: '👟', color: 'var(--amber)' },
+    { label: 'Workout Frequency', value: `${profile?.workoutsPerWeek || '—'}× / week`, icon: '💪', color: 'var(--rose)' },
     { label: 'Timeline', value: '6 months', icon: '📅', color: 'var(--green)' },
   ]
   return (
@@ -107,6 +114,8 @@ function GoalsSection({ onBack }: { onBack: () => void }) {
 }
 
 function SubscriptionSection({ onBack }: { onBack: () => void }) {
+  const plan = useAppStore((s) => s.user?.plan) || 'FREE'
+  const isPro = plan !== 'FREE'
   return (
     <div className="no-scrollbar" style={{ height: '100%', overflowY: 'auto', background: 'var(--bg)', padding: '56px 20px 24px' }}>
       <BackButton onBack={onBack} />
@@ -117,60 +126,81 @@ function SubscriptionSection({ onBack }: { onBack: () => void }) {
       <div
         style={{
           padding: '16px',
-          background: 'linear-gradient(135deg, var(--purple) 0%, var(--blue) 100%)',
+          background: isPro ? 'linear-gradient(135deg, var(--purple) 0%, var(--blue) 100%)' : 'var(--bg-elevated)',
           borderRadius: 20,
           marginBottom: 20,
+          border: isPro ? 'none' : '1px solid var(--border)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', margin: 0, letterSpacing: '0.06em' }}>CURRENT PLAN</p>
-            <p className="font-display" style={{ fontSize: 22, fontWeight: 700, color: '#fff', margin: '4px 0 0' }}>Pro Annual</p>
+            <p style={{ fontSize: 11, color: isPro ? 'rgba(255,255,255,0.7)' : 'var(--text-secondary)', margin: 0, letterSpacing: '0.06em' }}>CURRENT PLAN</p>
+            <p className="font-display" style={{ fontSize: 22, fontWeight: 700, color: isPro ? '#fff' : 'var(--text-primary)', margin: '4px 0 0' }}>
+              {isPro ? plan : 'Free Plan'}
+            </p>
           </div>
           <div
             style={{
               padding: '6px 12px',
-              background: 'rgba(255,255,255,0.2)',
+              background: isPro ? 'rgba(255,255,255,0.2)' : 'var(--green-dim)',
               borderRadius: 10,
               fontSize: 12,
-              color: '#fff',
+              color: isPro ? '#fff' : 'var(--green)',
               fontWeight: 600,
             }}
           >
-            Active ✓
+            {isPro ? 'Active ✓' : 'Active'}
           </div>
         </div>
         <div style={{ marginTop: 16, display: 'flex', gap: 16 }}>
           <div>
-            <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)', margin: 0 }}>Price</p>
-            <p className="font-display" style={{ fontSize: 16, fontWeight: 700, color: '#fff', margin: '2px 0 0' }}>$79 / year</p>
+            <p style={{ fontSize: 10, color: isPro ? 'rgba(255,255,255,0.6)' : 'var(--text-secondary)', margin: 0 }}>Price</p>
+            <p className="font-display" style={{ fontSize: 16, fontWeight: 700, color: isPro ? '#fff' : 'var(--text-primary)', margin: '2px 0 0' }}>
+              {isPro ? '$79 / year' : '$0'}
+            </p>
           </div>
           <div>
-            <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.6)', margin: 0 }}>Renews</p>
-            <p className="font-display" style={{ fontSize: 16, fontWeight: 700, color: '#fff', margin: '2px 0 0' }}>Aug 5, 2027</p>
+            <p style={{ fontSize: 10, color: isPro ? 'rgba(255,255,255,0.6)' : 'var(--text-secondary)', margin: 0 }}>AI Coach</p>
+            <p className="font-display" style={{ fontSize: 16, fontWeight: 700, color: isPro ? '#fff' : 'var(--text-primary)', margin: '2px 0 0' }}>
+              {isPro ? 'Unlimited' : 'Limited'}
+            </p>
           </div>
         </div>
       </div>
 
       <Card style={{ padding: '16px', marginBottom: 20 }}>
         <p className="font-display" style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 12px' }}>
-          Included in Pro
+          Included in {isPro ? plan : 'Free'}
         </p>
-        {[
-          '✦ Unlimited AI Coach conversations',
-          '✦ Advanced nutrition analytics',
-          '✦ 6-month transformation plans',
-          '✦ Meal photo analysis',
-          '✦ Priority support',
-          '✦ 10% off Marketplace programs',
-        ].map((f) => (
+        {(isPro
+          ? [
+              '✦ Unlimited AI Coach conversations',
+              '✦ Advanced nutrition analytics',
+              '✦ 6-month transformation plans',
+              '✦ Meal photo analysis',
+              '✦ Priority support',
+              '✦ 10% off Marketplace programs',
+            ]
+          : [
+              '✦ Basic calorie tracking',
+              '✦ 1 free AI food scan/day',
+              '✦ Daily summary dashboard',
+              '✦ Upgrade anytime for full access',
+            ]
+        ).map((f) => (
           <p key={f} style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 8px' }}>{f}</p>
         ))}
       </Card>
 
-      <Button variant="secondary" size="lg" fullWidth style={{ color: 'var(--rose)' }}>
-        Cancel Subscription
-      </Button>
+      {isPro ? (
+        <Button variant="secondary" size="lg" fullWidth style={{ color: 'var(--rose)' }}>
+          Cancel Subscription
+        </Button>
+      ) : (
+        <Button variant="primary" size="lg" fullWidth>
+          Upgrade to Pro
+        </Button>
+      )}
     </div>
   )
 }
@@ -275,7 +305,7 @@ function SimpleTextSection({ title, onBack, content }: { title: string; onBack: 
       </h1>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {content.map((c, i) => (
-          <p key={i} style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: 0 }}>
+          <p key={i} style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.7, margin: 0, whiteSpace: 'pre-line' }}>
             {c}
           </p>
         ))}
@@ -313,7 +343,12 @@ const staticContent: Record<string, string[]> = {
 export function ProfileScreen() {
   const [section, setSection] = useState<ProfileSection>('main')
   const { darkMode, setDarkMode } = useApp()
-  const logout = useAppStore((s) => s.logout)
+  const { user, logout } = useAppStore()
+  const [summary, setSummary] = useState<TrackingSummary | null>(null)
+
+  useEffect(() => {
+    api.get<TrackingSummary>('/tracking/summary').then((res) => setSummary(res.data)).catch(() => null)
+  }, [])
 
   if (section === 'personal') return <PersonalInfoSection onBack={() => setSection('main')} />
   if (section === 'goals') return <GoalsSection onBack={() => setSection('main')} />
@@ -327,12 +362,20 @@ export function ProfileScreen() {
   const menuItems = [
     { id: 'personal' as ProfileSection, icon: '👤', label: 'Personal Information', desc: 'Name, height, weight, contact', highlight: false },
     { id: 'goals' as ProfileSection, icon: '🎯', label: 'Goals', desc: 'Targets, timeline, preferences', highlight: false },
-    { id: 'subscription' as ProfileSection, icon: '⭐', label: 'Subscription', desc: 'Pro Annual · Active', highlight: true },
+    { id: 'subscription' as ProfileSection, icon: '⭐', label: 'Subscription', desc: `${user?.plan || 'Free'} · ${user?.plan === 'FREE' ? 'Active' : 'Active ✓'}`, highlight: true },
     { id: 'settings' as ProfileSection, icon: '⚙️', label: 'Settings', desc: 'Notifications, display, units', highlight: false },
     { id: 'faq' as ProfileSection, icon: '❓', label: 'FAQ', desc: 'Common questions answered', highlight: false },
     { id: 'support' as ProfileSection, icon: '💬', label: 'Support', desc: 'Get help from our team', highlight: false },
     { id: 'privacy' as ProfileSection, icon: '🔒', label: 'Privacy Policy', desc: 'How we handle your data', highlight: false },
     { id: 'terms' as ProfileSection, icon: '📄', label: 'Terms & Conditions', desc: 'Legal · Disclaimer', highlight: false },
+  ]
+
+  const firstName = user?.firstName || 'Friend'
+  const joined = user?.createdAt ? new Date(user.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : '—'
+  const stats = [
+    { label: 'Weight Lost', value: summary?.weightKg ? `${Math.max(0, +(summary.weightKg - (user?.profile?.targetWeightKg || summary.weightKg)).toFixed(1))} kg` : '—', color: 'var(--green)' },
+    { label: 'Days Active', value: '18', color: 'var(--purple)' },
+    { label: 'Health Score', value: `${summary?.healthScore ?? '—'}%`, color: 'var(--amber)' },
   ]
 
   return (
@@ -367,10 +410,11 @@ export function ProfileScreen() {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <div style={{ position: 'relative' }}>
-            <img
-              src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=160&h=160&fit=crop&auto=format"
-              alt="Alex"
-              style={{ width: 72, height: 72, borderRadius: '50%', objectFit: 'cover', border: '3px solid var(--green)' }}
+            <Avatar
+              src={user?.avatarUrl || undefined}
+              fallback={firstName[0] || '👤'}
+              size={72}
+              style={{ border: '3px solid var(--green)' }}
             />
             <div
               style={{
@@ -393,10 +437,10 @@ export function ProfileScreen() {
           </div>
           <div>
             <h1 className="font-display" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-              Alex Johnson
+              {firstName} {user?.lastName || ''}
             </h1>
             <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '3px 0 0' }}>
-              Member since March 2026
+              Member since {joined}
             </p>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
               <div
@@ -409,7 +453,7 @@ export function ProfileScreen() {
                   fontWeight: 700,
                 }}
               >
-                ⭐ Pro Member
+                ⭐ {user?.plan === 'FREE' ? 'Free Member' : user?.plan || 'Member'}
               </div>
               <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>18-day streak 🔥</span>
             </div>
@@ -417,11 +461,7 @@ export function ProfileScreen() {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginTop: 20 }}>
-          {[
-            { label: 'Weight Lost', value: '2.3 kg', color: 'var(--green)' },
-            { label: 'Days Active', value: '18', color: 'var(--purple)' },
-            { label: 'Health Score', value: '84%', color: 'var(--amber)' },
-          ].map((s) => (
+          {stats.map((s) => (
             <Card key={s.label} style={{ padding: '12px 10px', textAlign: 'center' }}>
               <p className="font-display" style={{ fontSize: 20, fontWeight: 700, color: s.color, margin: 0 }}>
                 {s.value}

@@ -85,12 +85,12 @@ export function App() {
         >
           <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
             <div className="screen-enter" style={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-              {showMarketplace && <MarketplaceScreen onBack={() => setShowMarketplace(false)} />}
               {!showMarketplace && activeTab === 'home' && <HomeScreen />}
               {!showMarketplace && activeTab === 'activity' && <ActivityScreen />}
               {!showMarketplace && activeTab === 'coach' && <AICoachScreen />}
               {!showMarketplace && activeTab === 'stats' && <StatisticsScreen />}
               {!showMarketplace && activeTab === 'profile' && <ProfileScreen />}
+              {showMarketplace && <MarketplaceScreen />}
             </div>
           </div>
 

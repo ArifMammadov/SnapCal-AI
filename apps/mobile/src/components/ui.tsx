@@ -272,9 +272,10 @@ interface AvatarProps {
   src?: string
   fallback?: string
   size?: number
+  style?: React.CSSProperties
 }
 
-export function Avatar({ src, fallback = '👤', size = 40 }: AvatarProps) {
+export function Avatar({ src, fallback = '👤', size = 40, style }: AvatarProps) {
   const [err, setErr] = useState(false)
   return (
     <div
@@ -290,6 +291,7 @@ export function Avatar({ src, fallback = '👤', size = 40 }: AvatarProps) {
         overflow: 'hidden',
         flexShrink: 0,
         fontSize: size * 0.45,
+        ...style,
       }}
     >
       {src && !err ? <img src={src} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={() => setErr(true)} /> : fallback}
