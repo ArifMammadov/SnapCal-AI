@@ -169,8 +169,8 @@ export function useChat() {
   const [loadingHistory, setLoadingHistory] = useState(true)
 
   useEffect(() => {
-    api.get<ChatMessage[]>('/ai/history')
-      .then((res) => setMessages(res.data.reverse()))
+    api.get<{ messages: ChatMessage[] }>('/ai/history')
+      .then((res) => setMessages(res.data.messages.reverse()))
       .catch(() => setMessages([]))
       .finally(() => setLoadingHistory(false))
   }, [])

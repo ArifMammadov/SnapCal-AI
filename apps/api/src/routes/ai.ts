@@ -59,6 +59,26 @@ async function checkAiLimit(userId: string): Promise<{ allowed: boolean; reason?
 const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
   app.addHook('preHandler', requireAuth)
 
+  app.get('/history', async (request: FastifyRequest) => {
+    const userId = request.user!.userId
+    const messages = await prisma.chatMessage.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    })
+
+    return {
+      messages: messages.map((m: any) => ({
+        id: m.id,
+        role: m.role,
+        type: m.type,
+        content: m.content,
+        createdAt: m.createdAt.toISOString(),
+        attachments: m.attachments as any,
+      })),
+    }
+  })
+
   app.post('/chat', {
     config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
   }, async (request: FastifyRequest, reply) => {
