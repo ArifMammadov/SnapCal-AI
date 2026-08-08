@@ -6,7 +6,6 @@ export async function auditLog(event: { userId: string; action: string; metadata
       data: {
         userId: event.userId,
         skillName: event.action,
-        metadata: event.metadata ?? {},
       },
     })
   } catch {
