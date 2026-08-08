@@ -190,6 +190,8 @@ Respond in a helpful, concise way in the user's language. Do not provide medical
       id: chat.id,
       role: 'ai',
       content,
+      type: 'text',
+      usedFallback: !!errorMessage,
     },
   }
 }
