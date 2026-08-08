@@ -81,6 +81,10 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
         { timeout: 30000 }
       )
 
+      if (!aiResponse.message) {
+        throw new Error('AI agent returned empty message')
+      }
+
       const aiMessage = await prisma.chatMessage.create({
         data: {
           userId,
@@ -101,12 +105,40 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
           timestamp: aiMessage.createdAt.toISOString(),
         },
       }
-    } catch (err) {
+    } catch (err: any) {
+      let fallbackMessage = 'Sorry, I could not process your request right now. Please try again in a moment.'
+      let usedFallback = false
+
+      if (axios.isAxiosError(err) && !err.response) {
+        usedFallback = true
+        fallbackMessage = 'AI Coach is temporarily unavailable. Please try again later.'
+      }
+
       await prisma.chatMessage.update({
         where: { id: userMessage.id },
         data: { content: `${message} [FAILED]` },
       })
-      throw err
+
+      const aiMessage = await prisma.chatMessage.create({
+        data: {
+          userId,
+          role: 'AI',
+          type: 'TEXT',
+          content: fallbackMessage,
+        },
+      })
+
+      return {
+        message: {
+          id: aiMessage.id,
+          role: 'ai',
+          type: 'TEXT',
+          content: fallbackMessage,
+          foodData: undefined,
+          timestamp: aiMessage.createdAt.toISOString(),
+          usedFallback,
+        },
+      }
     }
   })
 
