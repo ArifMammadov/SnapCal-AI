@@ -5,7 +5,7 @@ export async function auditLog(event: { userId: string; action: string; metadata
     await prisma.aiAuditLog.create({
       data: {
         userId: event.userId,
-        action: event.action,
+        skillName: event.action,
         metadata: event.metadata ?? {},
       },
     })
