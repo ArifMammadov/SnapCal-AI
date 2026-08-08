@@ -22,18 +22,22 @@ const feedbackSchema = z.object({
 })
 
 interface AiAgentResponse {
-  message: string
-  type: 'text' | 'food-analysis' | 'macro-card'
-  foodData?: {
-    name: string
-    calories: number
-    proteinG: number
-    carbsG: number
-    fatG: number
-    serving: string
-    suggestedMealType: string
+  message: {
+    id: string
+    role: 'ai'
+    content: string
+    type?: string
+    foodData?: {
+      name: string
+      calories: number
+      proteinG: number
+      carbsG: number
+      fatG: number
+      serving: string
+      suggestedMealType: string
+    }
+    usedFallback?: boolean
   }
-  usedFallback: boolean
 }
 
 async function checkAiLimit(userId: string): Promise<{ allowed: boolean; reason?: string }> {
@@ -101,7 +105,7 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
         { timeout: 30000 }
       )
 
-      if (!aiResponse.message) {
+      if (!aiResponse.message || !aiResponse.message.content) {
         throw new Error('AI agent returned empty message')
       }
 
@@ -109,9 +113,9 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
         data: {
           userId,
           role: 'AI',
-          type: aiResponse.type as any,
-          content: aiResponse.message,
-          attachments: aiResponse.foodData ? { foodData: aiResponse.foodData } : undefined,
+          type: (aiResponse.message.type?.toUpperCase() as any) ?? 'TEXT',
+          content: aiResponse.message.content,
+          attachments: aiResponse.message.foodData ? { foodData: aiResponse.message.foodData } : undefined,
         },
       })
 
@@ -119,9 +123,9 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
         message: {
           id: aiMessage.id,
           role: 'ai',
-          type: aiResponse.type as any,
-          content: aiResponse.message,
-          foodData: aiResponse.foodData,
+          type: (aiResponse.message.type?.toUpperCase() as any) ?? 'TEXT',
+          content: aiResponse.message.content,
+          foodData: aiResponse.message.foodData,
           timestamp: aiMessage.createdAt.toISOString(),
         },
       }
