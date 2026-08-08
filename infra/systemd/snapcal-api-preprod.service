@@ -1,0 +1,15 @@
+[Unit]
+Description=SnapCal API - Preprod
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/snapcal-preprod/apps/api
+ExecStart=/usr/bin/pnpm start
+Restart=always
+RestartSec=3
+Environment=NODE_ENV=development
+Environment=PORT=3004
+
+[Install]
+WantedBy=default.target
