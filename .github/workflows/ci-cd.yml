@@ -35,7 +35,13 @@ jobs:
         run: pnpm typecheck
 
       - name: Build packages
-        run: pnpm -r build
+        run: |
+          pnpm --filter @snapcal/database generate
+          pnpm --filter @snapcal/database build
+          pnpm --filter @snapcal/shared build
+          pnpm --filter @snapcal/api build
+          pnpm --filter @snapcal/admin build
+          pnpm --filter @snapcal/mobile build
 
   deploy-test:
     runs-on: ubuntu-latest
@@ -50,9 +56,9 @@ jobs:
       - name: Deploy to test server
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: 164.92.246.155
-          username: deploy
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.DO_PROD_SSH_KEY }}
           script: |
             set -e
             cd /opt/snapcal-test
@@ -80,9 +86,9 @@ jobs:
       - name: Deploy to preprod server
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: 164.92.246.155
-          username: deploy
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.DO_PROD_SSH_KEY }}
           script: |
             set -e
             cd /opt/snapcal-preprod
@@ -110,9 +116,9 @@ jobs:
       - name: Deploy to production server
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: 164.92.246.155
-          username: deploy
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.DO_PROD_SSH_KEY }}
           script: |
             set -e
             cd /opt/snapcal-main
@@ -140,9 +146,9 @@ jobs:
       - name: Deploy admin panel
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: 164.92.246.155
-          username: deploy
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.DO_PROD_SSH_KEY }}
           script: |
             set -e
             cd /opt/snapcal-admin
