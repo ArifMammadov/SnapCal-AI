@@ -189,7 +189,15 @@ export function useChat() {
 
     try {
       const res = await api.post<{ message: ChatMessage }>('/ai/chat', { message: content.trim() })
-      setMessages((prev) => [...prev, { ...res.data.message, createdAt: res.data.message.createdAt || new Date().toISOString() }])
+      const ai = res.data.message
+      setMessages((prev) => [...prev, {
+        id: ai.id || `${Date.now()}-ai`,
+        role: ai.role || 'AI',
+        type: ai.type || 'TEXT',
+        content: ai.content || 'Sorry, no response.',
+        createdAt: ai.createdAt || new Date().toISOString(),
+        attachments: ai.attachments,
+      }])
     } catch (err: any) {
       const aiMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
