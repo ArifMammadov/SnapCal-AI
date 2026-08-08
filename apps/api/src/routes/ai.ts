@@ -100,7 +100,7 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
 
     try {
       const { data: aiResponse } = await axios.post<AiAgentResponse>(
-        `${env.AI_AGENT_URL}/agent/chat`,
+        `${env.AI_AGENT_URL}/chat`,
         { userId, message, messageId: userMessage.id },
         { timeout: 30000 }
       )
@@ -181,7 +181,7 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
       data: { userId, role: 'USER', type: 'TEXT', content: '[food photo]', attachments: { imageUrl } },
     })
 
-    const { data } = await axios.post(`${env.AI_AGENT_URL}/agent/analyze-photo`, { userId, imageUrl }, { timeout: 30000 })
+    const { data } = await axios.post(`${env.AI_AGENT_URL}/analyze-photo`, { userId, imageUrl }, { timeout: 30000 })
 
     await prisma.chatMessage.create({
       data: {
