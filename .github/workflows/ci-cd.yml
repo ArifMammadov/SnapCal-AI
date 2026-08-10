@@ -28,10 +28,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Generate Prisma client
+      - name: Generate Prisma client and build packages
         run: |
           pnpm --filter @snapcal/database generate
           pnpm --filter @snapcal/database build
+          pnpm --filter @snapcal/shared build
 
       - name: Type check
         run: pnpm typecheck
