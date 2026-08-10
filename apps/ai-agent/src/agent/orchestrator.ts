@@ -65,7 +65,7 @@ async function runTools(toolNames: string[], context: ToolContext): Promise<Reco
   return results
 }
 
-function getUserLanguage(user: { languageCode?: string | null; region?: string | null } | null): string {
+function getUserLanguage(user: { languageCode?: string | null; regionCode?: string | null } | null): string {
   return user?.languageCode ?? 'en'
 }
 
@@ -98,7 +98,7 @@ export async function handleChat(input: ChatInput): Promise<ChatOutput> {
     metadata: {
       language: getUserLanguage(user),
       subscriptionStatus: user.subscriptionStatus,
-      region: user.region ?? undefined,
+      region: user.regionCode ?? undefined,
     },
   }
 
@@ -170,9 +170,6 @@ Respond in a helpful, concise way in the user's language. Do not provide medical
       role: 'AI',
       content,
       modelUsed,
-      skillName: route.skillName,
-      toolCalls: route.toolNames as unknown as object,
-      tokenUsage: { input: message?.length ?? 0, output: content.length, model: modelUsed },
       latencyMs: Date.now() - start,
     },
   })
@@ -190,6 +187,8 @@ Respond in a helpful, concise way in the user's language. Do not provide medical
       id: chat.id,
       role: 'ai',
       content,
+      type: 'text',
+      usedFallback: !!errorMessage,
     },
   }
 }

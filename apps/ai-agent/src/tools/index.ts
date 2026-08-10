@@ -6,11 +6,11 @@ export async function getUserSummary(context: ToolContext): Promise<ToolResult> 
   const [user, foodLogs, activities, metrics, facts] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
-      include: { profile: true, activeSubscription: true },
+      include: { profile: true },
     }),
-    prisma.foodLog.findMany({ where: { userId }, orderBy: { loggedAt: 'desc' }, take: 10 }),
-    prisma.activityLog.findMany({ where: { userId }, orderBy: { loggedAt: 'desc' }, take: 10 }),
-    prisma.metricLog.findMany({ where: { userId }, orderBy: { loggedAt: 'desc' }, take: 30 }),
+    prisma.foodLog.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 10 }),
+    prisma.activityLog.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 10 }),
+    prisma.metricLog.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 30 }),
     prisma.userFact.findMany({ where: { userId } }),
   ])
 
@@ -19,7 +19,7 @@ export async function getUserSummary(context: ToolContext): Promise<ToolResult> 
     data: {
       profile: user?.profile,
       today: { foodLogs, activities, metrics },
-      facts: facts.map((f: { key: string; value: string; confidence: number }) => ({ key: f.key, value: f.value, confidence: f.confidence })),
+      facts: facts.map((f: { key: string; value: string; confidence: any }) => ({ key: f.key, value: f.value, confidence: Number(f.confidence) })),
       subscriptionStatus: user?.subscriptionStatus,
     },
   }
