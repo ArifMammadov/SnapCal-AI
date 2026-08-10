@@ -15,7 +15,7 @@ async function buildApp() {
     timeWindow: '1 minute',
   })
 
-  await app.register(agentRoutes, { prefix: '/agent' })
+  await app.register(agentRoutes)
 
   app.get('/health', async () => ({ status: 'ok' }))
 
