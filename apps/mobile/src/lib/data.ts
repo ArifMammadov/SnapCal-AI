@@ -85,6 +85,23 @@ export interface ChatMessage {
   }
 }
 
+export interface GoalPlan {
+  startWeightKg: number
+  targetWeightKg: number
+  totalLossKg: number | null
+  currentMonth: number
+  percentComplete: number
+  milestones: {
+    month: number
+    label: string
+    targetWeightKg: number | null
+    targetCalories: number
+    workoutsPerWeek: number
+    focus: string
+    color: string
+  }[]
+}
+
 export function useTrackingSummary(date?: string) {
   const [data, setData] = useState<TrackingSummary | null>(null)
   const [loading, setLoading] = useState(true)
@@ -155,6 +172,31 @@ export function usePrograms(category?: string) {
       setLoading(false)
     }
   }, [category])
+
+  useEffect(() => {
+    fetch()
+  }, [fetch])
+
+  return { data, loading, error, refetch: fetch }
+}
+
+export function useGoalPlan() {
+  const [data, setData] = useState<GoalPlan | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const fetch = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await api.get<GoalPlan>('/goals/plan')
+      setData(res.data)
+    } catch (err: any) {
+      setError(err.message || 'Failed to load goal plan')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
     fetch()

@@ -12,6 +12,7 @@ import { aiRoutes } from './routes/ai.js'
 import { subscriptionRoutes } from './routes/subscriptions.js'
 import { marketplaceRoutes } from './routes/marketplace.js'
 import { adminRoutes } from './routes/admin.js'
+import { goalRoutes } from './routes/goals.js'
 import { errorHandler } from './lib/error-handler.js'
 
 export async function buildApp() {
@@ -67,6 +68,7 @@ export async function buildApp() {
   await app.register(subscriptionRoutes, { prefix: '/api/subscriptions' })
   await app.register(marketplaceRoutes, { prefix: '/api/marketplace' })
   await app.register(adminRoutes, { prefix: '/api/admin' })
+  await app.register(goalRoutes, { prefix: '/api/goals' })
 
   return app
 }

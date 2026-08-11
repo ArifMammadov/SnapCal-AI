@@ -1,4 +1,5 @@
 import { Card, BackIcon, MiniProgressBar } from '../components/ui.js'
+import { useGoalPlan } from '../lib/data.js'
 
 interface GoalPlanScreenProps {
   onBack: () => void
@@ -74,6 +75,55 @@ const milestones = [
 ]
 
 export function GoalPlanScreen({ onBack }: GoalPlanScreenProps) {
+  const { data: plan, loading, error } = useGoalPlan()
+
+  if (loading) {
+    return (
+      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
+        <p style={{ color: 'var(--text-secondary)' }}>Загрузка плана...</p>
+      </div>
+    )
+  }
+
+  if (error || !plan) {
+    return (
+      <div style={{ height: '100%', padding: 56, background: 'var(--bg)' }}>
+        <button
+          onClick={onBack}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            background: 'none',
+            border: 'none',
+            color: 'var(--green)',
+            fontSize: 15,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+            padding: 0,
+            marginBottom: 16,
+          }}
+        >
+          <BackIcon size={18} />
+          Назад
+        </button>
+        <p style={{ color: 'var(--rose)' }}>{error || 'Не удалось загрузить план'}</p>
+      </div>
+    )
+  }
+
+  const milestones = plan.milestones.map((m) => ({
+    month: m.month,
+    label: m.label,
+    weight: m.targetWeightKg ? `${m.targetWeightKg} кг` : '—',
+    calories: `${m.targetCalories.toLocaleString()} ккал`,
+    workouts: `${m.workoutsPerWeek}× / неделю`,
+    focus: m.focus,
+    color: m.color,
+    done: m.month < plan.currentMonth,
+    current: m.month === plan.currentMonth,
+  }))
+
   return (
     <div className="no-scrollbar" style={{ height: '100%', overflowY: 'auto', background: 'var(--bg)' }}>
       <div style={{ padding: '56px 20px 20px', background: 'var(--bg-card)', borderBottom: '1px solid var(--border)' }}>
@@ -115,7 +165,7 @@ export function GoalPlanScreen({ onBack }: GoalPlanScreenProps) {
             <h1 className="font-display" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.5px' }}>
               6-Month Transformation
             </h1>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>Alex's personalized roadmap</p>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>Персональный план трансформации</p>
           </div>
         </div>
 
@@ -131,9 +181,9 @@ export function GoalPlanScreen({ onBack }: GoalPlanScreenProps) {
           }}
         >
           {[
-            { label: 'Start Weight', value: '87 kg' },
-            { label: 'Target Weight', value: '75 kg' },
-            { label: 'Total Loss', value: '12 kg' },
+            { label: 'Начальный вес', value: `${plan.startWeightKg} кг` },
+            { label: 'Целевой вес', value: `${plan.targetWeightKg} кг` },
+            { label: 'Всего сбросить', value: plan.totalLossKg ? `${plan.totalLossKg} кг` : '—' },
           ].map((s) => (
             <div key={s.label} style={{ textAlign: 'center' }}>
               <p className="font-display" style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
@@ -146,10 +196,10 @@ export function GoalPlanScreen({ onBack }: GoalPlanScreenProps) {
 
         <div style={{ marginTop: 14 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Month 3 of 6</span>
-            <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>50% complete</span>
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Месяц {plan.currentMonth} из 6</span>
+            <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>{plan.percentComplete}% завершено</span>
           </div>
-          <MiniProgressBar value={3} max={6} color="var(--green)" height={6} />
+          <MiniProgressBar value={plan.currentMonth} max={6} color="var(--green)" height={6} />
         </div>
       </div>
 
