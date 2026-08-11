@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '@snapcal/database'
-import { calculateCalorieGoal } from '@snapcal/shared'
+import { calculateDefaultGoals } from '@snapcal/shared'
 import type { JwtPayload } from '../types/auth.js'
 
 export const requireAuth = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -26,6 +26,8 @@ const updateProfileSchema = z.object({
   allergies: z.array(z.string()).optional(),
   dailyCalories: z.number().int().optional(),
   dailyProteinG: z.number().int().optional(),
+  dailyCarbsG: z.number().int().optional(),
+  dailyFatG: z.number().int().optional(),
   dailyWaterMl: z.number().int().optional(),
   dailySleepH: z.number().positive().optional(),
   dailySteps: z.number().int().optional(),
@@ -51,26 +53,80 @@ export const userRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
     }
   })
 
+  app.get('/me/onboarding-status', async (request: FastifyRequest) => {
+    const user = await prisma.user.findUnique({
+      where: { id: request.user!.userId },
+      include: { profile: true },
+    })
+
+    const requiredFields = ['gender', 'heightCm', 'currentWeightKg', 'birthDate', 'primaryGoal', 'activityLevel'] as const
+    const missing: string[] = []
+    for (const field of requiredFields) {
+      if (!user?.profile?.[field]) missing.push(field)
+    }
+
+    return {
+      onboardingCompleted: missing.length === 0,
+      missingFields: missing,
+      profile: user?.profile
+        ? {
+            ...user.profile,
+            currentWeightKg: user.profile.currentWeightKg ? Number(user.profile.currentWeightKg) : null,
+            targetWeightKg: user.profile.targetWeightKg ? Number(user.profile.targetWeightKg) : null,
+          }
+        : null,
+    }
+  })
+
   app.patch('/me/profile', async (request: FastifyRequest) => {
     const data = updateProfileSchema.parse(request.body)
     const userId = request.user!.userId
 
-    let dailyCalories = data.dailyCalories
-    if (data.currentWeightKg && data.heightCm && !dailyCalories) {
-      dailyCalories = calculateCalorieGoal({
-        weightKg: data.currentWeightKg,
-        heightCm: data.heightCm,
-        gender: data.gender ?? 'OTHER',
-        birthDate: data.birthDate ? new Date(data.birthDate) : new Date('1995-01-01'),
-        activityLevel: data.activityLevel ?? 'MODERATE',
-        primaryGoal: data.primaryGoal ?? 'MAINTENANCE',
-      })
+    const existing = await prisma.profile.findUnique({ where: { userId } })
+
+    const mergedProfile = {
+      gender: data.gender ?? existing?.gender ?? 'OTHER',
+      heightCm: data.heightCm ?? existing?.heightCm ?? 0,
+      currentWeightKg: data.currentWeightKg ?? (existing?.currentWeightKg ? Number(existing.currentWeightKg) : 0),
+      birthDate: data.birthDate ? new Date(data.birthDate) : (existing?.birthDate ?? new Date('1995-01-01')),
+      activityLevel: data.activityLevel ?? existing?.activityLevel ?? 'MODERATE',
+      primaryGoal: data.primaryGoal ?? existing?.primaryGoal ?? 'MAINTENANCE',
+    }
+
+    const shouldAutoCalculateGoals =
+      !data.dailyCalories &&
+      mergedProfile.gender &&
+      mergedProfile.currentWeightKg > 0 &&
+      mergedProfile.heightCm > 0
+
+    const goals = shouldAutoCalculateGoals
+      ? calculateDefaultGoals({
+          gender: mergedProfile.gender,
+          weightKg: mergedProfile.currentWeightKg,
+          heightCm: mergedProfile.heightCm,
+          birthDate: mergedProfile.birthDate,
+          activityLevel: mergedProfile.activityLevel,
+          primaryGoal: mergedProfile.primaryGoal,
+        })
+      : null
+
+    const updatePayload = {
+      ...data,
+      ...(goals && {
+        dailyCalories: goals.dailyCalories,
+        dailyProteinG: data.dailyProteinG ?? goals.dailyProteinG,
+        dailyCarbsG: data.dailyCarbsG ?? goals.dailyCarbsG,
+        dailyFatG: data.dailyFatG ?? goals.dailyFatG,
+        dailyWaterMl: data.dailyWaterMl ?? goals.dailyWaterMl,
+        dailySleepH: data.dailySleepH ?? goals.dailySleepH,
+        dailySteps: data.dailySteps ?? goals.dailySteps,
+      }),
     }
 
     const updated = await prisma.profile.upsert({
       where: { userId },
-      update: { ...data, dailyCalories },
-      create: { userId, ...data, dailyCalories },
+      update: updatePayload,
+      create: { userId, ...updatePayload, ...mergedProfile },
     })
 
     return {

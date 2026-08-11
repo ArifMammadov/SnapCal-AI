@@ -70,6 +70,7 @@ jobs:
             git reset --hard origin/test
             pnpm install
             cd /opt/snapcal-test/packages/database && pnpm generate
+            pnpm --filter @snapcal/shared build
             cd /opt/snapcal-test/apps/api && pnpm build
             cd /opt/snapcal-test/apps/admin && pnpm build
             cd /opt/snapcal-test/apps/mobile && pnpm build
@@ -100,6 +101,7 @@ jobs:
             git reset --hard origin/preprod
             pnpm install
             cd /opt/snapcal-preprod/packages/database && pnpm generate
+            pnpm --filter @snapcal/shared build
             cd /opt/snapcal-preprod/apps/api && pnpm build
             cd /opt/snapcal-preprod/apps/admin && pnpm build
             cd /opt/snapcal-preprod/apps/mobile && pnpm build
@@ -130,6 +132,7 @@ jobs:
             git reset --hard origin/main
             pnpm install
             cd /opt/snapcal-main/packages/database && pnpm generate
+            pnpm --filter @snapcal/shared build
             cd /opt/snapcal-main/apps/api && pnpm build
             cd /opt/snapcal-main/apps/admin && pnpm build
             cd /opt/snapcal-main/apps/mobile && pnpm build
@@ -160,6 +163,7 @@ jobs:
             git reset --hard origin/admin
             pnpm install
             cd /opt/snapcal-admin/packages/database && pnpm generate
+            pnpm --filter @snapcal/shared build
             cd /opt/snapcal-admin/apps/api && pnpm build
             cd /opt/snapcal-admin/apps/admin && pnpm build
             systemctl --user restart snapcal-api-admin

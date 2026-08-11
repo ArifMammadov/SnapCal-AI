@@ -36,8 +36,47 @@ export function calculateCalorieGoal(profile: {
   return tdee
 }
 
-export function formatNumber(n: number): string {
-  return n.toLocaleString('en-US')
+export function calculateMacroGoals(calories: number, primaryGoal?: string) {
+  let proteinRatio = 0.25
+  let fatRatio = 0.30
+  let carbsRatio = 0.45
+
+  if (primaryGoal === 'FAT_LOSS') {
+    proteinRatio = 0.35
+    fatRatio = 0.30
+    carbsRatio = 0.35
+  } else if (primaryGoal === 'MUSCLE_GAIN') {
+    proteinRatio = 0.30
+    fatRatio = 0.25
+    carbsRatio = 0.45
+  }
+
+  return {
+    proteinG: Math.round((calories * proteinRatio) / 4),
+    carbsG: Math.round((calories * carbsRatio) / 4),
+    fatG: Math.round((calories * fatRatio) / 9),
+  }
+}
+
+export function calculateDefaultGoals(profile: {
+  gender?: string
+  weightKg?: number
+  heightCm?: number
+  birthDate?: Date
+  activityLevel?: string
+  primaryGoal?: string
+}) {
+  const dailyCalories = calculateCalorieGoal(profile)
+  const macros = calculateMacroGoals(dailyCalories, profile.primaryGoal)
+  return {
+    dailyCalories,
+    dailyProteinG: macros.proteinG,
+    dailyCarbsG: macros.carbsG,
+    dailyFatG: macros.fatG,
+    dailyWaterMl: 3000,
+    dailySleepH: 8,
+    dailySteps: 10000,
+  }
 }
 
 export function clamp(value: number, min: number, max: number): number {
