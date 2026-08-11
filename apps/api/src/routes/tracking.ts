@@ -35,6 +35,10 @@ const metricLogSchema = z.object({
   loggedAt: z.string().datetime().optional(),
 })
 
+const bulkMetricsSchema = z.object({
+  metrics: z.array(metricLogSchema).min(1).max(20),
+})
+
 const dateQuerySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 })
@@ -119,6 +123,19 @@ const trackingRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) =>
     const userId = request.user!.userId
     return prisma.metricLog.create({
       data: { ...data, userId, loggedAt: data.loggedAt ? new Date(data.loggedAt) : new Date() },
+    })
+  })
+
+  app.post('/metrics/bulk', async (request: FastifyRequest) => {
+    const { metrics } = bulkMetricsSchema.parse(request.body)
+    const userId = request.user!.userId
+    const now = new Date()
+    return prisma.metricLog.createMany({
+      data: metrics.map((m) => ({
+        ...m,
+        userId,
+        loggedAt: m.loggedAt ? new Date(m.loggedAt) : now,
+      })),
     })
   })
 

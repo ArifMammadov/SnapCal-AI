@@ -16,7 +16,7 @@ function formatTime(iso: string) {
 }
 
 export function AICoachScreen() {
-  const { messages, sending, sendMessage, sendPhoto } = useChat()
+  const { messages, sending, sendMessage, sendPhoto, logMetric } = useChat()
   const [input, setInput] = useState('')
   const [previewImage, setPreviewImage] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -35,6 +35,13 @@ export function AICoachScreen() {
     setInput('')
     sendMessage(text)
   }
+
+  const quickActions = [
+    { label: '💧 Вода', prompt: 'Log 250 ml of water', metric: ['WATER_ML', 250] as const },
+    { label: '😴 Сон', prompt: 'Log 7.5 hours of sleep', metric: ['SLEEP_H', 7.5] as const },
+    { label: '⚖️ Вес', prompt: 'Log weight', metric: ['WEIGHT_KG', 0] as const },
+    { label: '👟 Шаги', prompt: 'Log 5000 steps', metric: ['STEPS', 5000] as const },
+  ]
 
   const renderMessage = (msg: ChatMessage) => {
     const isUser = msg.role === 'USER'
@@ -206,6 +213,27 @@ export function AICoachScreen() {
           borderBottom: '1px solid var(--border)',
         }}
       >
+        {quickActions.map((a) => (
+          <button
+            key={a.label}
+            onClick={() => logMetric(a.metric[0], a.metric[1])}
+            className="chip"
+            style={{
+              flexShrink: 0,
+              padding: '7px 12px',
+              background: 'var(--blue-dim)',
+              border: '1px solid var(--blue)',
+              borderRadius: 20,
+              color: 'var(--blue)',
+              fontSize: 12,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              fontFamily: 'inherit',
+            }}
+          >
+            {a.label}
+          </button>
+        ))}
         {suggestedPrompts.map((p) => (
           <button
             key={p}

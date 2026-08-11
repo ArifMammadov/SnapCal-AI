@@ -21,6 +21,7 @@ const envSchema = z.object({
   S3_ACCESS_KEY: z.string().optional(),
   ADMIN_SECRET: z.string().min(16),
   S3_SECRET_KEY: z.string().optional(),
+  AI_AGENT_SECRET: z.string().min(16).optional(),
 })
 
 export const env = envSchema.parse(process.env)

@@ -8,9 +8,10 @@ import { DEFAULT_FREE_AI_DAILY_LIMIT } from '@snapcal/shared'
 import { parseFoodJson, saveFoodLogFromAnalysis } from '../lib/foodAnalysis.js'
 import { checkAiLimit } from '../lib/subscriptionLimits.js'
 
-  const chatSchema = z.object({
-  message: z.string().max(4000),
-  attachments: z.array(z.object({ type: z.enum(['image', 'audio']), url: z.string().url() })).optional(),
+const agent = axios.create({
+  baseURL: env.AI_AGENT_URL,
+  timeout: 30000,
+  headers: env.AI_AGENT_SECRET ? { 'x-snapcal-secret': env.AI_AGENT_SECRET } : undefined,
 })
 
 const analyzePhotoSchema = z.object({
@@ -21,6 +22,11 @@ const feedbackSchema = z.object({
   messageId: z.string().uuid(),
   rating: z.enum(['UP', 'DOWN']),
   correction: z.string().max(1000).optional(),
+})
+
+const chatSchema = z.object({
+  message: z.string().max(4000),
+  attachments: z.array(z.object({ type: z.enum(['image', 'audio']), url: z.string().url() })).optional(),
 })
 
 interface AiAgentResponse {
@@ -98,17 +104,16 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
       return reply.status(429).send({ error: { code: limit.reason, message: limit.paywallMessage || 'AI daily limit reached. Upgrade to Pro.' } })
     }
 
-    const { message } = chatSchema.parse(request.body)
+    const { message, attachments } = chatSchema.parse(request.body)
 
     const userMessage = await prisma.chatMessage.create({
-      data: { userId, role: 'USER', type: 'TEXT', content: message },
+      data: { userId, role: 'USER', type: 'TEXT', content: message, attachments: attachments ? { attachments } : undefined },
     })
 
     try {
-      const { data: aiResponse } = await axios.post<AiAgentResponse>(
-        `${env.AI_AGENT_URL}/chat`,
+      const { data: aiResponse } = await agent.post<AiAgentResponse>(
+        '/chat',
         { userId, message, messageId: userMessage.id },
-        { timeout: 30000 }
       )
 
       if (!aiResponse.message || !aiResponse.message.content) {
@@ -188,7 +193,7 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
     })
 
     try {
-      const { data } = await axios.post(`${env.AI_AGENT_URL}/analyze-photo`, { userId, imageUrl }, { timeout: 60000 })
+      const { data } = await agent.post('/analyze-photo', { userId, imageUrl }, { timeout: 60000 })
 
       const foodData = typeof data.message === 'string' ? parseFoodJson(data.message) : null
       if (foodData) {

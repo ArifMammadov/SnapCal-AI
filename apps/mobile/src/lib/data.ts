@@ -256,5 +256,32 @@ export function useChat() {
     }
   }, [])
 
-  return { messages, sending, loadingHistory, sendMessage, sendPhoto, setMessages }
+  const logMetric = useCallback(async (metricType: 'WATER_ML' | 'SLEEP_H' | 'WEIGHT_KG' | 'STEPS', value: number) => {
+    try {
+      await api.post('/tracking/metric', { metricType, value })
+      const labels: Record<string, string> = {
+        WATER_ML: 'Вода',
+        SLEEP_H: 'Сон',
+        WEIGHT_KG: 'Вес',
+        STEPS: 'Шаги',
+      }
+      setMessages((prev) => [...prev, {
+        id: (Date.now()).toString(),
+        role: 'AI',
+        type: 'TEXT',
+        content: `Записал: ${labels[metricType]} ${value}${metricType === 'WATER_ML' ? ' мл' : metricType === 'STEPS' ? '' : metricType === 'WEIGHT_KG' ? ' кг' : ' ч'}.`,
+        createdAt: new Date().toISOString(),
+      }])
+    } catch (err: any) {
+      setMessages((prev) => [...prev, {
+        id: (Date.now()).toString(),
+        role: 'AI',
+        type: 'TEXT',
+        content: err.message || 'Не удалось записать метрику.',
+        createdAt: new Date().toISOString(),
+      }])
+    }
+  }, [])
+
+  return { messages, sending, loadingHistory, sendMessage, sendPhoto, logMetric, setMessages }
 }
