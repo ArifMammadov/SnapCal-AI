@@ -212,5 +212,49 @@ export function useChat() {
     }
   }, [])
 
-  return { messages, sending, loadingHistory, sendMessage, setMessages }
+  const sendPhoto = useCallback(async (file: File) => {
+    const localUrl = URL.createObjectURL(file)
+    const userMsg: ChatMessage = {
+      id: Date.now().toString(),
+      role: 'USER',
+      type: 'TEXT',
+      content: '[food photo]',
+      createdAt: new Date().toISOString(),
+      attachments: { imageUrl: localUrl },
+    }
+    setMessages((prev) => [...prev, userMsg])
+    setSending(true)
+
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const uploadRes = await api.post<{ url: string }>('/tracking/upload', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+
+      const analyzeRes = await api.post<{ message: ChatMessage }>('/ai/analyze-photo', { imageUrl: uploadRes.data.url })
+      const ai = analyzeRes.data.message
+      setMessages((prev) => [...prev, {
+        id: ai.id || `${Date.now()}-ai`,
+        role: ai.role || 'AI',
+        type: ai.type || 'FOOD_ANALYSIS',
+        content: ai.content || 'Here is what I found in your photo.',
+        createdAt: ai.createdAt || new Date().toISOString(),
+        attachments: ai.attachments,
+      }])
+    } catch (err: any) {
+      const aiMsg: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        role: 'AI',
+        type: 'TEXT',
+        content: err.message || 'Sorry, I could not analyze this photo. Please try again.',
+        createdAt: new Date().toISOString(),
+      }
+      setMessages((prev) => [...prev, aiMsg])
+    } finally {
+      setSending(false)
+    }
+  }, [])
+
+  return { messages, sending, loadingHistory, sendMessage, sendPhoto, setMessages }
 }

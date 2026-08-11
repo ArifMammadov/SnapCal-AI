@@ -3,13 +3,14 @@ import { env } from '../lib/env.js'
 import { prisma } from '@snapcal/database'
 import { skills } from '../skills/index.js'
 import type { ChatInput, ChatOutput, ToolContext } from '../types/index.js'
-import { callOpenRouter, callOllama } from '../llm/openrouter.js'
+import { callOpenRouter, callOllama, callOpenRouterVision } from '../llm/openrouter.js'
 import { applyGuardrails } from '../guardrails/index.js'
 import { auditLog } from '../audit/index.js'
 import { updateMemory } from '../memory/index.js'
 import { getUserSummary, searchKnowledge, recommendProgram, analyzePhoto, logFood, logActivity } from '../tools/index.js'
 
 const FALLBACK_MODEL = 'gpt-4o-mini'
+const VISION_MODEL = 'openai/gpt-4o'
 const MAX_OUTPUT_TOKENS = 1024
 
 interface RouteResult {
@@ -130,31 +131,46 @@ Respond in a helpful, concise way in the user's language. Do not provide medical
   let modelUsed = model
   let errorMessage = ''
 
-  try {
-    const messages = [
-      { role: 'system' as const, content: systemPrompt },
-      ...(message ? [{ role: 'user' as const, content: message }] : []),
-    ]
-    const result = await callOpenRouter(model, messages, MAX_OUTPUT_TOKENS)
-    content = result.content
-    modelUsed = result.model
-  } catch (err) {
-    errorMessage = err instanceof Error ? err.message : 'OpenRouter error'
+  if (route.skillName === 'food_vision') {
     try {
-      const fallbackMessages = [
+      const imageUrl = context.attachments?.find((a) => a.type === 'image')?.url
+      if (imageUrl) {
+        const visionResult = await callOpenRouterVision(imageUrl)
+        content = visionResult
+        modelUsed = VISION_MODEL
+      } else {
+        content = JSON.stringify({ error: 'No image provided' })
+      }
+    } catch (err) {
+      errorMessage = err instanceof Error ? err.message : 'Vision error'
+    }
+  } else {
+    try {
+      const messages = [
         { role: 'system' as const, content: systemPrompt },
         ...(message ? [{ role: 'user' as const, content: message }] : []),
       ]
-      const fallback = env.OLLAMA_BASE_URL ? await callOllama(FALLBACK_MODEL, fallbackMessages) : null
-      if (fallback?.content) {
-        content = fallback.content
-        modelUsed = FALLBACK_MODEL
-        errorMessage = ''
-      } else {
-        throw err
+      const result = await callOpenRouter(model, messages, MAX_OUTPUT_TOKENS)
+      content = result.content
+      modelUsed = result.model
+    } catch (err) {
+      errorMessage = err instanceof Error ? err.message : 'OpenRouter error'
+      try {
+        const fallbackMessages = [
+          { role: 'system' as const, content: systemPrompt },
+          ...(message ? [{ role: 'user' as const, content: message }] : []),
+        ]
+        const fallback = env.OLLAMA_BASE_URL ? await callOllama(FALLBACK_MODEL, fallbackMessages) : null
+        if (fallback?.content) {
+          content = fallback.content
+          modelUsed = FALLBACK_MODEL
+          errorMessage = ''
+        } else {
+          throw err
+        }
+      } catch {
+        // final fallback
       }
-    } catch {
-      // final fallback
     }
   }
 

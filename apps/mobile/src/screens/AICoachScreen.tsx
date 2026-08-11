@@ -16,10 +16,12 @@ function formatTime(iso: string) {
 }
 
 export function AICoachScreen() {
-  const { messages, sending, sendMessage } = useChat()
+  const { messages, sending, sendMessage, sendPhoto } = useChat()
   const [input, setInput] = useState('')
+  const [previewImage, setPreviewImage] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -37,8 +39,9 @@ export function AICoachScreen() {
   const renderMessage = (msg: ChatMessage) => {
     const isUser = msg.role === 'USER'
     const foodData = msg.attachments?.foodData
+    const imageUrl = msg.attachments?.imageUrl
 
-    if (foodData) {
+    if (foodData || imageUrl) {
       return (
         <div
           style={{
@@ -49,47 +52,58 @@ export function AICoachScreen() {
             boxShadow: 'var(--shadow-card)',
           }}
         >
+          {imageUrl && !foodData && (
+            <img
+              src={imageUrl}
+              alt="food photo"
+              style={{ width: '100%', height: 160, objectFit: 'cover', display: 'block' }}
+            />
+          )}
           <div style={{ padding: '12px 14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
               <div>
                 <p className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-                  {foodData.name}
+                  {foodData ? foodData.name : 'Analyzing photo...'}
                 </p>
                 <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '2px 0 0' }}>
-                  {foodData.serving}
+                  {foodData ? foodData.serving : 'Please wait'}
                 </p>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <p className="font-display" style={{ fontSize: 22, fontWeight: 700, color: 'var(--orange)', margin: 0, lineHeight: 1 }}>
-                  {foodData.calories}
-                </p>
-                <p style={{ fontSize: 10, color: 'var(--text-secondary)', margin: 0 }}>kcal</p>
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-              {[
-                { label: 'Protein', value: foodData.proteinG, unit: 'g', color: 'var(--green)' },
-                { label: 'Carbs', value: foodData.carbsG, unit: 'g', color: 'var(--amber)' },
-                { label: 'Fat', value: foodData.fatG, unit: 'g', color: 'var(--orange)' },
-              ].map((m) => (
-                <div
-                  key={m.label}
-                  style={{
-                    flex: 1,
-                    padding: '8px',
-                    background: 'var(--bg-elevated)',
-                    borderRadius: 10,
-                    textAlign: 'center',
-                  }}
-                >
-                  <p className="font-display" style={{ fontSize: 16, fontWeight: 700, color: m.color, margin: 0 }}>
-                    {m.value}
-                    {m.unit}
+              {foodData && (
+                <div style={{ textAlign: 'right' }}>
+                  <p className="font-display" style={{ fontSize: 22, fontWeight: 700, color: 'var(--orange)', margin: 0, lineHeight: 1 }}>
+                    {foodData.calories}
                   </p>
-                  <p style={{ fontSize: 10, color: 'var(--text-muted)', margin: '2px 0 0' }}>{m.label}</p>
+                  <p style={{ fontSize: 10, color: 'var(--text-secondary)', margin: 0 }}>kcal</p>
                 </div>
-              ))}
+              )}
             </div>
+            {foodData && (
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                {[
+                  { label: 'Protein', value: foodData.proteinG, unit: 'g', color: 'var(--green)' },
+                  { label: 'Carbs', value: foodData.carbsG, unit: 'g', color: 'var(--amber)' },
+                  { label: 'Fat', value: foodData.fatG, unit: 'g', color: 'var(--orange)' },
+                ].map((m) => (
+                  <div
+                    key={m.label}
+                    style={{
+                      flex: 1,
+                      padding: '8px',
+                      background: 'var(--bg-elevated)',
+                      borderRadius: 10,
+                      textAlign: 'center',
+                    }}
+                  >
+                    <p className="font-display" style={{ fontSize: 16, fontWeight: 700, color: m.color, margin: 0 }}>
+                      {m.value}
+                      {m.unit}
+                    </p>
+                    <p style={{ fontSize: 10, color: 'var(--text-muted)', margin: '2px 0 0' }}>{m.label}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )
@@ -342,6 +356,7 @@ export function AICoachScreen() {
       >
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <button
+            onClick={() => fileRef.current?.click()}
             aria-label="Upload food photo"
             style={{
               width: 42,
@@ -362,6 +377,21 @@ export function AICoachScreen() {
               <circle cx="12" cy="13" r="4" />
             </svg>
           </button>
+          <input
+            type="file"
+            ref={fileRef}
+            accept="image/*"
+            capture="environment"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) {
+                setPreviewImage(URL.createObjectURL(file))
+                sendPhoto(file)
+              }
+              if (fileRef.current) fileRef.current.value = ''
+            }}
+          />
 
           <div
             style={{

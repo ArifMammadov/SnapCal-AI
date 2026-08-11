@@ -5,6 +5,7 @@ import { prisma } from '@snapcal/database'
 import { requireAuth } from './users.js'
 import { env } from '../lib/env.js'
 import { DEFAULT_FREE_AI_DAILY_LIMIT } from '@snapcal/shared'
+import { parseFoodJson, saveFoodLogFromAnalysis } from '../lib/foodAnalysis.js'
 
   const chatSchema = z.object({
   message: z.string().max(4000),
@@ -181,19 +182,64 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
       data: { userId, role: 'USER', type: 'TEXT', content: '[food photo]', attachments: { imageUrl } },
     })
 
-    const { data } = await axios.post(`${env.AI_AGENT_URL}/analyze-photo`, { userId, imageUrl }, { timeout: 30000 })
+    try {
+      const { data } = await axios.post(`${env.AI_AGENT_URL}/analyze-photo`, { userId, imageUrl }, { timeout: 60000 })
 
-    await prisma.chatMessage.create({
-      data: {
-        userId,
-        role: 'AI',
-        type: 'FOOD_ANALYSIS',
-        content: data.message,
-        attachments: { foodData: data.foodData },
-      },
-    })
+      const foodData = typeof data.message === 'string' ? parseFoodJson(data.message) : null
+      if (foodData) {
+        await saveFoodLogFromAnalysis(userId, imageUrl, foodData)
+      }
 
-    return data
+      const aiMessage = await prisma.chatMessage.create({
+        data: {
+          userId,
+          role: 'AI',
+          type: 'FOOD_ANALYSIS',
+          content: data.message,
+          attachments: { foodData, imageUrl },
+        },
+      })
+
+      return {
+        message: {
+          id: aiMessage.id,
+          role: 'ai',
+          type: 'FOOD_ANALYSIS',
+          content: data.message,
+          foodData,
+          imageUrl,
+          timestamp: aiMessage.createdAt.toISOString(),
+        },
+      }
+    } catch (err: any) {
+      const errorMessage = axios.isAxiosError(err) && !err.response
+        ? 'AI vision service is temporarily unavailable. Please try again later.'
+        : 'Could not analyze this photo. Please try again.'
+
+      await prisma.chatMessage.update({
+        where: { id: userMessage.id },
+        data: { content: '[food photo] [FAILED]' },
+      })
+
+      const aiMessage = await prisma.chatMessage.create({
+        data: {
+          userId,
+          role: 'AI',
+          type: 'TEXT',
+          content: errorMessage,
+        },
+      })
+
+      return reply.status(503).send({
+        message: {
+          id: aiMessage.id,
+          role: 'ai',
+          type: 'TEXT',
+          content: errorMessage,
+          timestamp: aiMessage.createdAt.toISOString(),
+        },
+      })
+    }
   })
 
   app.post('/feedback', async (request: FastifyRequest) => {

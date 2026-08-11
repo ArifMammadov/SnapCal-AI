@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify'
+import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -7,6 +7,7 @@ import { pipeline as pump } from 'node:stream/promises'
 import { prisma } from '@snapcal/database'
 import { env } from '../lib/env.js'
 import { requireAuth } from './users.js'
+import { isS3Enabled, uploadFileToS3 } from '../lib/s3.js'
 
 const foodLogSchema = z.object({
   mealType: z.enum(['BREAKFAST', 'LUNCH', 'DINNER', 'SNACK']),
@@ -149,11 +150,23 @@ const trackingRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) =>
     const allowed = ['jpg', 'jpeg', 'png', 'webp']
     if (!allowed.includes(ext)) return reply.status(400).send({ error: { code: 'INVALID_TYPE', message: 'Only images allowed' } })
 
+    const filename = request.user!.userId + '_' + Date.now() + '.' + ext
+
+    if (isS3Enabled()) {
+      const chunks: Buffer[] = []
+      for await (const chunk of data.file) {
+        chunks.push(chunk)
+      }
+      const buffer = Buffer.concat(chunks)
+      const key = `uploads/${filename}`
+      const url = await uploadFileToS3(key, buffer, data.mimetype, buffer.length)
+      return { url }
+    }
+
+    // fallback to local filesystem
     const uploadDir = '/opt/snapcal/uploads'
     fs.mkdirSync(uploadDir, { recursive: true })
-    const filename = request.user!.userId + '_' + Date.now() + '.' + ext
     const filepath = path.join(uploadDir, filename)
-
     await pump(data.file, fs.createWriteStream(filepath))
 
     const url = env.MOBILE_APP_URL + '/uploads/' + filename
