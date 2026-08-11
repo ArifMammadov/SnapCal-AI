@@ -70,15 +70,33 @@ export async function adminRoutes(app: FastifyInstance) {
       orderBy: { createdAt: 'desc' },
       take: 100,
     })
-    return users.map((u: { telegramId: bigint | number | string }) => ({ ...u, telegramId: u.telegramId.toString() }))
+    return users.map((u) => ({ ...u, telegramId: u.telegramId.toString() }))
   })
 
-  app.get('/users/:id', { preHandler: requireAdmin }, async (request: FastifyRequest) => {
+  app.patch('/users/:id', { preHandler: requireAdmin }, async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as { id: string }
-    return prisma.user.findUnique({
-      where: { id },
-      include: { profile: true, subscriptions: true, enrollments: true },
+    const schema = z.object({
+      role: z.enum(['USER', 'ADMIN']).optional(),
+      subscriptionStatus: z.enum(['ACTIVE', 'TRIALING', 'INACTIVE', 'CANCELED']).optional(),
     })
+    const data = schema.parse(request.body)
+    const user = await prisma.user.findUnique({ where: { id } })
+    if (!user) {
+      return reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'User not found' } })
+    }
+    return prisma.user.update({ where: { id }, data })
+  })
+
+  app.get('/users/:id', { preHandler: requireAdmin }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = request.params as { id: string }
+    const user = await prisma.user.findUnique({
+      where: { id },
+      include: { profile: true, subscriptions: true, enrollments: { include: { program: true } } },
+    })
+    if (!user) {
+      return reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'User not found' } })
+    }
+    return { ...user, telegramId: user.telegramId.toString() }
   })
 
   app.get('/audit-logs', { preHandler: requireAdmin }, async () => {
@@ -86,7 +104,7 @@ export async function adminRoutes(app: FastifyInstance) {
       orderBy: { createdAt: 'desc' },
       take: 100,
     })
-    return logs.map((l: { costUsd: { toString: () => string } | null | undefined }) => ({ ...l, costUsd: l.costUsd ? Number(l.costUsd) : null }))
+    return logs.map((l) => ({ ...l, costUsd: l.costUsd ? Number(l.costUsd) : null }))
   })
 
   app.get('/kb/articles', async () => {
@@ -122,7 +140,7 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.get('/programs', { preHandler: requireAdmin }, async () => {
     const programs = await prisma.program.findMany({ orderBy: { createdAt: 'desc' }, take: 100 })
-    return programs.map((p: { priceUsd: { toString: () => string } | null | undefined }) => ({ ...p, priceUsd: p.priceUsd ? Number(p.priceUsd) : null }))
+    return programs.map((p) => ({ ...p, priceUsd: p.priceUsd ? Number(p.priceUsd) : null }))
   })
 
   app.post('/programs', { preHandler: requireAdmin }, async (request: FastifyRequest) => {
