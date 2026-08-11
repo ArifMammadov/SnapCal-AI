@@ -59,12 +59,20 @@ function toUiProgram(p: MarketplaceProgram): UiProgram {
 
 type DetailState = { type: 'program'; program: UiProgram } | { type: 'enroll'; program: UiProgram } | null
 
-function PurchaseModal({ program, onClose, onPurchase }: { program: UiProgram; onClose: () => void; onPurchase: () => void }) {
+interface Enrollment {
+  enrollmentId: string
+  status: string
+  paymentStatus: string | null
+  enrolledAt: string
+  program: MarketplaceProgram
+}
+
+function PurchaseModal({ program, alreadyEnrolled, onClose, onPurchase }: { program: UiProgram; alreadyEnrolled: boolean; onClose: () => void; onPurchase: () => void }) {
   const [purchasing, setPurchasing] = useState(false)
   const handlePurchase = async () => {
     setPurchasing(true)
     try {
-      await api.post(`/marketplace/programs/${program.id}/purchase`)
+      await api.post(`/marketplace/programs/${program.id}/enroll`)
       onPurchase()
     } catch (err: any) {
       alert(err.message || 'Failed to enroll. Please try again.')
@@ -168,8 +176,8 @@ function PurchaseModal({ program, onClose, onPurchase }: { program: UiProgram; o
           </div>
         </div>
 
-        <Button variant="primary" size="lg" fullWidth onClick={handlePurchase} disabled={purchasing}>
-          {purchasing ? 'Processing...' : `Enroll for $${program.price}`}
+        <Button variant="primary" size="lg" fullWidth onClick={handlePurchase} disabled={purchasing || alreadyEnrolled}>
+          {alreadyEnrolled ? 'Вы уже записаны' : purchasing ? 'Processing...' : `Enroll for $${program.price}`}
         </Button>
       </div>
     </div>
@@ -213,14 +221,22 @@ function EnrollSuccess({ program, onClose }: { program: UiProgram; onClose: () =
 export function MarketplaceScreen() {
   const [category, setCategory] = useState<Category>('All')
   const [detail, setDetail] = useState<DetailState>(null)
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([])
   const { user } = useAppStore()
 
   const { data: programs, loading, error } = usePrograms(category)
 
   useEffect(() => {
+    api.get<Enrollment[]>('/marketplace/my-enrollments')
+      .then((res) => setEnrollments(res.data))
+      .catch(() => setEnrollments([]))
+  }, [])
+
+  useEffect(() => {
     if (error) console.error('Marketplace error:', error)
   }, [error])
 
+  const enrolledIds = new Set(enrollments.map((e) => e.program.id))
   const featured = programs[0]
   const rest = programs.slice(1)
 
@@ -275,6 +291,72 @@ export function MarketplaceScreen() {
             </button>
           ))}
         </div>
+
+        {enrollments.length > 0 && (
+          <div style={{ marginTop: 14 }}>
+            <p
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: 'var(--text-secondary)',
+                letterSpacing: '0.04em',
+                margin: '0 0 10px',
+                textTransform: 'uppercase',
+              }}
+            >
+              Мои программы
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {enrollments.slice(0, 3).map((e) => {
+                const program = toUiProgram(e.program)
+                return (
+                  <button
+                    key={e.enrollmentId}
+                    onClick={() => setDetail({ type: 'program', program })}
+                    style={{
+                      width: '100%',
+                      padding: 10,
+                      background: 'var(--bg-elevated)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 14,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      textAlign: 'left',
+                      fontFamily: 'inherit',
+                      color: 'inherit',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 12,
+                        background: program.gradient,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 20,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {program.emoji}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p className="font-display" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+                        {program.name}
+                      </p>
+                      <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '2px 0 0' }}>
+                        {e.paymentStatus === 'free' ? 'Бесплатно' : 'Оплачено'} · {program.weeks} недель
+                      </p>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '16px 20px 100px' }}>
@@ -476,8 +558,21 @@ export function MarketplaceScreen() {
       {detail?.type === 'program' && (
         <PurchaseModal
           program={detail.program}
+          alreadyEnrolled={enrolledIds.has(detail.program.id)}
           onClose={() => setDetail(null)}
-          onPurchase={() => setDetail({ type: 'enroll', program: detail.program })}
+          onPurchase={() => {
+            setEnrollments((prev) => [
+              ...prev,
+              {
+                enrollmentId: `new-${Date.now()}`,
+                status: 'active',
+                paymentStatus: detail.program.price === 0 ? 'free' : 'pending',
+                enrolledAt: new Date().toISOString(),
+                program: detail.program as unknown as MarketplaceProgram,
+              },
+            ])
+            setDetail({ type: 'enroll', program: detail.program })
+          }}
         />
       )}
       {detail?.type === 'enroll' && <EnrollSuccess program={detail.program} onClose={() => setDetail(null)} />}

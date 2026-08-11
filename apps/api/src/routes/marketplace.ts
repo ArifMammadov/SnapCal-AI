@@ -72,15 +72,48 @@ export const marketplaceRoutes: FastifyPluginAsync = async (app: FastifyInstance
       return reply.status(409).send({ error: { code: 'ALREADY_ENROLLED', message: 'Already enrolled' } })
     }
 
-    // Payment integration placeholder for Stripe/TON
-    return reply.status(501).send({ error: { code: 'PAYMENT_NOT_IMPLEMENTED', message: 'Payment integration pending' } })
+    const isFree = !program.priceUsd || program.priceUsd.toNumber() === 0
+    if (!isFree) {
+      // Paid programs require Stripe checkout integration; placeholder for now
+      return reply.status(501).send({
+        error: {
+          code: 'PAYMENT_REQUIRED',
+          message: 'Оплата платных программ будет доступна в следующем обновлении.',
+        },
+      })
+    }
+
+    await prisma.$transaction([
+      prisma.enrollment.create({
+        data: {
+          userId,
+          programId: id,
+          status: 'active',
+          paymentStatus: 'free',
+        },
+      }),
+      prisma.program.update({
+        where: { id },
+        data: { enrolledCount: { increment: 1 } },
+      }),
+    ])
+
+    return { enrolled: true, programId: id }
   })
 
   app.get('/my-enrollments', async (request: FastifyRequest) => {
-    return prisma.enrollment.findMany({
+    const rows = await prisma.enrollment.findMany({
       where: { userId: request.user!.userId },
       include: { program: true },
+      orderBy: { enrolledAt: 'desc' },
     })
+    return rows.map((e) => ({
+      enrollmentId: e.id,
+      status: e.status,
+      paymentStatus: e.paymentStatus,
+      enrolledAt: e.enrolledAt,
+      program: serializeProgram(e.program),
+    }))
   })
 }
 
