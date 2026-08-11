@@ -1,4 +1,3 @@
-import { Decimal } from '@prisma/client/runtime/library.js'
 import type { FastifyInstance, FastifyPluginAsync, FastifyRequest } from 'fastify'
 import { prisma } from '@snapcal/database'
 import { requireAuth } from './users.js'
@@ -13,10 +12,11 @@ interface Milestone {
   color: string
 }
 
-function toNumber(value: Decimal | number | null | undefined): number | null {
+function toNumber(value: any): number | null {
   if (value === null || value === undefined) return null
   if (typeof value === 'number') return value
-  return value.toNumber()
+  if (typeof value === 'object' && typeof value.toNumber === 'function') return value.toNumber()
+  return null
 }
 
 function generatePlan(profile: {
