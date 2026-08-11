@@ -6,6 +6,7 @@ import { requireAuth } from './users.js'
 import { env } from '../lib/env.js'
 import { DEFAULT_FREE_AI_DAILY_LIMIT } from '@snapcal/shared'
 import { parseFoodJson, saveFoodLogFromAnalysis } from '../lib/foodAnalysis.js'
+import { checkAiLimit } from '../lib/subscriptionLimits.js'
 
   const chatSchema = z.object({
   message: z.string().max(4000),
@@ -41,7 +42,7 @@ interface AiAgentResponse {
   }
 }
 
-async function checkAiLimit(userId: string): Promise<{ allowed: boolean; reason?: string }> {
+async function checkAiLimitOld(userId: string): Promise<{ allowed: boolean; reason?: string }> {
   const user = await prisma.user.findUnique({ where: { id: userId } })
   if (!user) return { allowed: false, reason: 'USER_NOT_FOUND' }
 
@@ -84,13 +85,17 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
     }
   })
 
+  app.get('/limits', async (request: FastifyRequest) => {
+    return checkAiLimit(request.user!.userId)
+  })
+
   app.post('/chat', {
     config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
   }, async (request: FastifyRequest, reply) => {
     const userId = request.user!.userId
     const limit = await checkAiLimit(userId)
     if (!limit.allowed) {
-      return reply.status(429).send({ error: { code: limit.reason, message: 'AI daily limit reached. Upgrade to Pro.' } })
+      return reply.status(429).send({ error: { code: limit.reason, message: limit.paywallMessage || 'AI daily limit reached. Upgrade to Pro.' } })
     }
 
     const { message } = chatSchema.parse(request.body)
@@ -173,7 +178,7 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
     const userId = request.user!.userId
     const limit = await checkAiLimit(userId)
     if (!limit.allowed) {
-      return reply.status(429).send({ error: { code: limit.reason, message: 'AI daily limit reached. Upgrade to Pro.' } })
+      return reply.status(429).send({ error: { code: limit.reason, message: limit.paywallMessage || 'AI daily limit reached. Upgrade to Pro.' } })
     }
 
     const { imageUrl } = analyzePhotoSchema.parse(request.body)

@@ -25,6 +25,7 @@ model User {
   subscriptionStatus   SubscriptionStatus @default(INACTIVE)
   subscriptionPlanId   String?          @db.Uuid
   subscriptionExpiresAt DateTime?
+  stripeCustomerId    String?
   trialEndsAt          DateTime?
   createdAt            DateTime         @default(now())
   updatedAt            DateTime         @updatedAt
@@ -95,7 +96,7 @@ model Subscription {
   id                   String   @id @default(uuid()) @db.Uuid
   userId               String   @db.Uuid
   planId               String?  @db.Uuid
-  stripeSubscriptionId String?
+  stripeSubscriptionId String?  @unique
   status               SubscriptionStatus
   currentPeriodStart   DateTime?
   currentPeriodEnd     DateTime?

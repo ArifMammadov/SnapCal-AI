@@ -10,6 +10,39 @@ const stripe = env.STRIPE_SECRET_KEY ? new Stripe(env.STRIPE_SECRET_KEY, { apiVe
 const subscriptionRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
   app.addHook('preHandler', requireAuth)
 
+  app.get('/status', async (request: FastifyRequest) => {
+    const user = await prisma.user.findUnique({
+      where: { id: request.user!.userId },
+      include: { subscriptions: { orderBy: { createdAt: 'desc' }, take: 1 } },
+    })
+    if (!user) return { error: { code: 'USER_NOT_FOUND', message: 'Пользователь не найден' } }
+
+    const now = new Date()
+    const trialActive = user.trialEndsAt && user.trialEndsAt > now
+    const hasActiveSub = ['active', 'trialing'].includes(user.subscriptionStatus.toLowerCase())
+
+    let message = ''
+    if (trialActive) {
+      const daysLeft = Math.ceil((user.trialEndsAt!.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+      message = `Пробный период SnapCal Pro активен. Осталось ${daysLeft} ${daysLeft === 1 ? 'день' : 'дней'}.`
+    } else if (hasActiveSub) {
+      message = 'Подписка SnapCal Pro активна. Анализируйте еду без ограничений.'
+    } else {
+      message = 'Бесплатный лимит: 1 анализ фото в день. Оформите SnapCal Pro для безлимитного доступа к AI Coach.'
+    }
+
+    const sub = user.subscriptions[0]
+    return {
+      status: user.subscriptionStatus,
+      trialEndsAt: user.trialEndsAt,
+      trialActive,
+      hasActiveSub,
+      message,
+      currentPeriodEnd: sub?.currentPeriodEnd ?? null,
+      cancelAtPeriodEnd: sub?.status === 'CANCELED',
+    }
+  })
+
   app.get('/plans', async () => {
     return prisma.subscriptionPlan.findMany({
       where: { isActive: true },
@@ -33,12 +66,16 @@ const subscriptionRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance
       return reply.status(404).send({ error: { code: 'USER_NOT_FOUND', message: 'User not found' } })
     }
 
-    let stripeCustomerId: string | undefined
+    let stripeCustomerId = user.stripeCustomerId
     if (!stripeCustomerId) {
       const customer = await stripe.customers.create({
         metadata: { telegramId: user.telegramId.toString(), userId: user.id },
       })
       stripeCustomerId = customer.id
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { stripeCustomerId },
+      })
     }
 
     const session = await stripe.checkout.sessions.create({
@@ -97,34 +134,63 @@ const subscriptionRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance
         return reply.status(400).send({ error: { code: 'MISSING_METADATA', message: 'Missing metadata' } })
       }
 
+      const subscription = await stripe.subscriptions.retrieve(session.subscription as string)
+      const status = subscription.status === 'trialing' ? 'TRIALING' : 'ACTIVE'
+
       await prisma.user.update({
         where: { id: userId },
         data: {
-          subscriptionStatus: 'ACTIVE',
+          subscriptionStatus: status,
           subscriptionPlanId: planId,
+          stripeCustomerId: session.customer as string,
+          subscriptionExpiresAt: new Date(subscription.current_period_end * 1000),
         },
       })
 
-      const subscription = await stripe.subscriptions.retrieve(session.subscription as string)
-      await prisma.subscription.create({
-        data: {
+      await prisma.subscription.upsert({
+        where: { stripeSubscriptionId: subscription.id },
+        create: {
           userId,
           planId,
           stripeSubscriptionId: subscription.id,
-          status: 'ACTIVE',
+          status,
           currentPeriodStart: new Date(subscription.current_period_start * 1000),
           currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+        },
+        update: {
+          status,
+          planId,
+          currentPeriodStart: new Date(subscription.current_period_start * 1000),
+          currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+          canceledAt: null,
         },
       })
     }
 
     if (event.type === 'invoice.payment_failed') {
       const invoice = event.data.object as Stripe.Invoice
-      const userId = invoice.metadata?.userId
-      if (userId) {
+      const customerId = invoice.customer as string | null
+      if (!customerId) return { received: true }
+      const user = await prisma.user.findFirst({ where: { stripeCustomerId: customerId } })
+      if (user) {
         await prisma.user.update({
-          where: { id: userId },
+          where: { id: user.id },
           data: { subscriptionStatus: 'PAST_DUE' },
+        })
+      }
+    }
+
+    if (event.type === 'customer.subscription.deleted') {
+      const subscription = event.data.object as Stripe.Subscription
+      const user = await prisma.user.findFirst({ where: { stripeCustomerId: subscription.customer as string } })
+      if (user) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { subscriptionStatus: 'INACTIVE' },
+        })
+        await prisma.subscription.updateMany({
+          where: { stripeSubscriptionId: subscription.id },
+          data: { status: 'CANCELED', canceledAt: new Date() },
         })
       }
     }
