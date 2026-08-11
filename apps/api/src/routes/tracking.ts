@@ -38,11 +38,20 @@ const dateQuerySchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 })
 
+const summariesQuerySchema = z.object({
+  start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  end: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+})
+
 function getDateRange(dateStr?: string) {
   const date = dateStr ? new Date(dateStr) : new Date()
   const start = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0)
   const end = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1, 0, 0, 0)
   return { start, end }
+}
+
+function dateKey(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 const trackingRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
@@ -153,69 +162,123 @@ const trackingRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) =>
 
   app.get('/summary', async (request: FastifyRequest) => {
     const { date } = dateQuerySchema.parse(request.query)
-    const { start, end } = getDateRange(date)
-    const userId = request.user!.userId
+    return buildDailySummary(request.user!.userId, date)
+  })
 
+  app.get('/summaries', async (request: FastifyRequest) => {
+    const { start, end } = summariesQuerySchema.parse(request.query)
+    const startDate = new Date(start)
+    const endDate = new Date(end)
+    endDate.setDate(endDate.getDate() + 1)
+
+    const userId = request.user!.userId
     const [profile, foodLogs, activities, metrics] = await Promise.all([
       prisma.profile.findUnique({ where: { userId } }),
-      prisma.foodLog.findMany({ where: { userId, loggedAt: { gte: start, lt: end } } }),
-      prisma.activityLog.findMany({ where: { userId, startedAt: { gte: start, lt: end } } }),
-      prisma.metricLog.findMany({ where: { userId, loggedAt: { gte: start, lt: end } } }),
+      prisma.foodLog.findMany({
+        where: { userId, loggedAt: { gte: startDate, lt: endDate } },
+        orderBy: { loggedAt: 'asc' },
+      }),
+      prisma.activityLog.findMany({
+        where: { userId, startedAt: { gte: startDate, lt: endDate } },
+        orderBy: { startedAt: 'asc' },
+      }),
+      prisma.metricLog.findMany({
+        where: { userId, loggedAt: { gte: startDate, lt: endDate } },
+        orderBy: { loggedAt: 'asc' },
+      }),
     ])
 
-    const caloriesConsumed = foodLogs.reduce((s: number, f: { calories: number }) => s + f.calories, 0)
-    const proteinG = foodLogs.reduce((s: number, f: { proteinG: number | null }) => s + (f.proteinG ?? 0), 0)
-    const carbsG = foodLogs.reduce((s: number, f: { carbsG: number | null }) => s + (f.carbsG ?? 0), 0)
-    const fatG = foodLogs.reduce((s: number, f: { fatG: number | null }) => s + (f.fatG ?? 0), 0)
-    const waterMl = metrics
-      .filter((m: { metricType: string; value: { toNumber: () => number } }) => m.metricType === 'WATER_ML')
-      .reduce((s: number, m: { value: { toNumber: () => number } }) => s + m.value.toNumber(), 0)
-    const sleepH = Number(metrics.find((m: { metricType: string }) => m.metricType === 'SLEEP_H')?.value?.toNumber() ?? 0)
-    const steps = metrics
-      .filter((m: { metricType: string; value: { toNumber: () => number } }) => m.metricType === 'STEPS')
-      .reduce((s: number, m: { value: { toNumber: () => number } }) => s + m.value.toNumber(), 0)
-    const weightKg = (Number(metrics.find((m: { metricType: string }) => m.metricType === 'WEIGHT_KG')?.value?.toNumber() ?? 0) || (profile?.currentWeightKg ?? 0))
-    const activitiesCount = activities.length
-    const caloriesBurned = activities.reduce((s: number, a: { caloriesBurned: number | null }) => s + (a.caloriesBurned ?? 0), 0)
-
-    const calorieGoal = profile?.dailyCalories ?? 2200
-    const proteinGoal = profile?.dailyProteinG ?? 150
-    const waterGoalMl = profile?.dailyWaterMl ?? 3000
-    const sleepGoalH = profile?.dailySleepH ?? 8
-    const stepsGoal = profile?.dailySteps ?? 10000
-
-    const scoreParts = [
-      clamp(caloriesConsumed / calorieGoal, 0, 1),
-      clamp(proteinG / proteinGoal, 0, 1),
-      clamp(waterMl / waterGoalMl, 0, 1),
-      clamp(Number(sleepH) / Number(sleepGoalH), 0, 1),
-      clamp(steps / stepsGoal, 0, 1),
-      activitiesCount > 0 ? 1 : 0,
-    ]
-    const healthScore = Math.round((scoreParts.reduce((s: number, v: number) => s + v, 0) / scoreParts.length) * 100)
-
-    return {
-      date: start.toISOString().split('T')[0],
-      caloriesConsumed,
-      calorieGoal,
-      proteinG,
-      proteinGoal,
-      carbsG,
-      fatG,
-      waterMl,
-      waterGoalMl,
-      sleepH,
-      sleepGoalH,
-      steps,
-      stepsGoal,
-      weightKg,
-      activitiesCount,
-      caloriesBurned,
-      healthScore,
-      foodLogs,
-      activities,
+    const byDay = new Map<string, { foodLogs: any[]; activities: any[]; metrics: any[] }>()
+    for (let d = new Date(startDate); d < endDate; d.setDate(d.getDate() + 1)) {
+      byDay.set(dateKey(d), { foodLogs: [], activities: [], metrics: [] })
     }
+
+    for (const f of foodLogs) byDay.get(dateKey(f.loggedAt))?.foodLogs.push(f)
+    for (const a of activities) byDay.get(dateKey(a.startedAt))?.activities.push(a)
+    for (const m of metrics) byDay.get(dateKey(m.loggedAt))?.metrics.push(m)
+
+    const results: any[] = []
+    for (let d = new Date(startDate); d < endDate; d.setDate(d.getDate() + 1)) {
+      const key = dateKey(d)
+      const day = byDay.get(key)!
+      results.push(buildSummaryFromData(userId, key, day.foodLogs, day.activities, day.metrics, profile))
+    }
+
+    return results
   })
+}
+
+async function buildDailySummary(userId: string, dateStr?: string) {
+  const { start, end } = getDateRange(dateStr)
+  const [profile, foodLogs, activities, metrics] = await Promise.all([
+    prisma.profile.findUnique({ where: { userId } }),
+    prisma.foodLog.findMany({ where: { userId, loggedAt: { gte: start, lt: end } } }),
+    prisma.activityLog.findMany({ where: { userId, startedAt: { gte: start, lt: end } } }),
+    prisma.metricLog.findMany({ where: { userId, loggedAt: { gte: start, lt: end } } }),
+  ])
+  return buildSummaryFromData(userId, start.toISOString().split('T')[0], foodLogs, activities, metrics, profile)
+}
+
+function buildSummaryFromData(
+  _userId: string,
+  date: string,
+  foodLogs: any[],
+  activities: any[],
+  metrics: any[],
+  profile: any,
+) {
+  const caloriesConsumed = foodLogs.reduce((s: number, f: { calories: number }) => s + f.calories, 0)
+  const proteinG = foodLogs.reduce((s: number, f: { proteinG: number | null }) => s + (f.proteinG ?? 0), 0)
+  const carbsG = foodLogs.reduce((s: number, f: { carbsG: number | null }) => s + (f.carbsG ?? 0), 0)
+  const fatG = foodLogs.reduce((s: number, f: { fatG: number | null }) => s + (f.fatG ?? 0), 0)
+  const waterMl = metrics
+    .filter((m: { metricType: string; value: { toNumber: () => number } }) => m.metricType === 'WATER_ML')
+    .reduce((s: number, m: { value: { toNumber: () => number } }) => s + m.value.toNumber(), 0)
+  const sleepH = Number(metrics.find((m: { metricType: string }) => m.metricType === 'SLEEP_H')?.value?.toNumber() ?? 0)
+  const steps = metrics
+    .filter((m: { metricType: string; value: { toNumber: () => number } }) => m.metricType === 'STEPS')
+    .reduce((s: number, m: { value: { toNumber: () => number } }) => s + m.value.toNumber(), 0)
+  const weightKg = (Number(metrics.find((m: { metricType: string }) => m.metricType === 'WEIGHT_KG')?.value?.toNumber() ?? 0) || (profile?.currentWeightKg ?? 0))
+  const activitiesCount = activities.length
+  const caloriesBurned = activities.reduce((s: number, a: { caloriesBurned: number | null }) => s + (a.caloriesBurned ?? 0), 0)
+
+  const calorieGoal = profile?.dailyCalories ?? 2200
+  const proteinGoal = profile?.dailyProteinG ?? 150
+  const waterGoalMl = profile?.dailyWaterMl ?? 3000
+  const sleepGoalH = profile?.dailySleepH ?? 8
+  const stepsGoal = profile?.dailySteps ?? 10000
+
+  const scoreParts = [
+    clamp(caloriesConsumed / calorieGoal, 0, 1),
+    clamp(proteinG / proteinGoal, 0, 1),
+    clamp(waterMl / waterGoalMl, 0, 1),
+    clamp(Number(sleepH) / Number(sleepGoalH), 0, 1),
+    clamp(steps / stepsGoal, 0, 1),
+    activitiesCount > 0 ? 1 : 0,
+  ]
+  const healthScore = Math.round((scoreParts.reduce((s: number, v: number) => s + v, 0) / scoreParts.length) * 100)
+
+  return {
+    date,
+    caloriesConsumed,
+    calorieGoal,
+    proteinG,
+    proteinGoal,
+    carbsG,
+    fatG,
+    waterMl,
+    waterGoalMl,
+    sleepH,
+    sleepGoalH,
+    steps,
+    stepsGoal,
+    weightKg,
+    activitiesCount,
+    caloriesBurned,
+    healthScore,
+    foodLogs,
+    activities,
+  }
 }
 
 function clamp(value: number, min: number, max: number) {
