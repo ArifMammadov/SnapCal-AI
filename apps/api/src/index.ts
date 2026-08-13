@@ -5,7 +5,7 @@ import jwt from '@fastify/jwt'
 import rateLimit from '@fastify/rate-limit'
 import multipart from '@fastify/multipart'
 import { env } from './lib/env.js'
-import { getRedis } from '@snapcal/shared'
+import { getRedis, initTracing, installShutdownHandlers, logger } from '@snapcal/shared'
 import { authRoutes } from './routes/auth.js'
 import { userRoutes } from './routes/users.js'
 import { trackingRoutes } from './routes/tracking.js'
@@ -19,11 +19,11 @@ import { gdprRoutes } from './routes/gdpr.js'
 import { errorHandler } from './lib/error-handler.js'
 
 export async function buildApp() {
+  initTracing('snapcal-api')
+
   const app = fastify({
-    logger: {
-      level: 'info',
-    },
-    genReqId: () => `req_${Math.random().toString(36).slice(2)}`,
+    loggerInstance: logger.child({ service: 'snapcal-api' }),
+    genReqId: () => `req_${crypto.randomUUID()}`,
   })
 
   await app.register(helmet, {
@@ -75,6 +75,10 @@ export async function buildApp() {
     }),
   })
 
+  app.addHook('onRequest', async (request, reply) => {
+    reply.header('x-request-id', request.id)
+  })
+
   app.addHook('onResponse', async (request, reply) => {
     request.log.info({
       req: {
@@ -111,14 +115,12 @@ export async function buildApp() {
 
 async function main() {
   const app = await buildApp()
+  installShutdownHandlers(app)
   await app.listen({ port: env.PORT, host: '0.0.0.0' })
   app.log.info(`API service running on port ${env.PORT}`)
 }
 
 main().catch((err) => {
-  if (env.NODE_ENV === 'development') {
-    // eslint-disable-next-line no-console
-    console.error(err)
-  }
+  logger.fatal({ err }, 'failed to start api')
   process.exit(1)
 })

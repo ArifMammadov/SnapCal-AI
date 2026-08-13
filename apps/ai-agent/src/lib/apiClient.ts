@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { env } from '../lib/env.js'
+import { logger } from '@snapcal/shared'
 
 export const apiClient = axios.create({
   baseURL: env.API_URL ?? env.API_SERVICE_URL,
@@ -7,19 +8,31 @@ export const apiClient = axios.create({
   headers: env.AGENT_SECRET ? { 'x-snapcal-secret': env.AGENT_SECRET } : undefined,
 })
 
-export interface FoodLogPayload {
+apiClient.interceptors.request.use((config) => {
+  logger.debug({ url: config.url, method: config.method }, 'api client request')
+  return config
+})
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    logger.warn({ err: error, url: error.config?.url }, 'api client error')
+    return Promise.reject(error)
+  },
+)
+
+interface FoodLogPayload {
   userId: string
-  mealType: 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK'
+  mealType: string
   name: string
   calories: number
-  proteinG?: number
-  carbsG?: number
-  fatG?: number
-  imageUrl?: string
-  aiAnalyzed?: boolean
+  proteinG: number
+  carbsG: number
+  fatG: number
+  aiAnalyzed: boolean
 }
 
-export interface ActivityLogPayload {
+interface ActivityLogPayload {
   userId: string
   type: string
   durationMin: number
@@ -28,12 +41,12 @@ export interface ActivityLogPayload {
   notes?: string
 }
 
-export async function createFoodLog(payload: FoodLogPayload): Promise<{ id: string }> {
+export async function createFoodLog(payload: FoodLogPayload) {
   const { data } = await apiClient.post('/api/tracking/food', payload)
   return data
 }
 
-export async function createActivityLog(payload: ActivityLogPayload): Promise<{ id: string }> {
+export async function createActivityLog(payload: ActivityLogPayload) {
   const { data } = await apiClient.post('/api/tracking/activity', payload)
   return data
 }

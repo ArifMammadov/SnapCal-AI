@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { env } from '../lib/env.js'
 import { prisma } from '@snapcal/database'
+import { logger } from '@snapcal/shared'
 import { parseFoodJson, saveFoodLogFromAnalysis } from '../lib/foodAnalysis.js'
 
 const agent = axios.create({
@@ -8,6 +9,19 @@ const agent = axios.create({
   timeout: 30000,
   headers: env.AI_AGENT_SECRET ? { 'x-snapcal-secret': env.AI_AGENT_SECRET } : undefined,
 })
+
+agent.interceptors.request.use((config) => {
+  logger.debug({ url: config.url, method: config.method }, 'ai agent client request')
+  return config
+})
+
+agent.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    logger.warn({ err: error, url: error.config?.url }, 'ai agent client error')
+    return Promise.reject(error)
+  },
+)
 
 export interface AnalyzePhotoResult {
   message: {

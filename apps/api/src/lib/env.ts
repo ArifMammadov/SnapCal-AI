@@ -22,6 +22,8 @@ const envSchema = z.object({
   ADMIN_SECRET: z.string().min(16),
   S3_SECRET_KEY: z.string().optional(),
   AI_AGENT_SECRET: z.string().min(16),
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
+  OTEL_EXPORTER_OTLP_HEADERS: z.string().optional(),
 })
 
 export const env = envSchema.parse(process.env)

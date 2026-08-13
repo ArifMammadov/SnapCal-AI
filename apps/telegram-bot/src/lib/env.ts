@@ -6,4 +6,6 @@ export const env = z.object({
   MOBILE_APP_URL: z.string().url().default('https://snapcal.health'),
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().default('redis://localhost:6379'),
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
+  OTEL_EXPORTER_OTLP_HEADERS: z.string().optional(),
 }).parse(process.env)

@@ -1,17 +1,11 @@
 import { startVisionWorker } from './lib/visionQueue.js'
+import { initTracing, installShutdownHandlers, logger, onShutdown } from '@snapcal/shared'
+
+initTracing('snapcal-ai-agent-worker')
 
 const worker = startVisionWorker()
 
-process.on('SIGTERM', async () => {
-  console.log('Vision worker received SIGTERM, closing...')
-  await worker.close()
-  process.exit(0)
-})
+onShutdown(() => worker.close())
+installShutdownHandlers()
 
-process.on('SIGINT', async () => {
-  console.log('Vision worker received SIGINT, closing...')
-  await worker.close()
-  process.exit(0)
-})
-
-console.log('Vision worker started')
+logger.info('vision worker started')

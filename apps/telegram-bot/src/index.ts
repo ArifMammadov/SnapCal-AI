@@ -1,6 +1,7 @@
 import TelegramBot from 'node-telegram-bot-api'
 import { env } from './lib/env.js'
 import { prisma } from '@snapcal/database'
+import { initTracing, installShutdownHandlers, logger } from '@snapcal/shared'
 
 const bot = new TelegramBot(env.TELEGRAM_BOT_TOKEN, { polling: true })
 
@@ -50,10 +51,7 @@ export async function sendTelegramNotification(telegramId: bigint, text: string,
   try {
     await bot.sendMessage(Number(telegramId), text, options)
   } catch (err) {
-    if (env.NODE_ENV === 'development') {
-      // eslint-disable-next-line no-console
-      console.error('Failed to send Telegram notification:', err)
-    }
+    logger.warn({ err, telegramId: telegramId.toString() }, 'failed to send telegram notification')
   }
 }
 
@@ -132,10 +130,12 @@ export async function processRemindersForTime(hourMinute: string, dayOfWeek: str
 }
 
 async function main() {
-  if (env.NODE_ENV === 'development') {
-    // eslint-disable-next-line no-console
-    console.log('Telegram bot started')
-  }
+  initTracing('snapcal-telegram-bot')
+  installShutdownHandlers()
+  logger.info('telegram bot started')
 }
 
-main()
+main().catch((err) => {
+  logger.fatal({ err }, 'failed to start telegram bot')
+  process.exit(1)
+})
