@@ -41,6 +41,8 @@ model User {
   aiAuditLogs   AiAuditLog[]
   knowledgeArticles KnowledgeArticle[] @relation("CreatedBy")
   staffInvites  StaffInvite[]        @relation("InvitedBy")
+  notifications Notification[]
+  reminderPreferences ReminderPreference?
 
   @@index([telegramId])
   @@index([subscriptionStatus])
@@ -419,4 +421,43 @@ enum MessageType {
 enum FeedbackRating {
   UP
   DOWN
+}
+
+model Notification {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @db.Uuid
+  type        String
+  title       String
+  body        String
+  data        Json?
+  isRead      Boolean  @default(false)
+  sentVia     String   @default("in_app")
+  createdAt   DateTime @default(now())
+  readAt      DateTime?
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt])
+  @@map("notifications")
+}
+
+model ReminderPreference {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @unique @db.Uuid
+  breakfastAt   String?  // HH:MM
+  lunchAt       String?  // HH:MM
+  dinnerAt      String?  // HH:MM
+  weightDay     String?  // e.g. "monday"
+  weightAt      String?  // HH:MM
+  workoutDays   String[]
+  workoutAt     String?  // HH:MM
+  waterReminders Boolean @default(false)
+  enabled       Boolean  @default(true)
+  timezone      String   @default("UTC")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("reminder_preferences")
 }

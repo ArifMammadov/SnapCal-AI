@@ -5,6 +5,9 @@ export interface JwtPayload {
   telegramId?: string
   role?: string
   type?: string
+  languageCode?: string
+  iat?: number
+  exp?: number
 }
 
 declare module '@fastify/jwt' {

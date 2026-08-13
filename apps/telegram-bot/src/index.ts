@@ -46,11 +46,85 @@ bot.onText(/\/start/, async (msg) => {
   })
 })
 
-export async function sendNotification(telegramId: bigint, text: string) {
+export async function sendTelegramNotification(telegramId: bigint, text: string, options?: TelegramBot.SendMessageOptions) {
   try {
-    await bot.sendMessage(Number(telegramId), text)
+    await bot.sendMessage(Number(telegramId), text, options)
   } catch (err) {
     console.error('Failed to send Telegram notification:', err)
+  }
+}
+
+const REMINDER_TEMPLATES: Record<string, { title: string; body: string }> = {
+  breakfast: {
+    title: 'Завтрак 🌅',
+    body: 'Доброе утро! Залогируй завтрак — сделай фото еды, и AI рассчитает калории.',
+  },
+  lunch: {
+    title: 'Обед 🍽️',
+    body: 'Время обеда! Сфотографируй тарелку или расскажи, что ешь.',
+  },
+  dinner: {
+    title: 'Ужин 🌙',
+    body: 'Не забудь про ужин. Лёгкий ужин — залог хорошего сна и прогресса.',
+  },
+  weight: {
+    title: 'Взвешивание ⚖️',
+    body: 'Сегодня день взвешивания. Запиши текущий вес, чтобы отслеживать динамику.',
+  },
+  workout: {
+    title: 'Тренировка 💪',
+    body: 'Запланирована тренировка. После неё не забудь восполнить белок!',
+  },
+  water: {
+    title: 'Вода 💧',
+    body: 'Пей водичку! Гидратация помогает контролировать аппетит и энергию.',
+  },
+}
+
+export async function sendReminder(userId: string, type: string) {
+  const template = REMINDER_TEMPLATES[type]
+  if (!template) return
+
+  const user = await prisma.user.findUnique({ where: { id: userId } })
+  if (!user || !user.telegramId) return
+
+  await prisma.notification.create({
+    data: {
+      userId,
+      type,
+      title: template.title,
+      body: template.body,
+      sentVia: 'telegram',
+    },
+  })
+
+  await sendTelegramNotification(user.telegramId, `${template.title}\n\n${template.body}`, {
+    reply_markup: {
+      inline_keyboard: [[{ text: 'Открыть SnapCal AI', web_app: { url: MINI_APP_URL } }]],
+    },
+  })
+}
+
+export async function processRemindersForTime(hourMinute: string, dayOfWeek: string) {
+  const prefs = await prisma.reminderPreference.findMany({
+    where: { enabled: true },
+    include: { user: true },
+  })
+
+  for (const pref of prefs) {
+    if (!pref.user.telegramId) continue
+
+    const sendIfMatch = async (field: keyof typeof REMINDER_TEMPLATES | null, time: string | null, matchDay?: boolean) => {
+      if (!field || !time || time !== hourMinute) return
+      if (matchDay !== undefined && !matchDay) return
+      await sendReminder(pref.userId, field)
+    }
+
+    await sendIfMatch('breakfast', pref.breakfastAt)
+    await sendIfMatch('lunch', pref.lunchAt)
+    await sendIfMatch('dinner', pref.dinnerAt)
+    await sendIfMatch('weight', pref.weightAt, pref.weightDay === dayOfWeek)
+    await sendIfMatch('workout', pref.workoutAt, pref.workoutDays.includes(dayOfWeek))
   }
 }
 

@@ -4,8 +4,9 @@ import { Card, Button, BackIcon, Avatar } from '../components/ui.js'
 import { useAppStore } from '../store/index.js'
 import { api } from '../lib/api.js'
 import type { TrackingSummary } from '../lib/data.js'
+import { NotificationScreen } from './NotificationScreen.js'
 
-type ProfileSection = 'main' | 'personal' | 'goals' | 'subscription' | 'settings' | 'faq' | 'support' | 'privacy' | 'terms'
+type ProfileSection = 'main' | 'personal' | 'goals' | 'subscription' | 'notifications' | 'settings' | 'faq' | 'support' | 'privacy' | 'terms'
 
 function BackButton({ onBack }: { onBack: () => void }) {
   return (
@@ -353,6 +354,7 @@ export function ProfileScreen() {
   if (section === 'personal') return <PersonalInfoSection onBack={() => setSection('main')} />
   if (section === 'goals') return <GoalsSection onBack={() => setSection('main')} />
   if (section === 'subscription') return <SubscriptionSection onBack={() => setSection('main')} />
+  if (section === 'notifications') return <NotificationScreen onBack={() => setSection('main')} />
   if (section === 'settings') return <SettingsSection onBack={() => setSection('main')} />
   if (section === 'faq') return <SimpleTextSection title="FAQ" onBack={() => setSection('main')} content={staticContent.faq} />
   if (section === 'support') return <SimpleTextSection title="Support" onBack={() => setSection('main')} content={staticContent.support} />
@@ -363,6 +365,7 @@ export function ProfileScreen() {
     { id: 'personal' as ProfileSection, icon: '👤', label: 'Personal Information', desc: 'Name, height, weight, contact', highlight: false },
     { id: 'goals' as ProfileSection, icon: '🎯', label: 'Goals', desc: 'Targets, timeline, preferences', highlight: false },
     { id: 'subscription' as ProfileSection, icon: '⭐', label: 'Subscription', desc: `${user?.plan || 'Free'} · ${user?.plan === 'FREE' ? 'Active' : 'Active ✓'}`, highlight: true },
+    { id: 'notifications' as ProfileSection, icon: '🔔', label: 'Notifications', desc: 'Reminders, history', highlight: false },
     { id: 'settings' as ProfileSection, icon: '⚙️', label: 'Settings', desc: 'Notifications, display, units', highlight: false },
     { id: 'faq' as ProfileSection, icon: '❓', label: 'FAQ', desc: 'Common questions answered', highlight: false },
     { id: 'support' as ProfileSection, icon: '💬', label: 'Support', desc: 'Get help from our team', highlight: false },

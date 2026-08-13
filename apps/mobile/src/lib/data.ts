@@ -102,6 +102,110 @@ export interface GoalPlan {
   }[]
 }
 
+export interface ReminderPreferences {
+  breakfastAt: string | null
+  lunchAt: string | null
+  dinnerAt: string | null
+  weightDay: string | null
+  weightAt: string | null
+  workoutDays: string[]
+  workoutAt: string | null
+  waterReminders: boolean
+  enabled: boolean
+  timezone: string
+}
+
+export interface NotificationItem {
+  id: string
+  type: string
+  title: string
+  body: string
+  data: any
+  isRead: boolean
+  sentVia: string
+  createdAt: string
+  readAt: string | null
+}
+
+export function useNotifications() {
+  const [notifications, setNotifications] = useState<NotificationItem[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const fetch = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await api.get<{ notifications: NotificationItem[]; unreadCount: number }>('/notifications')
+      setNotifications(res.data.notifications)
+      setUnreadCount(res.data.unreadCount)
+    } catch (err: any) {
+      setError(err.message || 'Failed to load notifications')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetch()
+  }, [fetch])
+
+  const markRead = useCallback(async (id: string) => {
+    await api.patch(`/notifications/${id}/read`)
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true, readAt: new Date().toISOString() } : n)))
+    setUnreadCount((c) => Math.max(0, c - 1))
+  }, [])
+
+  const markAllRead = useCallback(async () => {
+    await api.post('/notifications/read-all')
+    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true, readAt: new Date().toISOString() })))
+    setUnreadCount(0)
+  }, [])
+
+  return { notifications, unreadCount, loading, error, refetch: fetch, markRead, markAllRead }
+}
+
+export function useReminderPreferences() {
+  const [prefs, setPrefs] = useState<ReminderPreferences | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const fetch = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await api.get<ReminderPreferences>('/notifications/preferences')
+      setPrefs(res.data)
+    } catch (err: any) {
+      setError(err.message || 'Failed to load preferences')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetch()
+  }, [fetch])
+
+  const save = useCallback(async (data: Partial<ReminderPreferences>) => {
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await api.put<ReminderPreferences>('/notifications/preferences', data)
+      setPrefs(res.data)
+      return true
+    } catch (err: any) {
+      setError(err.message || 'Failed to save preferences')
+      return false
+    } finally {
+      setSaving(false)
+    }
+  }, [])
+
+  return { prefs, loading, saving, error, refetch: fetch, save }
+}
+
 export function useTrackingSummary(date?: string) {
   const [data, setData] = useState<TrackingSummary | null>(null)
   const [loading, setLoading] = useState(true)

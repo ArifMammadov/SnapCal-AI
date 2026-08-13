@@ -6,6 +6,7 @@
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
+    "reminders": "tsx src/cron/reminders.ts",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit"
   },
