@@ -4,10 +4,29 @@ import { prisma } from '@snapcal/database'
 import { requireAuth } from './users.js'
 import { env } from '../lib/env.js'
 
-const requireAdmin = async (request: FastifyRequest, reply: any) => {
+const requireAdmin = async (request: FastifyRequest, reply: FastifyReply) => {
   if (request.user?.role !== 'ADMIN') {
+    await prisma.auditLog.create({
+      data: {
+        action: 'ADMIN_ACCESS_DENIED',
+        userId: request.user?.userId,
+        ipAddress: request.ip,
+        userAgent: request.headers['user-agent']?.slice(0, 255) || null,
+        details: { path: request.url, method: request.method },
+      },
+    })
     return reply.status(403).send({ error: { code: 'FORBIDDEN', message: 'Admin access required' } })
   }
+
+  await prisma.auditLog.create({
+    data: {
+      action: 'ADMIN_ACCESS',
+      userId: request.user.userId,
+      ipAddress: request.ip,
+      userAgent: request.headers['user-agent']?.slice(0, 255) || null,
+      details: { path: request.url, method: request.method },
+    },
+  })
 }
 
 const loginSchema = z.object({
@@ -44,9 +63,19 @@ function slugify(name: string) {
 }
 
 export async function adminRoutes(app: FastifyInstance) {
-  app.post('/login', async (request: FastifyRequest, reply: FastifyReply) => {
+  app.post('/login', {
+    config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     const { secret } = loginSchema.parse(request.body)
     if (secret !== env.ADMIN_SECRET) {
+      await prisma.auditLog.create({
+        data: {
+          action: 'ADMIN_LOGIN_FAILED',
+          ipAddress: request.ip,
+          userAgent: request.headers['user-agent']?.slice(0, 255) || null,
+          details: { reason: 'invalid_secret' },
+        },
+      })
       return reply.status(401).send({ error: { code: 'INVALID_SECRET', message: 'Invalid admin secret' } })
     }
     const token = app.jwt.sign({ userId: 'admin', role: 'ADMIN' }, { expiresIn: '24h' })

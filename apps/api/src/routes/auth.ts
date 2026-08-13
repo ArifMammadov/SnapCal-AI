@@ -93,7 +93,9 @@ export async function authRoutes(app: FastifyInstance) {
     }
   })
 
-  app.post('/telegram', async (request: FastifyRequest, reply: FastifyReply) => {
+  app.post('/telegram', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     const { initData } = telegramAuthSchema.parse(request.body)
     const data = verifyTelegramInitData(initData)
 
@@ -173,7 +175,9 @@ export async function authRoutes(app: FastifyInstance) {
     }
   })
 
-  app.post('/refresh', async (request: FastifyRequest, reply: FastifyReply) => {
+  app.post('/refresh', {
+    config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
     const { refreshToken } = refreshSchema.parse(request.body)
 
     try {

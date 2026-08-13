@@ -7,6 +7,12 @@ export default defineConfig({
   server: {
     port: 5176,
     host: '0.0.0.0',
+    headers: {
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+      'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+    },
   },
   build: {
     outDir: 'dist',

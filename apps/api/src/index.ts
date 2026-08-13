@@ -14,6 +14,7 @@ import { marketplaceRoutes } from './routes/marketplace.js'
 import { adminRoutes } from './routes/admin.js'
 import { goalRoutes } from './routes/goals.js'
 import { notificationsRoutes } from './routes/notifications.js'
+import { gdprRoutes } from './routes/gdpr.js'
 import { errorHandler } from './lib/error-handler.js'
 
 export async function buildApp() {
@@ -30,9 +31,15 @@ export async function buildApp() {
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
         fontSrc: ["'self'", "https://fonts.gstatic.com"],
         imgSrc: ["'self'", "data:", "https:", "blob:"],
-        connectSrc: ["'self'", env.MOBILE_APP_URL, env.ADMIN_APP_URL],
+        connectSrc: ["'self'", env.MOBILE_APP_URL, env.ADMIN_APP_URL, env.AI_AGENT_URL],
+        frameAncestors: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
       },
     },
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    crossOriginEmbedderPolicy: false,
+    hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
   })
 
   await app.register(cors, {
@@ -55,6 +62,13 @@ export async function buildApp() {
     max: 100,
     timeWindow: '1 minute',
     keyGenerator: (req) => (req as { user?: { userId: string } }).user?.userId ?? req.ip,
+    skipOnError: false,
+    errorResponseBuilder: (_req, context) => ({
+      statusCode: 429,
+      error: 'Too Many Requests',
+      message: `Rate limit exceeded. Retry in ${context.after}`,
+      retryAfter: context.after,
+    }),
   })
 
   app.setErrorHandler(errorHandler)
@@ -71,6 +85,7 @@ export async function buildApp() {
   await app.register(adminRoutes, { prefix: '/api/admin' })
   await app.register(goalRoutes, { prefix: '/api/goals' })
   await app.register(notificationsRoutes, { prefix: '/api/notifications' })
+  await app.register(gdprRoutes, { prefix: '/api/gdpr' })
 
   return app
 }

@@ -39,6 +39,7 @@ model User {
   enrollments   Enrollment[]
   userFacts     UserFact[]
   aiAuditLogs   AiAuditLog[]
+  auditLogs     AuditLog[]
   knowledgeArticles KnowledgeArticle[] @relation("CreatedBy")
   staffInvites  StaffInvite[]        @relation("InvitedBy")
   notifications Notification[]
@@ -332,6 +333,22 @@ model AiAuditLog {
   @@index([userId, createdAt])
   @@index([skillName])
   @@map("ai_audit_logs")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String?  @db.Uuid
+  action      String
+  ipAddress   String?
+  userAgent   String?  @db.VarChar(255)
+  details     Json?
+  createdAt   DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+  @@map("audit_logs")
 }
 
 model StaffInvite {
