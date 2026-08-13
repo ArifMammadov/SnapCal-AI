@@ -4,6 +4,8 @@ import helmet from '@fastify/helmet'
 import cors from '@fastify/cors'
 import rateLimit from '@fastify/rate-limit'
 import agentRoutes from './routes/agent.js'
+import { startVisionWorker } from './lib/visionQueue.js'
+import { registerMetricsEndpoint } from './lib/metrics.js'
 
 async function buildApp() {
   const app = fastify({ logger: env.NODE_ENV === 'development' })
@@ -17,6 +19,8 @@ async function buildApp() {
 
   await app.register(agentRoutes)
 
+  registerMetricsEndpoint(app)
+
   app.get('/health', async () => ({ status: 'ok' }))
 
   return app
@@ -24,11 +28,13 @@ async function buildApp() {
 
 async function start() {
   const app = await buildApp()
+  const worker = startVisionWorker()
   try {
     await app.listen({ port: env.PORT, host: '0.0.0.0' })
     app.log.info(`AI Agent running on port ${env.PORT}`)
   } catch (err) {
     app.log.error(err)
+    await worker.close()
     process.exit(1)
   }
 }

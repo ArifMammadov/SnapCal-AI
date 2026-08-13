@@ -7,6 +7,7 @@ import { applyGuardrails, containsPromptLeakage, isPromptInjection, sanitizeUser
 import { estimateCost, recordAiUsage } from '../lib/limits.js'
 import { estimateTokens } from '../llm/client.js'
 import { routeSkillLlm } from './router.js'
+import { aiCostTotal, aiErrorsTotal, aiLatencyHistogram, aiRequestsTotal } from '../lib/metrics.js'
 import { auditLog } from '../audit/index.js'
 import { updateMemory } from '../memory/index.js'
 import { getUserSummary, searchKnowledge, recommendProgram, analyzePhoto, logFood, logActivity } from '../tools/index.js'
@@ -232,6 +233,16 @@ Respond in a helpful, concise way in the user's language. Do not provide medical
       estimatedCostUsd: estimateCost(modelUsed, estimateTokens(systemPrompt + (message ?? '')), estimateTokens(content)),
     },
   })
+
+  const latencySeconds = (Date.now() - start) / 1000
+  aiLatencyHistogram.observe({ skill: route.skillName, model: modelUsed }, latencySeconds)
+  aiRequestsTotal.inc({ skill: route.skillName, model: modelUsed, status: errorMessage ? 'error' : 'success' })
+  if (errorMessage) {
+    aiErrorsTotal.inc({ skill: route.skillName, error_type: errorMessage.includes('timeout') ? 'timeout' : 'provider' })
+  }
+
+  const estimatedCostUsd = estimateCost(modelUsed, estimateTokens(systemPrompt + (message ?? '')), estimateTokens(content))
+  aiCostTotal.inc({ model: modelUsed, provider: 'openrouter' }, estimatedCostUsd)
 
   if (route.skillName === 'food_vision' || route.skillName === 'nutrition') {
     const inputTokens = estimateTokens(systemPrompt + (message ?? ''))

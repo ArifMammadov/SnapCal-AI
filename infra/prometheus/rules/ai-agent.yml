@@ -1,0 +1,38 @@
+groups:
+  - name: snapcal_ai
+    rules:
+      - alert: SnapCalHighErrorRate
+        expr: rate(snapcal_ai_errors_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'AI agent error rate is high'
+          description: 'Error rate > 0.05/sec for 5 minutes on {{ $labels.skill }}'
+
+      - alert: SnapCalHighCost
+        expr: increase(snapcal_ai_cost_usd_total[1h]) > 5
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: 'AI spend over $5/hour'
+          description: 'Estimated AI cost is {{ $value }} USD in the last hour'
+
+      - alert: SnapCalVisionQueueFailures
+        expr: rate(snapcal_ai_vision_queue_jobs_total{state="failed"}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Vision queue failing'
+          description: 'Vision queue failure rate is high'
+
+      - alert: SnapCalHighLatency
+        expr: histogram_quantile(0.95, rate(snapcal_ai_latency_seconds_bucket[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'AI p95 latency > 10s'
+          description: 'p95 latency for skill {{ $labels.skill }} is {{ $value }}s'

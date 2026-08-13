@@ -4,6 +4,8 @@ import { z } from 'zod'
 import { handleChat, analyzeFoodPhoto } from '../agent/orchestrator.js'
 import type { ChatInput } from '../types/index.js'
 import { checkAiUsageLimits, getUserSubscriptionStatus, recordAiUsage } from '../lib/limits.js'
+import { enqueueVisionAnalysis, getVisionJobStatus } from '../lib/visionQueue.js'
+import { isAllowedImageUrl } from '../lib/imageUrl.js'
 
 const chatSchema = z.object({
   message: z.string().min(1).max(4000),
@@ -48,15 +50,37 @@ const agentRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
 
   app.post('/analyze-photo', async (request: FastifyRequest, reply) => {
     const body = photoSchema.parse(request.body)
+    if (!isAllowedImageUrl(body.imageUrl)) {
+      request.log.warn({ imageUrl: body.imageUrl }, 'Rejected analyze-photo with disallowed image URL')
+      return reply.status(400).send({ error: { code: 'INVALID_IMAGE_URL', message: 'Image URL is not allowed' } })
+    }
+
     const subscriptionStatus = await getUserSubscriptionStatus(body.userId)
     const limit = await checkAiUsageLimits(body.userId, subscriptionStatus, 200, 512)
     if (!limit.allowed) {
       return reply.status(429).send({ error: { code: limit.reason, message: 'AI usage limit reached.' } })
     }
 
-    const result = await analyzeFoodPhoto(body.userId, body.imageUrl)
-    await recordAiUsage(body.userId, 200, result.message.content.length / 4, result.message.modelUsed ?? 'unknown', 'openrouter')
-    return reply.send(result)
+    const job = await enqueueVisionAnalysis({
+      userId: body.userId,
+      imageUrl: body.imageUrl,
+      messageId: crypto.randomUUID(),
+    })
+
+    return reply.send({
+      accepted: true,
+      jobId: job.id,
+      statusUrl: `/ai-agent/vision-status/${job.id}`,
+    })
+  })
+
+  app.get('/vision-status/:jobId', async (request: FastifyRequest, reply) => {
+    const { jobId } = request.params as { jobId: string }
+    const status = await getVisionJobStatus(jobId)
+    if (status.status === 'not_found') {
+      return reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Job not found' } })
+    }
+    return reply.send(status)
   })
 }
 

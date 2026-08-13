@@ -49,6 +49,11 @@ export async function analyzePhoto(context: ToolContext): Promise<ToolResult> {
     return { success: false, error: 'No image URL provided' }
   }
 
+  const { isAllowedImageUrl } = await import('../lib/imageUrl.js')
+  if (!isAllowedImageUrl(imageUrl)) {
+    return { success: false, error: 'Image URL is not allowed' }
+  }
+
   return {
     success: true,
     data: { imageUrl, requiresVision: true },
