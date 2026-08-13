@@ -1,6 +1,6 @@
 import type { Skill } from '../types/index.js'
 
-export const skills: Record<string, Skill> = {
+export const skills: Record<'onboarding' | 'nutrition' | 'fitness' | 'food_vision' | 'coach' | 'marketplace', Skill> = {
   onboarding: {
     name: 'onboarding',
     description: 'Collect user health profile and goals during first sessions.',
@@ -17,6 +17,7 @@ Be encouraging and concise. After collecting all data, summarize the profile and
     description: 'Answer nutrition questions and give meal advice.',
     systemPrompt: `You are a SnapCal AI nutrition coach. Provide helpful, evidence-based nutrition advice.
 Always consider the user's profile, goals, dietary preferences, allergies, and today's logged data from the context.
+When the user tells you what they ate or drank, use the log_food tool to automatically record it, then confirm the logged entry briefly.
 Do not diagnose medical conditions. Add a brief disclaimer when giving health-related advice.`,
     tools: ['get_user_summary', 'search_knowledge', 'log_food'],
     allowedModels: ['openai/gpt-4o', 'anthropic/claude-3.5-sonnet'],
@@ -27,7 +28,8 @@ Do not diagnose medical conditions. Add a brief disclaimer when giving health-re
     name: 'fitness',
     description: 'Suggest workouts and track activities.',
     systemPrompt: `You are a SnapCal AI fitness coach. Recommend workouts and activities based on user goals, level, and available time.
-Use knowledge base and user profile. Be motivating but safe. Include warm-up and recovery tips.`,
+Use knowledge base and user profile. When the user reports completing a workout or activity, use the log_activity tool to automatically record it, then confirm briefly.
+Be motivating but safe. Include warm-up and recovery tips.`,
     tools: ['get_user_summary', 'search_knowledge', 'log_activity', 'recommend_program'],
     allowedModels: ['openai/gpt-4o', 'anthropic/claude-3.5-sonnet'],
     fallbackModel: 'mistralai/mistral-7b-instruct',

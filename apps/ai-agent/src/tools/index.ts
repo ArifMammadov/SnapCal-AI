@@ -1,5 +1,7 @@
 import { prisma } from '@snapcal/database'
 import type { ToolContext, ToolResult } from '../types/index.js'
+import { createActivityLog, createFoodLog } from '../lib/apiClient.js'
+import { parseFoodJson } from '../lib/foodParser.js'
 
 export async function getUserSummary(context: ToolContext): Promise<ToolResult> {
   const { userId } = context
@@ -25,21 +27,9 @@ export async function getUserSummary(context: ToolContext): Promise<ToolResult> 
   }
 }
 
-export async function searchKnowledge(context: ToolContext): Promise<ToolResult> {
-  const { message } = context
-  const articles = await prisma.knowledgeArticle.findMany({
-    where: { isPublished: true },
-    take: 5,
-  })
+import { searchKnowledgeWithVector } from './knowledge.js'
 
-  return {
-    success: true,
-    data: {
-      query: message,
-      results: articles.map((a: { title: string; content: string; sourceUrl: string | null }) => ({ title: a.title, content: a.content.slice(0, 500), source: a.sourceUrl })),
-    },
-  }
-}
+export { searchKnowledgeWithVector as searchKnowledge }
 
 export async function recommendProgram(context: ToolContext): Promise<ToolResult> {
   const { userId } = context
@@ -65,10 +55,99 @@ export async function analyzePhoto(context: ToolContext): Promise<ToolResult> {
   }
 }
 
-export async function logFood(_context: ToolContext): Promise<ToolResult> {
-  return { success: true, data: { note: 'Use API /api/tracking/food to persist food entries.' } }
+const MEAL_TYPES = ['BREAKFAST', 'LUNCH', 'DINNER', 'SNACK'] as const
+
+type MealType = (typeof MEAL_TYPES)[number]
+
+function detectMealType(message: string): MealType {
+  const lower = message.toLowerCase()
+  if (/breakfast|утро|завтрак/i.test(lower)) return 'BREAKFAST'
+  if (/lunch|обед|день/i.test(lower)) return 'LUNCH'
+  if (/dinner|evening|ужин|вечер/i.test(lower)) return 'DINNER'
+  return 'SNACK'
 }
 
-export async function logActivity(_context: ToolContext): Promise<ToolResult> {
-  return { success: true, data: { note: 'Use API /api/tracking/activity to persist activity.' } }
+export async function logFood(context: ToolContext): Promise<ToolResult> {
+  const { userId, message } = context
+  if (!message) {
+    return { success: false, error: 'No food description provided' }
+  }
+
+  try {
+    // Ask a tiny LLM call to extract structured food data from free text
+    const { callLlm } = await import('../llm/client.js')
+    const extractionPrompt = [
+      {
+        role: 'system' as const,
+        content:
+          'Extract food data from the user message. Return ONLY valid JSON: { "name": string, "calories": integer, "proteinG": number, "carbsG": number, "fatG": number }. Guess macros if the user only named a food.',
+      },
+      { role: 'user' as const, content: message },
+    ]
+    const result = await callLlm('openai/gpt-4o-mini', extractionPrompt, 256, 0.1)
+    const foodData = parseFoodJson(result.content)
+
+    if (!foodData) {
+      return { success: false, error: 'Could not parse food data from message' }
+    }
+
+    const created = await createFoodLog({
+      userId,
+      mealType: detectMealType(message),
+      name: foodData.name,
+      calories: foodData.calories,
+      proteinG: Math.round(foodData.proteinG),
+      carbsG: Math.round(foodData.carbsG),
+      fatG: Math.round(foodData.fatG),
+      aiAnalyzed: true,
+    })
+
+    return {
+      success: true,
+      data: { foodLogId: created.id, foodData },
+    }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to log food' }
+  }
+}
+
+export async function logActivity(context: ToolContext): Promise<ToolResult> {
+  const { userId, message } = context
+  if (!message) {
+    return { success: false, error: 'No activity description provided' }
+  }
+
+  try {
+    const { callLlm } = await import('../llm/client.js')
+    const extractionPrompt = [
+      {
+        role: 'system' as const,
+        content:
+          'Extract activity data from the user message. Return ONLY valid JSON: { "type": string, "durationMin": integer, "caloriesBurned": integer (optional, null if unknown) }. Example: "ran 30 minutes" -> { "type": "running", "durationMin": 30, "caloriesBurned": null }.',
+      },
+      { role: 'user' as const, content: message },
+    ]
+    const result = await callLlm('openai/gpt-4o-mini', extractionPrompt, 256, 0.1)
+    const parsed = JSON.parse(result.content.replace(/^```json\s*|\s*```$/g, '').trim())
+
+    if (typeof parsed.type !== 'string' || typeof parsed.durationMin !== 'number') {
+      return { success: false, error: 'Could not parse activity data' }
+    }
+
+    const created = await createActivityLog({
+      userId,
+      type: parsed.type,
+      durationMin: parsed.durationMin,
+      caloriesBurned: typeof parsed.caloriesBurned === 'number' ? parsed.caloriesBurned : undefined,
+      startedAt: new Date().toISOString(),
+      notes: message,
+    })
+
+    return {
+      success: true,
+      data: { activityLogId: created.id, activity: parsed },
+    }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to log activity' }
+  }
 }

@@ -4,6 +4,9 @@ import { skills } from '../skills/index.js'
 import type { ChatInput, ChatOutput, ToolContext } from '../types/index.js'
 import { callLlm, callVisionLlm } from '../llm/client.js'
 import { applyGuardrails, containsPromptLeakage, isPromptInjection, sanitizeUserInput } from '../guardrails/index.js'
+import { estimateCost, recordAiUsage } from '../lib/limits.js'
+import { estimateTokens } from '../llm/client.js'
+import { routeSkillLlm } from './router.js'
 import { auditLog } from '../audit/index.js'
 import { updateMemory } from '../memory/index.js'
 import { getUserSummary, searchKnowledge, recommendProgram, analyzePhoto, logFood, logActivity } from '../tools/index.js'
@@ -17,7 +20,7 @@ interface RouteResult {
   confidence: number
 }
 
-async function routeSkill(input: ChatInput): Promise<RouteResult> {
+async function routeSkillRegex(input: ChatInput): Promise<RouteResult> {
   if (!input.message?.trim()) {
     return { skillName: 'coach', toolNames: [], confidence: 1 }
   }
@@ -33,6 +36,17 @@ async function routeSkill(input: ChatInput): Promise<RouteResult> {
   if (/\b(hello|hi|who are you|help)\b/i.test(lower)) return { skillName: 'coach', toolNames: [], confidence: 0.7 }
 
   return { skillName: 'coach', toolNames: ['searchKnowledge'], confidence: 0.55 }
+}
+
+interface OrchestratorRouteResult {
+  skillName: keyof typeof skills
+  toolNames: string[]
+  confidence: number
+}
+
+async function routeSkill(input: ChatInput): Promise<OrchestratorRouteResult> {
+  const result = await routeSkillLlm(input, () => routeSkillRegex(input))
+  return result as unknown as OrchestratorRouteResult
 }
 
 async function runTools(toolNames: string[], context: ToolContext): Promise<Record<string, unknown>> {
@@ -83,7 +97,7 @@ export async function handleChat(input: ChatInput): Promise<ChatOutput> {
   }
 
   const route = await routeSkill(input)
-  const skill = skills[route.skillName]
+  const skill = skills[route.skillName as keyof typeof skills]
   if (!skill || !skill.isActive) {
     return { message: { id: 'unavailable', role: 'ai', content: 'This feature is temporarily unavailable.' } }
   }
@@ -162,6 +176,27 @@ Respond in a helpful, concise way in the user's language. Do not provide medical
     }
   }
 
+  // Summarize tool execution results to the user so they know something was logged
+  const loggedResults = Object.entries(toolResults)
+    .filter(([name]) => name === 'logFood' || name === 'logActivity')
+    .map(([_, result]) => result)
+
+  if (loggedResults.length > 0) {
+    const confirmations = loggedResults
+      .filter((r: any) => r?.success)
+      .map((r: any) => {
+        if (r.data?.foodData) return `✅ Logged ${r.data.foodData.name} (${r.data.foodData.calories} kcal)`
+        if (r.data?.activity) return `✅ Logged ${r.data.activity.type} for ${r.data.activity.durationMin} min`
+        return ''
+      })
+      .filter(Boolean)
+      .join('\n')
+
+    if (confirmations) {
+      content = `${content}\n\n${confirmations}`
+    }
+  }
+
   if (!content && errorMessage) {
     return { message: { id: 'error', role: 'ai', content: 'AI service is temporarily unavailable. Please try again in a moment.' } }
   }
@@ -186,8 +221,23 @@ Respond in a helpful, concise way in the user's language. Do not provide medical
   void auditLog({
     userId,
     action: 'AI_CHAT',
-    metadata: { skillName: route.skillName, modelUsed, latencyMs: Date.now() - start },
+    metadata: {
+      skillName: route.skillName,
+      modelUsed,
+      latencyMs: Date.now() - start,
+      confidence: route.confidence,
+      toolsUsed: route.toolNames,
+      inputTokens: estimateTokens(systemPrompt + (message ?? '')),
+      outputTokens: estimateTokens(content),
+      estimatedCostUsd: estimateCost(modelUsed, estimateTokens(systemPrompt + (message ?? '')), estimateTokens(content)),
+    },
   })
+
+  if (route.skillName === 'food_vision' || route.skillName === 'nutrition') {
+    const inputTokens = estimateTokens(systemPrompt + (message ?? ''))
+    const outputTokens = estimateTokens(content)
+    void recordAiUsage(userId, inputTokens, outputTokens, modelUsed, 'openrouter').catch(() => undefined)
+  }
 
   void updateMemory(userId, content)
 
@@ -199,6 +249,8 @@ Respond in a helpful, concise way in the user's language. Do not provide medical
       type: 'text',
       modelUsed,
       usedFallback: !!errorMessage,
+      skillName: route.skillName,
+      confidence: route.confidence,
     },
   }
 }

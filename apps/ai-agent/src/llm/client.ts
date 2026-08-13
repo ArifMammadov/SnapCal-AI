@@ -161,6 +161,15 @@ export async function callLlm(model: string, messages: LlmMessage[], maxTokens =
   throw lastError
 }
 
+export function estimateTokens(text: string): number {
+  // Rough estimate: ~4 chars per token for English, ~2 for CJK
+  return Math.ceil(text.length / (isCjk(text) ? 2 : 4))
+}
+
+function isCjk(text: string): boolean {
+  return /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(text)
+}
+
 export async function callVisionLlm(imageUrl: string): Promise<LlmResponse> {
   const messages: LlmMessage[] = [
     {

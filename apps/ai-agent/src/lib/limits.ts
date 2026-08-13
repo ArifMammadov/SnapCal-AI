@@ -64,7 +64,7 @@ export async function checkAiUsageLimits(
   const tokensToday = Number(tokensStr ?? 0)
   const costToday = Number(costStr ?? 0)
 
-  const estimatedCost = estimateCostUsd(estimatedInputTokens, estimatedOutputTokens)
+  const estimatedCost = estimateCost('openai/gpt-4o', estimatedInputTokens, estimatedOutputTokens)
   const tomorrow = new Date()
   tomorrow.setUTCHours(24, 0, 0, 0)
 
@@ -120,7 +120,7 @@ export async function recordAiUsage(
 ): Promise<{ costUsd: number }> {
   const dayBucket = getDayBucket()
   const redis = getRedis()
-  const costUsd = estimateCostUsd(inputTokens, outputTokens, model, provider)
+  const costUsd = estimateCost(model, inputTokens, outputTokens)
 
   const pipeline = redis.pipeline()
   pipeline.incr(getWindowKey(userId, `requests:${dayBucket}`))
@@ -144,7 +144,7 @@ const PRICING: Record<string, { input: number; output: number }> = {
   'llama3.2': { input: 0, output: 0 },
 }
 
-function estimateCostUsd(inputTokens: number, outputTokens: number, model?: string, _provider?: string): number {
+export function estimateCost(model: string, inputTokens: number, outputTokens: number): number {
   const p = model && Object.prototype.hasOwnProperty.call(PRICING, model) ? PRICING[model] : PRICING['openai/gpt-4o']
   return (inputTokens * p.input + outputTokens * p.output) / 1_000_000
 }

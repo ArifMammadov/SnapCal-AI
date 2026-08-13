@@ -13,5 +13,8 @@ export const env = z.object({
   OPENROUTER_BASE_URL: z.string().url().default('https://openrouter.ai/api/v1'),
   OLLAMA_BASE_URL: z.string().url().optional(),
   API_SERVICE_URL: z.string().url().default('http://localhost:4000'),
+  API_URL: z.string().url().optional(),
   AGENT_SECRET: z.string().min(16),
 }).parse(process.env)
+
+export type Env = typeof env

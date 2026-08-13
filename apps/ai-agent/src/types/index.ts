@@ -17,6 +17,8 @@ export interface ChatMessage {
   content: string
   usedFallback?: boolean
   modelUsed?: string
+  skillName?: string
+  confidence?: number
   foodData?: {
     name: string
     calories: number
