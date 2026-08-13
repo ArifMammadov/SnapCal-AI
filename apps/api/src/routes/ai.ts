@@ -35,6 +35,7 @@ interface AiAgentResponse {
     role: 'ai'
     content: string
     type?: string
+    modelUsed?: string
     foodData?: {
       name: string
       calories: number
@@ -120,12 +121,14 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
         throw new Error('AI agent returned empty message')
       }
 
+      // Enrich audit with usage/cost from AI agent if available
       const aiMessage = await prisma.chatMessage.create({
         data: {
           userId,
           role: 'AI',
           type: (aiResponse.message.type?.toUpperCase() as any) ?? 'TEXT',
           content: aiResponse.message.content,
+          modelUsed: aiResponse.message.modelUsed,
           attachments: aiResponse.message.foodData ? { foodData: aiResponse.message.foodData } : undefined,
         },
       })
@@ -195,7 +198,7 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
     try {
       const { data } = await agent.post('/analyze-photo', { userId, imageUrl }, { timeout: 60000 })
 
-      const foodData = typeof data.message === 'string' ? parseFoodJson(data.message) : null
+      const foodData = typeof data.message.content === 'string' ? parseFoodJson(data.message.content) : null
       if (foodData) {
         await saveFoodLogFromAnalysis(userId, imageUrl, foodData)
       }
@@ -205,7 +208,8 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
           userId,
           role: 'AI',
           type: 'FOOD_ANALYSIS',
-          content: data.message,
+          content: data.message.content,
+          modelUsed: data.message.modelUsed,
           attachments: { foodData, imageUrl },
         },
       })
@@ -215,7 +219,7 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
           id: aiMessage.id,
           role: 'ai',
           type: 'FOOD_ANALYSIS',
-          content: data.message,
+          content: data.message.content,
           foodData,
           imageUrl,
           timestamp: aiMessage.createdAt.toISOString(),

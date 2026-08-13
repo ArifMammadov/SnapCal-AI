@@ -13,9 +13,10 @@ export interface ChatInput {
 export interface ChatMessage {
   id: string
   role: 'user' | 'ai'
-  type?: 'TEXT' | 'text' | 'FOOD_ANALYSIS' | 'MACRO_CARD'
+  type?: 'TEXT' | 'text' | 'FOOD_ANALYSIS' | 'MACRO_CARD' | 'VOICE'
   content: string
   usedFallback?: boolean
+  modelUsed?: string
   foodData?: {
     name: string
     calories: number

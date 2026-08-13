@@ -1,17 +1,14 @@
 import crypto from 'node:crypto'
-import { env } from '../lib/env.js'
 import { prisma } from '@snapcal/database'
 import { skills } from '../skills/index.js'
 import type { ChatInput, ChatOutput, ToolContext } from '../types/index.js'
-import { callOpenRouter, callOllama, callOpenRouterVision } from '../llm/openrouter.js'
-import { applyGuardrails } from '../guardrails/index.js'
+import { callLlm, callVisionLlm } from '../llm/client.js'
+import { applyGuardrails, containsPromptLeakage, isPromptInjection, sanitizeUserInput } from '../guardrails/index.js'
 import { auditLog } from '../audit/index.js'
 import { updateMemory } from '../memory/index.js'
 import { getUserSummary, searchKnowledge, recommendProgram, analyzePhoto, logFood, logActivity } from '../tools/index.js'
 
 const FALLBACK_MODEL = 'gpt-4o-mini'
-const OLLAMA_FALLBACK_MODEL = 'llama3.2'
-const VISION_MODEL = 'openai/gpt-4o'
 const MAX_OUTPUT_TOKENS = 1024
 
 interface RouteResult {
@@ -79,6 +76,12 @@ export async function handleChat(input: ChatInput): Promise<ChatOutput> {
     return { message: { id: 'rejected', role: 'ai', content: 'Your message is too long. Please keep it under 4000 characters.' } }
   }
 
+  const safeMessage = message ? sanitizeUserInput(message) : ''
+  if (safeMessage && isPromptInjection(safeMessage)) {
+    void auditLog({ userId, action: 'PROMPT_INJECTION_BLOCKED', metadata: { preview: safeMessage.slice(0, 200) } })
+    return { message: { id: 'blocked', role: 'ai', content: 'I cannot process this request. Please ask a nutrition or fitness question.' } }
+  }
+
   const route = await routeSkill(input)
   const skill = skills[route.skillName]
   if (!skill || !skill.isActive) {
@@ -136,9 +139,9 @@ Respond in a helpful, concise way in the user's language. Do not provide medical
     try {
       const imageUrl = context.attachments?.find((a) => a.type === 'image')?.url
       if (imageUrl) {
-        const visionResult = await callOpenRouterVision(imageUrl)
-        content = visionResult
-        modelUsed = VISION_MODEL
+        const visionResult = await callVisionLlm(imageUrl)
+        content = visionResult.content
+        modelUsed = visionResult.model
       } else {
         content = JSON.stringify({ error: 'No image provided' })
       }
@@ -149,34 +152,23 @@ Respond in a helpful, concise way in the user's language. Do not provide medical
     try {
       const messages = [
         { role: 'system' as const, content: systemPrompt },
-        ...(message ? [{ role: 'user' as const, content: message }] : []),
+        ...(safeMessage ? [{ role: 'user' as const, content: safeMessage }] : []),
       ]
-      const result = await callOpenRouter(model, messages, MAX_OUTPUT_TOKENS)
+      const result = await callLlm(model, messages, MAX_OUTPUT_TOKENS)
       content = result.content
       modelUsed = result.model
     } catch (err) {
       errorMessage = err instanceof Error ? err.message : 'OpenRouter error'
-      try {
-        const fallbackMessages = [
-          { role: 'system' as const, content: systemPrompt },
-          ...(message ? [{ role: 'user' as const, content: message }] : []),
-        ]
-        const fallback = env.OLLAMA_BASE_URL ? await callOllama(OLLAMA_FALLBACK_MODEL, fallbackMessages) : null
-        if (fallback?.content) {
-          content = fallback.content
-          modelUsed = OLLAMA_FALLBACK_MODEL
-          errorMessage = ''
-        } else {
-          throw err
-        }
-      } catch {
-        // final fallback
-      }
     }
   }
 
   if (!content && errorMessage) {
     return { message: { id: 'error', role: 'ai', content: 'AI service is temporarily unavailable. Please try again in a moment.' } }
+  }
+
+  if (containsPromptLeakage(content)) {
+    void auditLog({ userId, action: 'PROMPT_LEAKAGE_BLOCKED', metadata: { preview: content.slice(0, 200) } })
+    content = 'I can only help with nutrition and fitness questions. How can I assist you today?'
   }
 
   content = applyGuardrails(content, route.skillName)
@@ -205,6 +197,7 @@ Respond in a helpful, concise way in the user's language. Do not provide medical
       role: 'ai',
       content,
       type: 'text',
+      modelUsed,
       usedFallback: !!errorMessage,
     },
   }

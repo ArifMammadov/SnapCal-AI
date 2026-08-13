@@ -1,3 +1,7 @@
 packages:
-  - 'apps/*'
+  - 'apps/api'
+  - 'apps/ai-agent'
+  - 'apps/admin'
+  - 'apps/mobile'
+  - 'apps/telegram-bot'
   - 'packages/*'
