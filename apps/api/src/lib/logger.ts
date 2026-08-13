@@ -10,4 +10,4 @@ export const logger = pino({
     paths: ['req.headers.authorization', 'req.headers.cookie', '*.password', '*.token', '*.secret', '*.apiKey'],
     remove: true,
   },
-})
+}) as import('pino').Logger

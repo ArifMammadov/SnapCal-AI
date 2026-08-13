@@ -1,5 +1,7 @@
 import { prisma } from '@snapcal/database'
-import { logger } from './logger.js'
+import { logger as baseLogger } from './logger.js'
+
+const logger = baseLogger as import('pino').Logger
 
 export enum AuditEvent {
   LOGIN = 'LOGIN',
