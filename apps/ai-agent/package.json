@@ -6,6 +6,7 @@
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsx watch src/index.ts",
     "start": "dotenv -e .env -- node dist/index.js",
+    "start:worker": "dotenv -e .env -- node dist/worker.js",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit"
   },

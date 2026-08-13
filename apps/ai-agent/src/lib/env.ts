@@ -15,6 +15,7 @@ export const env = z.object({
   API_SERVICE_URL: z.string().url().default('http://localhost:4000'),
   API_URL: z.string().url().optional(),
   AGENT_SECRET: z.string().min(16),
+  WORKER_ONLY: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
 }).parse(process.env)
 
 export type Env = typeof env

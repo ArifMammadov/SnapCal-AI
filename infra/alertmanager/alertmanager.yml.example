@@ -29,3 +29,6 @@ receivers:
     webhook_configs:
       - url: '${ALERT_WEBHOOK_URL}'
         send_resolved: true
+        # For Telegram/Slack/PagerDuty/OpsGenie: replace with provider webhook
+        # Example Slack: https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX
+        # Example Telegram bot: https://api.telegram.org/bot<BOT_TOKEN>/sendMessage?chat_id=<CHAT_ID>

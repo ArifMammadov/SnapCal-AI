@@ -5,7 +5,7 @@ import { prisma } from '@snapcal/database'
 import { requireAuth } from './users.js'
 import { env } from '../lib/env.js'
 import { DEFAULT_FREE_AI_DAILY_LIMIT } from '@snapcal/shared'
-import { parseFoodJson, saveFoodLogFromAnalysis } from '../lib/foodAnalysis.js'
+import { enqueuePhotoAnalysis, finalizePhotoAnalysis, pollPhotoAnalysisStatus } from '../lib/aiAgentClient.js'
 import { checkAiLimit } from '../lib/subscriptionLimits.js'
 
 const agent = axios.create({
@@ -196,39 +196,18 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
     })
 
     try {
-      const { data } = await agent.post('/analyze-photo', { userId, imageUrl }, { timeout: 60000 })
-
-      const foodData = typeof data.message.content === 'string' ? parseFoodJson(data.message.content) : null
-      if (foodData) {
-        await saveFoodLogFromAnalysis(userId, imageUrl, foodData)
-      }
-
-      const aiMessage = await prisma.chatMessage.create({
-        data: {
-          userId,
-          role: 'AI',
-          type: 'FOOD_ANALYSIS',
-          content: data.message.content,
-          modelUsed: data.message.modelUsed,
-          attachments: { foodData, imageUrl },
-        },
-      })
+      const { jobId, statusUrl } = await enqueuePhotoAnalysis(userId, imageUrl)
 
       return {
-        message: {
-          id: aiMessage.id,
-          role: 'ai',
-          type: 'FOOD_ANALYSIS',
-          content: data.message.content,
-          foodData,
-          imageUrl,
-          timestamp: aiMessage.createdAt.toISOString(),
-        },
+        accepted: true,
+        jobId,
+        statusUrl,
+        messageId: userMessage.id,
       }
     } catch (err: any) {
       const errorMessage = axios.isAxiosError(err) && !err.response
         ? 'AI vision service is temporarily unavailable. Please try again later.'
-        : 'Could not analyze this photo. Please try again.'
+        : 'Could not start photo analysis. Please try again.'
 
       await prisma.chatMessage.update({
         where: { id: userMessage.id },
@@ -251,6 +230,36 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
           type: 'TEXT',
           content: errorMessage,
           timestamp: aiMessage.createdAt.toISOString(),
+        },
+      })
+    }
+  })
+
+  app.get('/analyze-photo/:jobId', {
+    config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+  }, async (request: FastifyRequest, reply) => {
+    const userId = request.user!.userId
+    const { jobId } = request.params as { jobId: string }
+
+    const status = await pollPhotoAnalysisStatus(jobId)
+
+    if (status.state !== 'completed') {
+      return reply.send({
+        jobId,
+        state: status.state,
+        failedReason: status.failedReason,
+      })
+    }
+
+    try {
+      const { imageUrl } = analyzePhotoSchema.parse(request.body)
+      const result = await finalizePhotoAnalysis(userId, imageUrl, jobId)
+      return reply.send(result)
+    } catch (err: any) {
+      return reply.status(500).send({
+        error: {
+          code: 'FINALIZE_FAILED',
+          message: err instanceof Error ? err.message : 'Could not finalize photo analysis',
         },
       })
     }

@@ -28,13 +28,18 @@ async function buildApp() {
 
 async function start() {
   const app = await buildApp()
-  const worker = startVisionWorker()
+  let worker: ReturnType<typeof startVisionWorker> | undefined
+
+  if (!env.WORKER_ONLY) {
+    worker = startVisionWorker()
+  }
+
   try {
     await app.listen({ port: env.PORT, host: '0.0.0.0' })
     app.log.info(`AI Agent running on port ${env.PORT}`)
   } catch (err) {
     app.log.error(err)
-    await worker.close()
+    if (worker) await worker.close()
     process.exit(1)
   }
 }
