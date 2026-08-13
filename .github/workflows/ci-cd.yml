@@ -137,6 +137,7 @@ jobs:
             cd /opt/snapcal-main/apps/admin && pnpm build
             cd /opt/snapcal-main/apps/mobile && pnpm build
             systemctl --user restart snapcal-api-main
+            systemctl --user restart snapcal-ai-main
             echo "Production deploy done"
 
   deploy-admin:
