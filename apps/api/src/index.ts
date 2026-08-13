@@ -5,6 +5,8 @@ import jwt from '@fastify/jwt'
 import rateLimit from '@fastify/rate-limit'
 import multipart from '@fastify/multipart'
 import { env } from './lib/env.js'
+import { getRedis } from '@snapcal/shared'
+import { logger } from './lib/logger.js'
 import { authRoutes } from './routes/auth.js'
 import { userRoutes } from './routes/users.js'
 import { trackingRoutes } from './routes/tracking.js'
@@ -19,7 +21,7 @@ import { errorHandler } from './lib/error-handler.js'
 
 export async function buildApp() {
   const app = fastify({
-    logger: env.NODE_ENV === 'development',
+    logger,
     genReqId: () => `req_${Math.random().toString(36).slice(2)}`,
   })
 
@@ -63,6 +65,7 @@ export async function buildApp() {
     timeWindow: '1 minute',
     keyGenerator: (req) => (req as { user?: { userId: string } }).user?.userId ?? req.ip,
     skipOnError: false,
+    redis: getRedis(),
     errorResponseBuilder: (_req, context) => ({
       statusCode: 429,
       error: 'Too Many Requests',
@@ -71,10 +74,25 @@ export async function buildApp() {
     }),
   })
 
-  app.setErrorHandler(errorHandler)
+  app.addHook('onResponse', async (request, reply) => {
+    request.log.info({
+      req: {
+        method: request.method,
+        url: request.url,
+        remoteAddress: request.ip,
+        userId: (request.user as { userId?: string } | undefined)?.userId,
+      },
+      res: {
+        statusCode: reply.statusCode,
+      },
+      responseTime: reply.elapsedTime,
+    }, 'request completed')
+  })
 
   app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }))
   app.get('/api/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }))
+
+  app.setErrorHandler(errorHandler)
 
   await app.register(authRoutes, { prefix: '/api/auth' })
   await app.register(userRoutes, { prefix: '/api/users' })
@@ -97,6 +115,9 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(err)
+  if (env.NODE_ENV === 'development') {
+    // eslint-disable-next-line no-console
+    console.error(err)
+  }
   process.exit(1)
 })

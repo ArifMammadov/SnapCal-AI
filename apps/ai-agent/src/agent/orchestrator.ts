@@ -10,6 +10,7 @@ import { updateMemory } from '../memory/index.js'
 import { getUserSummary, searchKnowledge, recommendProgram, analyzePhoto, logFood, logActivity } from '../tools/index.js'
 
 const FALLBACK_MODEL = 'gpt-4o-mini'
+const OLLAMA_FALLBACK_MODEL = 'llama3.2'
 const VISION_MODEL = 'openai/gpt-4o'
 const MAX_OUTPUT_TOKENS = 1024
 
@@ -160,10 +161,10 @@ Respond in a helpful, concise way in the user's language. Do not provide medical
           { role: 'system' as const, content: systemPrompt },
           ...(message ? [{ role: 'user' as const, content: message }] : []),
         ]
-        const fallback = env.OLLAMA_BASE_URL ? await callOllama(FALLBACK_MODEL, fallbackMessages) : null
+        const fallback = env.OLLAMA_BASE_URL ? await callOllama(OLLAMA_FALLBACK_MODEL, fallbackMessages) : null
         if (fallback?.content) {
           content = fallback.content
-          modelUsed = FALLBACK_MODEL
+          modelUsed = OLLAMA_FALLBACK_MODEL
           errorMessage = ''
         } else {
           throw err

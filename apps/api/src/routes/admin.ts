@@ -33,6 +33,12 @@ const loginSchema = z.object({
   secret: z.string().min(1),
 })
 
+const auditLogQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  userId: z.string().uuid().optional(),
+})
+
 const kbArticleSchema = z.object({
   title: z.string().min(1).max(300),
   slug: z.string().min(1).max(200),
@@ -84,22 +90,51 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.addHook('preHandler', requireAuth)
 
-  app.get('/users', { preHandler: requireAdmin }, async () => {
-    const users = await prisma.user.findMany({
-      select: {
-        id: true,
-        telegramId: true,
-        telegramUsername: true,
-        firstName: true,
-        languageCode: true,
-        role: true,
-        subscriptionStatus: true,
-        createdAt: true,
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-    })
-    return users.map((u) => ({ ...u, telegramId: u.telegramId.toString() }))
+  const paginationSchema = z.object({
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+    search: z.string().optional(),
+    role: z.enum(['USER', 'ADMIN', 'SUPPORT', 'VIEWER']).optional(),
+    status: z.enum(['ACTIVE', 'TRIALING', 'INACTIVE', 'CANCELED']).optional(),
+  })
+
+  app.get('/users', { preHandler: requireAdmin }, async (request: FastifyRequest) => {
+    const { page, limit, search, role, status } = paginationSchema.parse(request.query)
+    const where: any = {}
+    if (role) where.role = role
+    if (status) where.subscriptionStatus = status
+    if (search) {
+      where.OR = [
+        { telegramUsername: { contains: search, mode: 'insensitive' } },
+        { firstName: { contains: search, mode: 'insensitive' } },
+        ...(Number.isNaN(Number(search)) ? [] : [{ telegramId: { equals: BigInt(search) } }]),
+      ]
+    }
+
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          telegramId: true,
+          telegramUsername: true,
+          firstName: true,
+          languageCode: true,
+          role: true,
+          subscriptionStatus: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.user.count({ where }),
+    ])
+
+    return {
+      data: users.map((u) => ({ ...u, telegramId: u.telegramId.toString() })),
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    }
   })
 
   app.patch('/users/:id', { preHandler: requireAdmin }, async (request: FastifyRequest, reply: FastifyReply) => {
@@ -128,12 +163,25 @@ export async function adminRoutes(app: FastifyInstance) {
     return { ...user, telegramId: user.telegramId.toString() }
   })
 
-  app.get('/audit-logs', { preHandler: requireAdmin }, async () => {
-    const logs = await prisma.aiAuditLog.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 100,
-    })
-    return logs.map((l) => ({ ...l, costUsd: l.costUsd ? Number(l.costUsd) : null }))
+  app.get('/audit-logs', { preHandler: requireAdmin }, async (request: FastifyRequest) => {
+    const { page, limit, userId } = auditLogQuerySchema.parse(request.query)
+    const where: any = {}
+    if (userId) where.userId = userId
+
+    const [logs, total] = await Promise.all([
+      prisma.aiAuditLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.aiAuditLog.count({ where }),
+    ])
+
+    return {
+      data: logs.map((l) => ({ ...l, costUsd: l.costUsd ? Number(l.costUsd) : null })),
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    }
   })
 
   app.get('/kb/articles', async () => {

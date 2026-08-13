@@ -4,6 +4,7 @@ import crypto from 'node:crypto'
 import { prisma } from '@snapcal/database'
 import { env } from '../lib/env.js'
 import { getRegionLanguage } from '@snapcal/shared'
+import { AuditEvent, auditLog } from '../lib/audit.js'
 
 const telegramAuthSchema = z.object({
   initData: z.string().min(1),
@@ -100,6 +101,14 @@ export async function authRoutes(app: FastifyInstance) {
     const data = verifyTelegramInitData(initData)
 
     if (!data) {
+      await auditLog({
+        userId: 'anonymous',
+        event: AuditEvent.LOGIN_FAILED,
+        ip: request.ip,
+        userAgent: request.headers['user-agent'],
+        metadata: { reason: 'invalid_init_data' },
+        severity: 'warning',
+      })
       return reply.status(401).send({ error: { code: 'INVALID_INIT_DATA', message: 'Telegram init data invalid' } })
     }
 
@@ -157,6 +166,15 @@ export async function authRoutes(app: FastifyInstance) {
     await prisma.user.update({
       where: { id: user.id },
       data: { updatedAt: new Date() },
+    })
+
+    await auditLog({
+      userId: user.id,
+      event: AuditEvent.LOGIN,
+      ip: request.ip,
+      userAgent: request.headers['user-agent'],
+      metadata: { telegramId: user.telegramId.toString() },
+      severity: 'info',
     })
 
     return {

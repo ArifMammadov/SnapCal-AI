@@ -15,6 +15,11 @@ interface OpenRouterResponse {
   model?: string
 }
 
+function authHeader(): string {
+  const prefix = 'Bearer'
+  return [prefix, env.OPENROUTER_API_KEY].join(' ')
+}
+
 export async function callOpenRouter(model: string, messages: OpenRouterMessage[], _maxTokens?: number) {
   const { data } = await axios.post<OpenRouterResponse>(
     `${env.OPENROUTER_BASE_URL}/chat/completions`,
@@ -26,7 +31,7 @@ export async function callOpenRouter(model: string, messages: OpenRouterMessage[
     },
     {
       headers: {
-        Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
+        Authorization: authHeader(),
         'Content-Type': 'application/json',
       },
       timeout: 60000,
@@ -62,10 +67,11 @@ export async function callOpenRouterVision(imageUrl: string): Promise<string> {
       messages,
       max_tokens: 512,
       temperature: 0.2,
+      response_format: { type: 'json_object' },
     },
     {
       headers: {
-        Authorization: `Bearer ${env.OPENROUTER_API_KEY}`,
+        Authorization: authHeader(),
         'Content-Type': 'application/json',
       },
       timeout: 60000,

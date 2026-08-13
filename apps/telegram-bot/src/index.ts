@@ -50,7 +50,10 @@ export async function sendTelegramNotification(telegramId: bigint, text: string,
   try {
     await bot.sendMessage(Number(telegramId), text, options)
   } catch (err) {
-    console.error('Failed to send Telegram notification:', err)
+    if (env.NODE_ENV === 'development') {
+      // eslint-disable-next-line no-console
+      console.error('Failed to send Telegram notification:', err)
+    }
   }
 }
 
@@ -129,7 +132,10 @@ export async function processRemindersForTime(hourMinute: string, dayOfWeek: str
 }
 
 async function main() {
-  console.log('Telegram bot started')
+  if (env.NODE_ENV === 'development') {
+    // eslint-disable-next-line no-console
+    console.log('Telegram bot started')
+  }
 }
 
 main()

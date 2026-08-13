@@ -9,22 +9,34 @@ async function tick() {
   const dayOfWeek = dayMap[now.getUTCDay()]
   const time = `${hour}:${minute}`
 
-  console.log(`[reminder-cron] tick ${time} ${dayOfWeek}`)
+  if (env.NODE_ENV === 'development') {
+    // eslint-disable-next-line no-console
+    console.log(`[reminder-cron] tick ${time} ${dayOfWeek}`)
+  }
   try {
     await processRemindersForTime(time, dayOfWeek)
   } catch (err) {
-    console.error('[reminder-cron] error', err)
+    if (env.NODE_ENV === 'development') {
+      // eslint-disable-next-line no-console
+      console.error('[reminder-cron] error', err)
+    }
   }
 }
 
 async function main() {
-  console.log('[reminder-cron] started', env.NODE_ENV)
+  if (env.NODE_ENV === 'development') {
+    // eslint-disable-next-line no-console
+    console.log('[reminder-cron] started', env.NODE_ENV)
+  }
   // Run every minute
   setInterval(tick, 60_000)
   await tick()
 }
 
 main().catch((err) => {
-  console.error(err)
+  if (env.NODE_ENV === 'development') {
+    // eslint-disable-next-line no-console
+    console.error(err)
+  }
   process.exit(1)
 })

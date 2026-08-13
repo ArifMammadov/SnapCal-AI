@@ -339,9 +339,12 @@ model AuditLog {
   id          String   @id @default(uuid()) @db.Uuid
   userId      String?  @db.Uuid
   action      String
+  event       String?
+  severity    String   @default("info")
   ipAddress   String?
   userAgent   String?  @db.VarChar(255)
   details     Json?
+  metadata    Json?
   createdAt   DateTime @default(now())
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)

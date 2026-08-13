@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '@snapcal/database'
+import { cacheGet, cacheSet, cacheInvalidate } from '@snapcal/shared'
 import { requireAuth } from './users.js'
 
 function slugify(name: string) {
@@ -40,6 +41,10 @@ export const marketplaceRoutes: FastifyPluginAsync = async (app: FastifyInstance
 
   app.get('/programs', async (request: FastifyRequest) => {
     const { category } = categoryQuerySchema.parse(request.query)
+    const cacheKey = `marketplace:programs:${category || 'all'}`
+    const cached = await cacheGet<unknown[]>(cacheKey)
+    if (cached) return cached
+
     const programs = await prisma.program.findMany({
       where: {
         isActive: true,
@@ -47,7 +52,9 @@ export const marketplaceRoutes: FastifyPluginAsync = async (app: FastifyInstance
       },
       orderBy: { createdAt: 'desc' },
     })
-    return programs.map(serializeProgram).filter(Boolean)
+    const result = programs.map(serializeProgram).filter(Boolean)
+    await cacheSet(cacheKey, result, 60)
+    return result
   })
 
   app.get('/programs/:id', async (request: FastifyRequest) => {
@@ -97,6 +104,10 @@ export const marketplaceRoutes: FastifyPluginAsync = async (app: FastifyInstance
         data: { enrolledCount: { increment: 1 } },
       }),
     ])
+
+    const cacheKey = `marketplace:enrollments:${userId}`
+    await cacheInvalidate('marketplace:programs:*')
+    await cacheInvalidate(cacheKey)
 
     return { enrolled: true, programId: id }
   })

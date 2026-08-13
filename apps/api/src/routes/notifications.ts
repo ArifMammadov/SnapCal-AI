@@ -28,16 +28,28 @@ function coerceNullableString(value: string | null | undefined): string | undefi
 export async function notificationsRoutes(app: FastifyInstance) {
   app.addHook('preHandler', requireAuth)
 
+  const listQuerySchema = z.object({
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(50).default(20),
+  })
+
   app.get('/', async (request: FastifyRequest) => {
-    const notifications = await prisma.notification.findMany({
-      where: { userId: request.user!.userId },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-    })
-    const unreadCount = await prisma.notification.count({
-      where: { userId: request.user!.userId, isRead: false },
-    })
-    return { notifications, unreadCount }
+    const { page, limit } = listQuerySchema.parse(request.query)
+    const [notifications, unreadCount, total] = await Promise.all([
+      prisma.notification.findMany({
+        where: { userId: request.user!.userId },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.notification.count({
+        where: { userId: request.user!.userId, isRead: false },
+      }),
+      prisma.notification.count({
+        where: { userId: request.user!.userId },
+      }),
+    ])
+    return { notifications, unreadCount, total, page, limit }
   })
 
   app.patch('/:id/read', async (request: FastifyRequest, reply: FastifyReply) => {
