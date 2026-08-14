@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
-import { prisma, indexArticleVector, generateEmbedding, searchKnowledgeChunks } from '@snapcal/database'
+import { prisma, indexArticleVector, generateEmbedding, prismaRead } from '@snapcal/database'
 import { requireAuth } from './users.js'
 import { env } from '../lib/env.js'
 import { enqueueKnowledgeIndex, enqueueKnowledgeIndexAll } from '@snapcal/shared'
@@ -114,7 +114,7 @@ export async function adminRoutes(app: FastifyInstance) {
     }
 
     const [users, total] = await Promise.all([
-      prisma.user.findMany({
+      prismaRead.user.findMany({
         where,
         select: {
           id: true,
@@ -130,7 +130,7 @@ export async function adminRoutes(app: FastifyInstance) {
         skip: (page - 1) * limit,
         take: limit,
       }),
-      prisma.user.count({ where }),
+      prismaRead.user.count({ where }),
     ])
 
     return {

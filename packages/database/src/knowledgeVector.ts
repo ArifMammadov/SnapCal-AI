@@ -1,4 +1,4 @@
-import { prisma } from './index.js'
+import { prisma, prismaRead } from './index.js'
 import { splitTextIntoChunks, deleteExistingChunks } from './chunking.js'
 
 interface EmbeddingResponse {
@@ -41,7 +41,7 @@ export async function indexArticleVector(
 ) {
   await deleteExistingChunks(articleId)
 
-  const article = await prisma.knowledgeArticle.findUnique({
+  const article = await prismaRead.knowledgeArticle.findUnique({
     where: { id: articleId },
   })
   if (!article || !article.isPublished) {
@@ -93,7 +93,7 @@ export async function searchKnowledgeChunks(
     distance: number
   }
 
-  const rows = await prisma.$queryRawUnsafe<ChunkRow[]>(
+  const rows = await prismaRead.$queryRawUnsafe<ChunkRow[]>(
     `SELECT
        kc.id,
        kc.article_id AS "articleId",
@@ -117,7 +117,7 @@ export async function searchKnowledgeChunks(
 }
 
 export async function getUnindexedArticles() {
-  return prisma.$queryRawUnsafe<{ id: string }[]>(
+  return prismaRead.$queryRawUnsafe<{ id: string }[]>(
     `SELECT ka.id
      FROM knowledge_articles ka
      LEFT JOIN knowledge_chunks kc ON kc.article_id = ka.id
