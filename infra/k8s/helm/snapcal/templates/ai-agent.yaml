@@ -1,0 +1,5 @@
+{{ if .Values.aiAgent.enabled }}
+{{- include "snapcal.deployment" (dict "context" . "name" "ai-agent" "replicas" .Values.aiAgent.replicas "ports" (list .Values.aiAgent.port) "resources" .Values.aiAgent.resources "healthPort" .Values.aiAgent.port) }}
+---
+{{- include "snapcal.service" (dict "context" . "name" "ai-agent" "ports" (list .Values.aiAgent.port)) }}
+{{ end }}

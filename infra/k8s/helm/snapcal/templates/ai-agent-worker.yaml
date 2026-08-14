@@ -1,0 +1,3 @@
+{{ if .Values.aiAgentWorker.enabled }}
+{{- include "snapcal.deployment" (dict "context" . "name" "ai-agent-worker" "replicas" .Values.aiAgentWorker.replicas "ports" (list) "resources" .Values.aiAgentWorker.resources "command" (list "node" "apps/ai-agent/dist/worker.js")) }}
+{{ end }}

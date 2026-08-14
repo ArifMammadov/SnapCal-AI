@@ -1,0 +1,44 @@
+{{ if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "snapcal.fullname" . }}
+  labels:
+    {{- include "snapcal.labels" . | nindent 4 }}
+  annotations:
+    {{- toYaml .Values.ingress.annotations | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls }}
+  tls:
+    {{- toYaml .Values.ingress.tls | nindent 4 }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.static.mobile.host }}
+      http:
+        paths:
+          - path: {{ .Values.static.mobile.path }}
+            pathType: Prefix
+            backend:
+              service:
+                name: mobile
+                port:
+                  number: 80
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: {{ .Values.api.port }}
+    - host: {{ .Values.static.admin.host }}
+      http:
+        paths:
+          - path: {{ .Values.static.admin.path }}
+            pathType: Prefix
+            backend:
+              service:
+                name: admin
+                port:
+                  number: 80
+{{ end }}

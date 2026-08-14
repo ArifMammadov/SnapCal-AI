@@ -1,0 +1,11 @@
+{{ if .Values.static.mobile.enabled }}
+{{- include "snapcal.deployment" (dict "context" . "name" "mobile" "replicas" .Values.static.mobile.replicas "ports" (list 80) "resources" (dict "requests" (dict "cpu" "50m" "memory" "32Mi") "limits" (dict "cpu" "200m" "memory" "64Mi"))) }}
+---
+{{- include "snapcal.service" (dict "context" . "name" "mobile" "ports" (list 80)) }}
+{{ end }}
+{{ if .Values.static.admin.enabled }}
+---
+{{- include "snapcal.deployment" (dict "context" . "name" "admin" "replicas" .Values.static.admin.replicas "ports" (list 80) "resources" (dict "requests" (dict "cpu" "50m" "memory" "32Mi") "limits" (dict "cpu" "200m" "memory" "64Mi"))) }}
+---
+{{- include "snapcal.service" (dict "context" . "name" "admin" "ports" (list 80)) }}
+{{ end }}

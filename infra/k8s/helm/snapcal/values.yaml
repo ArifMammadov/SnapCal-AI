@@ -1,0 +1,160 @@
+replicaCount: 2
+
+image:
+  registry: ghcr.io
+  repository: snapcal/snapcal
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: regcred
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+env:
+  NODE_ENV: production
+  DATABASE_URL: "postgresql://snapcal:CHANGEME@postgres:5432/snapcal?connection_limit=10"
+  DATABASE_READ_URL: "postgresql://snapcal:CHANGEME@postgres:5432/snapcal?connection_limit=10"
+  DATABASE_DIRECT_URL: "postgresql://snapcal:CHANGEME@postgres:5432/snapcal"
+  REDIS_URL: "redis://redis:6379"
+  OPENROUTER_BASE_URL: "https://openrouter.ai/api/v1"
+  MOBILE_APP_URL: "https://snapcal.health"
+  ADMIN_APP_URL: "https://admin.snapcal.health"
+  AI_AGENT_URL: "http://ai-agent:4001"
+  API_SERVICE_URL: "http://api:4000"
+  OLLAMA_BASE_URL: "http://ollama:11434"
+
+secrets:
+  # Use external-secrets.io or SealedSecrets in real prod.
+  # Values here are intentionally placeholders and must be overridden.
+  JWT_SECRET: "replace-me-with-64-char-random"
+  JWT_REFRESH_SECRET: "replace-me-with-64-char-random"
+  TELEGRAM_BOT_TOKEN: "replace-me"
+  OPENROUTER_API_KEY: "replace-me"
+  STRIPE_SECRET_KEY: "replace-me"
+  STRIPE_WEBHOOK_SECRET: "replace-me"
+  AI_AGENT_SECRET: "replace-me-with-32-char-random"
+  ADMIN_SECRET: "replace-me-with-32-char-random"
+
+api:
+  enabled: true
+  port: 4000
+  replicas: 2
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  service:
+    type: ClusterIP
+    port: 4000
+  ingress:
+    host: snapcal.health
+    path: /api
+
+aiAgent:
+  enabled: true
+  port: 4001
+  replicas: 2
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  service:
+    type: ClusterIP
+    port: 4001
+
+aiAgentWorker:
+  enabled: true
+  replicas: 2
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+telegramBot:
+  enabled: true
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+static:
+  mobile:
+    enabled: true
+    replicas: 2
+    host: snapcal.health
+    path: /
+  admin:
+    enabled: true
+    replicas: 2
+    host: admin.snapcal.health
+    path: /
+
+postgres:
+  enabled: true
+  image: pgvector/pgvector:pg16
+  storage: 20Gi
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+
+redis:
+  enabled: true
+  image: redis:7-alpine
+  storage: 5Gi
+
+ollama:
+  enabled: false
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "25m"
+  tls:
+    - secretName: snapcal-tls
+      hosts:
+        - snapcal.health
+        - admin.snapcal.health
+
+monitoring:
+  enabled: true
+  serviceMonitor:
+    enabled: false

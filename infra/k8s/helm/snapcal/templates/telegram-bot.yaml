@@ -1,0 +1,3 @@
+{{ if .Values.telegramBot.enabled }}
+{{- include "snapcal.deployment" (dict "context" . "name" "telegram-bot" "replicas" .Values.telegramBot.replicas "ports" (list) "resources" .Values.telegramBot.resources) }}
+{{ end }}

@@ -1,0 +1,5 @@
+{{ if .Values.api.enabled }}
+{{- include "snapcal.deployment" (dict "context" . "name" "api" "replicas" .Values.api.replicas "ports" (list .Values.api.port) "resources" .Values.api.resources "healthPort" .Values.api.port) }}
+---
+{{- include "snapcal.service" (dict "context" . "name" "api" "ports" (list .Values.api.port)) }}
+{{ end }}
