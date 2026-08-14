@@ -1,8 +1,10 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
-import { prisma } from '@snapcal/database'
+import { prisma, indexArticleVector, generateEmbedding, searchKnowledgeChunks } from '@snapcal/database'
 import { requireAuth } from './users.js'
 import { env } from '../lib/env.js'
+import { enqueueKnowledgeIndex, enqueueKnowledgeIndexAll } from '@snapcal/shared'
+import { logger } from '@snapcal/shared'
 
 const requireAdmin = async (request: FastifyRequest, reply: FastifyReply) => {
   if (request.user?.role !== 'ADMIN') {
@@ -190,9 +192,18 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post('/kb/articles', { preHandler: requireAdmin }, async (request: FastifyRequest) => {
     const data = kbArticleSchema.parse(request.body)
-    return prisma.knowledgeArticle.create({
+    const article = await prisma.knowledgeArticle.create({
       data: { ...data, createdBy: request.user!.userId },
     })
+    // Trigger async indexing if published
+    if (article.isPublished) {
+      try {
+        await enqueueKnowledgeIndex(article.id)
+      } catch (err) {
+        logger.warn({ err, articleId: article.id }, 'failed to enqueue knowledge index')
+      }
+    }
+    return article
   })
 
   app.patch('/kb/articles/:id', { preHandler: requireAdmin }, async (request: FastifyRequest, reply) => {
@@ -202,7 +213,33 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!article) {
       return reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Article not found' } })
     }
-    return prisma.knowledgeArticle.update({ where: { id }, data })
+    const updated = await prisma.knowledgeArticle.update({ where: { id }, data })
+    if (updated.isPublished) {
+      try {
+        await enqueueKnowledgeIndex(updated.id)
+      } catch (err) {
+        logger.warn({ err, articleId: updated.id }, 'failed to enqueue knowledge index')
+      }
+    }
+    return updated
+  })
+
+  app.post('/kb/articles/:id/index', { preHandler: requireAdmin }, async (request: FastifyRequest, reply) => {
+    const { id } = request.params as { id: string }
+    const article = await prisma.knowledgeArticle.findUnique({ where: { id } })
+    if (!article) {
+      return reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Article not found' } })
+    }
+    try {
+      const result = await indexArticleVector(
+        id,
+        (text) => generateEmbedding(text, env.OPENROUTER_API_KEY ?? '', env.OPENROUTER_BASE_URL),
+      )
+      return { success: true, result }
+    } catch (err) {
+      logger.error({ err, articleId: id }, 'failed to index knowledge article')
+      return reply.status(500).send({ error: { code: 'INDEX_FAILED', message: 'Failed to index article' } })
+    }
   })
 
   app.delete('/kb/articles/:id', { preHandler: requireAdmin }, async (request: FastifyRequest, reply) => {

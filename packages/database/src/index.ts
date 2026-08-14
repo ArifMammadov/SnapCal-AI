@@ -9,3 +9,5 @@ export const prisma: PrismaClientType = globalForPrisma.prisma ?? new PrismaClie
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
 
 export { PrismaClient }
+export * from './chunking.js'
+export * from './knowledgeVector.js'

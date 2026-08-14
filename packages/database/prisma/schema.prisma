@@ -232,6 +232,7 @@ model KnowledgeChunk {
   article KnowledgeArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
 
   @@index([articleId])
+  @@index([embedding], name: "knowledge_chunks_embedding_hnsw_idx", type: Hnsw, ops: vector_cosine_ops)
   @@map("knowledge_chunks")
 }
 
