@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import { prisma } from '@snapcal/database'
-import { skills } from '../skills/index.js'
+import { resolveSkill } from './promptResolver.js'
 import type { ChatInput, ChatOutput, ToolContext } from '../types/index.js'
 import { callLlm, callVisionLlm } from '../llm/client.js'
 import { applyGuardrails, containsPromptLeakage, isPromptInjection, sanitizeUserInput } from '../guardrails/index.js'
@@ -40,7 +40,7 @@ async function routeSkillRegex(input: ChatInput): Promise<RouteResult> {
 }
 
 interface OrchestratorRouteResult {
-  skillName: keyof typeof skills
+  skillName: import('./router.js').SkillName
   toolNames: string[]
   confidence: number
 }
@@ -98,8 +98,8 @@ export async function handleChat(input: ChatInput): Promise<ChatOutput> {
   }
 
   const route = await routeSkill(input)
-  const skill = skills[route.skillName as keyof typeof skills]
-  if (!skill || !skill.isActive) {
+  const skill = await resolveSkill(route.skillName)
+  if (!skill) {
     return { message: { id: 'unavailable', role: 'ai', content: 'This feature is temporarily unavailable.' } }
   }
 

@@ -1,0 +1,42 @@
+name: AI Eval
+
+on:
+  push:
+    branches: [main, preprod, develop]
+  pull_request:
+    branches: [main, preprod]
+  workflow_dispatch:
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    environment:
+      name: eval
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+      - name: Build packages
+        run: |
+          pnpm --filter @snapcal/database generate
+          pnpm --filter @snapcal/database build
+          pnpm --filter @snapcal/shared build
+          pnpm --filter @snapcal/ai-agent build
+      - name: Seed default prompts
+        run: pnpm --filter @snapcal/ai-agent tsx src/eval/seed.ts
+        env:
+          DATABASE_URL: ${{ secrets.EVAL_DATABASE_URL }}
+      - name: Run eval harness
+        run: pnpm --filter @snapcal/ai-agent eval
+        env:
+          DATABASE_URL: ${{ secrets.EVAL_DATABASE_URL }}
+          REDIS_URL: ${{ secrets.EVAL_REDIS_URL }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          AI_AGENT_SECRET: ${{ secrets.AI_AGENT_SECRET }}
+          AGENT_SECRET: ${{ secrets.AI_AGENT_SECRET }}
+          API_URL: ${{ secrets.EVAL_API_URL }}

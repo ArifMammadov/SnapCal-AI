@@ -30,3 +30,4 @@ if (process.env.NODE_ENV !== 'production') {
 export { PrismaClient }
 export * from './chunking.js'
 export * from './knowledgeVector.js'
+export * from './prompts.js'

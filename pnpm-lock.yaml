@@ -117,7 +117,7 @@ importers:
         specifier: ^11.0.0
         version: 11.0.0
       tsx:
-        specifier: ^4.19.0
+        specifier: ^4.23.9
         version: 4.23.9
       typescript:
         specifier: ^5.7.0

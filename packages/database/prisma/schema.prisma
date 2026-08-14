@@ -232,7 +232,6 @@ model KnowledgeChunk {
   article KnowledgeArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
 
   @@index([articleId])
-  @@index([embedding], name: "knowledge_chunks_embedding_hnsw_idx", type: Hnsw, ops: vector_cosine_ops)
   @@map("knowledge_chunks")
 }
 
@@ -294,6 +293,57 @@ model Program {
 
   @@index([isActive, category])
   @@map("programs")
+}
+
+model PromptTemplate {
+  id                String   @id @default(uuid()) @db.Uuid
+  name              String   @unique
+  skillName         String?
+  version           Int      @default(1)
+  isActive          Boolean  @default(false)
+  previousVersionId String?  @db.Uuid
+  systemPrompt      String
+  routerPrompt      String?
+  guardrails        Json?    @default("[]")
+  allowedModels     String[] @default([])
+  fallbackModel     String?
+  experimentKey     String?
+  metadata          Json?
+  createdBy         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  previousVersion PromptTemplate?  @relation("PromptVersions", fields: [previousVersionId], references: [id])
+  nextVersions    PromptTemplate[] @relation("PromptVersions")
+
+  @@map("prompt_templates")
+}
+
+model EvalRun {
+  id        String   @id @default(uuid()) @db.Uuid
+  promptId  String   @db.Uuid
+  branch    String?
+  commitSha String?
+  results   Json
+  summary   Json
+  passed    Boolean
+  createdAt DateTime @default(now())
+
+  @@map("eval_runs")
+}
+
+model EvalCase {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique
+  skillName   String
+  input       Json
+  expected    Json
+  tags        String[]
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("eval_cases")
 }
 
 model Enrollment {

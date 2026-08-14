@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
-import { prisma, indexArticleVector, generateEmbedding, prismaRead } from '@snapcal/database'
+import { prisma, indexArticleVector, generateEmbedding, prismaRead, createPromptTemplate, publishPromptTemplate, listPrompts, createEvalCase, listEvalCases, saveEvalRun } from '@snapcal/database'
 import { requireAuth } from './users.js'
 import { env } from '../lib/env.js'
 import { enqueueKnowledgeIndex, enqueueKnowledgeIndexAll } from '@snapcal/shared'
@@ -64,6 +64,23 @@ const programSchema = z.object({
   gradient: z.string().optional(),
   tag: z.string().optional(),
   isActive: z.boolean().default(true),
+})
+
+const promptTemplateSchema = z.object({
+  name: z.string().min(1).max(100),
+  skillName: z.string().max(50).optional(),
+  systemPrompt: z.string().min(10),
+  routerPrompt: z.string().optional(),
+  allowedModels: z.array(z.string()).default([]),
+  fallbackModel: z.string().optional(),
+})
+
+const evalCaseSchema = z.object({
+  name: z.string().min(1).max(200),
+  skillName: z.string().min(1),
+  input: z.record(z.unknown()),
+  expected: z.record(z.unknown()),
+  tags: z.array(z.string()).default([]),
 })
 
 function slugify(name: string) {
@@ -281,5 +298,47 @@ export async function adminRoutes(app: FastifyInstance) {
     }
     await prisma.program.update({ where: { id }, data: { isActive: false } })
     return { success: true }
+  })
+
+  app.get('/prompts', { preHandler: requireAdmin }, async (request: FastifyRequest) => {
+    const { skillName } = z.object({ skillName: z.string().optional() }).parse(request.query)
+    return listPrompts(skillName)
+  })
+
+  app.post('/prompts', { preHandler: requireAdmin }, async (request: FastifyRequest) => {
+    const data = promptTemplateSchema.parse(request.body)
+    return createPromptTemplate({ ...data, createdBy: request.user!.userId })
+  })
+
+  app.post('/prompts/:id/publish', { preHandler: requireAdmin }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = request.params as { id: string }
+    const published = await publishPromptTemplate(id)
+    if (!published) {
+      return reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Prompt template not found' } })
+    }
+    return published
+  })
+
+  app.get('/eval-cases', { preHandler: requireAdmin }, async (request: FastifyRequest) => {
+    const { skillName, tags } = z.object({ skillName: z.string().optional(), tags: z.string().optional() }).parse(request.query)
+    const tagList = tags ? tags.split(',').filter(Boolean) : undefined
+    return listEvalCases(skillName, tagList)
+  })
+
+  app.post('/eval-cases', { preHandler: requireAdmin }, async (request: FastifyRequest) => {
+    const data = evalCaseSchema.parse(request.body)
+    return createEvalCase(data)
+  })
+
+  app.post('/eval-runs', { preHandler: requireAdmin }, async (request: FastifyRequest) => {
+    const data = z.object({
+      promptId: z.string().uuid(),
+      branch: z.string().optional(),
+      commitSha: z.string().optional(),
+      results: z.record(z.unknown()),
+      summary: z.record(z.unknown()),
+      passed: z.boolean(),
+    }).parse(request.body)
+    return saveEvalRun(data)
   })
 }
