@@ -1,0 +1,46 @@
+# Custom Semgrep rules for SnapCal
+
+rules:
+  - id: snapcal-no-hardcoded-secrets
+    languages: [js, ts]
+    message: Possible hardcoded secret or credential detected.
+    severity: ERROR
+    pattern-either:
+      - pattern: const $X = "sk_live_..."
+      - pattern: const $X = "pk_live_..."
+      - pattern: const $X = "whsec_..."
+      - pattern: const $X = "hvs."
+      - pattern: const $X = "AKIA"
+      - pattern: const $X = "xoxb-"
+    paths:
+      include:
+        - apps
+        - packages
+      exclude:
+        - apps/*/dist
+        - apps/*/.env*
+        - node_modules
+
+  - id: snapcal-no-unsafe-eval
+    languages: [js, ts]
+    message: Avoid eval/new Function/setTimeout with string to prevent code injection.
+    severity: ERROR
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: new Function(...)
+      - pattern: setTimeout("...", ...)
+      - pattern: setInterval("...", ...)
+
+  - id: snapcal-no-console-in-production
+    languages: [js, ts]
+    message: Use structured logger instead of console.* in production code.
+    severity: WARNING
+    pattern-either:
+      - pattern: console.log(...)
+      - pattern: console.error(...)
+      - pattern: console.warn(...)
+      - pattern: console.info(...)
+    paths:
+      exclude:
+        - '**/*.test.ts'
+        - scripts

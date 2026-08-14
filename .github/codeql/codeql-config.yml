@@ -1,0 +1,11 @@
+name: "SnapCal CodeQL config"
+
+paths-ignore:
+  - '**/node_modules'
+  - '**/dist'
+  - '**/*.test.ts'
+  - '**/migrations'
+
+queries:
+  - uses: security-extended
+  - uses: security-and-quality

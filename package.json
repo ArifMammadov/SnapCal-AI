@@ -11,7 +11,8 @@
     "dev:bot": "pnpm --filter @snapcal/telegram-bot dev",
     "build": "pnpm --filter @snapcal/database build && pnpm --filter @snapcal/shared build && pnpm --filter @snapcal/api build && pnpm --filter @snapcal/ai-agent build && pnpm --filter @snapcal/telegram-bot build && pnpm --filter @snapcal/mobile build && pnpm --filter @snapcal/admin build",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "audit:ci": "pnpm audit --audit-level=moderate"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
