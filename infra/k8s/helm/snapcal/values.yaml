@@ -154,6 +154,13 @@ ingress:
         - snapcal.health
         - admin.snapcal.health
 
+canary:
+  enabled: false
+  weight: 10
+  header: "x-canary"
+  headerValue: "true"
+  tls: false
+
 monitoring:
   enabled: true
   serviceMonitor:

@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "snapcal.fullname" . }}-canary-smoke
+  labels:
+    {{- include "snapcal.labels" . | nindent 4 }}
+data:
+  smoke.sh: |
+    #!/usr/bin/env sh
+    set -eu
+    apk add --no-cache curl jq
+    API_URL="http://api:4000"
+    AI_URL="http://ai-agent:4001"
+    for url in "$API_URL/health" "$AI_URL/health"; do
+      echo "Checking $url"
+      curl -fsS --max-time 10 "$url" >/dev/null
+    done
+    echo "Canary smoke tests passed"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "snapcal.fullname" . }}-canary-smoke-{{ .Values.image.tag | replace ":" "-" | replace "." "-" | trunc 25 }}
+  labels:
+    {{- include "snapcal.labels" . | nindent 4 }}
+spec:
+  ttlSecondsAfterFinished: 3600
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: smoke
+          image: alpine/curl:latest
+          command: ["sh", "/smoke.sh"]
+          volumeMounts:
+            - name: smoke-script
+              mountPath: /smoke.sh
+              subPath: smoke.sh
+      volumes:
+        - name: smoke-script
+          configMap:
+            name: {{ include "snapcal.fullname" . }}-canary-smoke
+            defaultMode: 0755
+  {{- if .Values.image.pullSecrets }}
+  imagePullSecrets:
+    {{- toYaml .Values.image.pullSecrets | nindent 4 }}
+  {{- end }}

@@ -1,62 +1,78 @@
-name: CI/CD
+name: CI/CD with Helm Blue-Green/Canary
 
 on:
   push:
-    branches: [main, preprod, test, develop, admin]
+    branches: [main, preprod, test]
   pull_request:
-    branches: [main, preprod, develop]
+    branches: [main, preprod]
 
 env:
   NODE_VERSION: '22'
   PNPM_VERSION: '9'
+  REGISTRY: ghcr.io
+  IMAGE_NAME: snapcal/snapcal
 
 jobs:
   lint-and-typecheck:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: pnpm/action-setup@v4
-        with:
-          run_install: false
-
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @snapcal/database generate
+      - run: pnpm --filter @snapcal/database build
+      - run: pnpm --filter @snapcal/shared build
+      - run: pnpm run typecheck
+      - run: pnpm run test
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Generate Prisma client and build packages
-        run: |
-          pnpm --filter @snapcal/database generate
-          pnpm --filter @snapcal/database build
-          pnpm --filter @snapcal/shared build
-
-      - name: Type check
-        run: pnpm typecheck
-
-      - name: Build packages
-        run: |
-          pnpm --filter @snapcal/database generate
-          pnpm --filter @snapcal/database build
-          pnpm --filter @snapcal/shared build
-          pnpm --filter @snapcal/api build
-          pnpm --filter @snapcal/admin build
-          pnpm --filter @snapcal/mobile build
+  build-and-push:
+    runs-on: ubuntu-latest
+    needs: lint-and-typecheck
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/preprod' || github.ref == 'refs/heads/test'
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
+      short_sha: ${{ steps.meta.outputs.short_sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix={{branch}}-
+            type=ref,event=branch
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   deploy-test:
     runs-on: ubuntu-latest
-    needs: lint-and-typecheck
+    needs: build-and-push
     if: github.ref == 'refs/heads/test'
     environment:
       name: test
       url: https://test.snapcal.health
     steps:
       - uses: actions/checkout@v4
-
-      - name: Deploy to test server
+      - name: Deploy to test (systemd fallback)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.PROD_HOST }}
@@ -65,107 +81,91 @@ jobs:
           script: |
             set -e
             cd /opt/snapcal-test
-            git fetch origin
-            git checkout -f test
-            git reset --hard origin/test
+            git fetch origin && git checkout -f test && git reset --hard origin/test
             pnpm install
-            cd /opt/snapcal-test/packages/database && pnpm generate
+            pnpm --filter @snapcal/database generate
             pnpm --filter @snapcal/shared build
-            cd /opt/snapcal-test/apps/api && pnpm build
-            cd /opt/snapcal-test/apps/admin && pnpm build
-            cd /opt/snapcal-test/apps/mobile && pnpm build
+            pnpm --filter @snapcal/api build
+            pnpm --filter @snapcal/admin build
+            pnpm --filter @snapcal/mobile build
             systemctl --user restart snapcal-api-test
             echo "Test deploy done"
 
   deploy-preprod:
     runs-on: ubuntu-latest
-    needs: lint-and-typecheck
+    needs: build-and-push
     if: github.ref == 'refs/heads/preprod'
     environment:
       name: preprod
       url: https://preprod.snapcal.health
     steps:
       - uses: actions/checkout@v4
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+      - name: Deploy canary to preprod
+        run: |
+          helm upgrade --install snapcal-canary ./infra/k8s/helm/snapcal \
+            --namespace snapcal-preprod \
+            --create-namespace \
+            --values ./infra/k8s/helm/snapcal/values-canary.yaml \
+            --set image.tag=${{ needs.build-and-push.outputs.short_sha }} \
+            --set canary.weight=50 \
+            --wait --timeout 5m
+      - name: Canary smoke tests
+        run: |
+          ./scripts/smoke-test.sh https://preprod.snapcal.health/api https://preprod.snapcal.health/ai
+      - name: Promote canary to full preprod
+        if: success()
+        run: |
+          helm upgrade --install snapcal ./infra/k8s/helm/snapcal \
+            --namespace snapcal-preprod \
+            --values ./infra/k8s/helm/snapcal/values.yaml \
+            --set image.tag=${{ needs.build-and-push.outputs.short_sha }} \
+            --wait --timeout 5m
+          helm uninstall snapcal-canary -n snapcal-preprod || true
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          ./scripts/rollback.sh snapcal-canary snapcal-preprod 0 || ./scripts/rollback.sh snapcal snapcal-preprod 0
 
-      - name: Deploy to preprod server
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.PROD_HOST }}
-          username: ${{ secrets.PROD_USER }}
-          key: ${{ secrets.DO_PROD_SSH_KEY }}
-          script: |
-            set -e
-            cd /opt/snapcal-preprod
-            git fetch origin
-            git checkout -f preprod
-            git reset --hard origin/preprod
-            pnpm install
-            cd /opt/snapcal-preprod/packages/database && pnpm generate
-            pnpm --filter @snapcal/shared build
-            cd /opt/snapcal-preprod/apps/api && pnpm build
-            cd /opt/snapcal-preprod/apps/admin && pnpm build
-            cd /opt/snapcal-preprod/apps/mobile && pnpm build
-            systemctl --user restart snapcal-api-preprod
-            echo "Preprod deploy done"
-
-  deploy-main:
+  deploy-production:
     runs-on: ubuntu-latest
-    needs: lint-and-typecheck
+    needs: build-and-push
     if: github.ref == 'refs/heads/main'
     environment:
       name: production
       url: https://snapcal.health
     steps:
       - uses: actions/checkout@v4
-
-      - name: Deploy to production server
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.PROD_HOST }}
-          username: ${{ secrets.PROD_USER }}
-          key: ${{ secrets.DO_PROD_SSH_KEY }}
-          script: |
-            set -e
-            cd /opt/snapcal-main
-            git fetch origin
-            git checkout -f main
-            git reset --hard origin/main
-            pnpm install
-            cd /opt/snapcal-main/packages/database && pnpm generate
-            pnpm --filter @snapcal/shared build
-            cd /opt/snapcal-main/apps/api && pnpm build
-            cd /opt/snapcal-main/apps/admin && pnpm build
-            cd /opt/snapcal-main/apps/mobile && pnpm build
-            systemctl --user restart snapcal-api-main
-            systemctl --user restart snapcal-ai-main
-            echo "Production deploy done"
-
-  deploy-admin:
-    runs-on: ubuntu-latest
-    needs: lint-and-typecheck
-    if: github.ref == 'refs/heads/admin'
-    environment:
-      name: admin
-      url: https://admin.snapcal.health
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Deploy admin panel
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.PROD_HOST }}
-          username: ${{ secrets.PROD_USER }}
-          key: ${{ secrets.DO_PROD_SSH_KEY }}
-          script: |
-            set -e
-            cd /opt/snapcal-admin
-            git fetch origin
-            git checkout -f admin
-            git reset --hard origin/admin
-            pnpm install
-            cd /opt/snapcal-admin/packages/database && pnpm generate
-            pnpm --filter @snapcal/shared build
-            cd /opt/snapcal-admin/apps/api && pnpm build
-            cd /opt/snapcal-admin/apps/admin && pnpm build
-            systemctl --user restart snapcal-api-admin
-            echo "Admin deploy done"
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+      - name: Deploy canary to production
+        run: |
+          helm upgrade --install snapcal-canary ./infra/k8s/helm/snapcal \
+            --namespace snapcal \
+            --create-namespace \
+            --values ./infra/k8s/helm/snapcal/values-canary.yaml \
+            --values ./infra/k8s/helm/snapcal/values.prod.yaml \
+            --set image.tag=${{ needs.build-and-push.outputs.short_sha }} \
+            --set canary.weight=10 \
+            --wait --timeout 5m
+      - name: Canary smoke tests
+        run: |
+          ./scripts/smoke-test.sh https://snapcal.health/api https://snapcal.health/ai
+      - name: Promote canary to full production
+        if: success()
+        run: |
+          helm upgrade --install snapcal ./infra/k8s/helm/snapcal \
+            --namespace snapcal \
+            --values ./infra/k8s/helm/snapcal/values.prod.yaml \
+            --set image.tag=${{ needs.build-and-push.outputs.short_sha }} \
+            --wait --timeout 5m
+          helm uninstall snapcal-canary -n snapcal || true
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          ./scripts/rollback.sh snapcal-canary snapcal 0 || ./scripts/rollback.sh snapcal snapcal 0

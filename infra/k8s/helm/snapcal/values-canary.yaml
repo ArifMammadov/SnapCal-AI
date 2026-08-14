@@ -1,0 +1,26 @@
+nameOverride: snapcal-canary
+fullnameOverride: snapcal-canary
+
+api:
+  service:
+    name: snapcal-canary-api
+
+aiAgent:
+  service:
+    name: snapcal-canary-ai-agent
+
+canary:
+  enabled: true
+  weight: 10
+
+static:
+  mobile:
+    enabled: false
+  admin:
+    enabled: false
+
+postgres:
+  enabled: false
+
+redis:
+  enabled: false
