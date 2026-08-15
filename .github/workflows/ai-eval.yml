@@ -10,11 +10,14 @@ on:
 jobs:
   eval:
     runs-on: ubuntu-latest
+    if: secrets.EVAL_DATABASE_URL != ''
     environment:
       name: eval
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -23,7 +26,6 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build packages
         run: |
-          pnpm --filter @snapcal/database generate
           pnpm --filter @snapcal/database build
           pnpm --filter @snapcal/shared build
           pnpm --filter @snapcal/ai-agent build
@@ -31,6 +33,9 @@ jobs:
         run: pnpm --filter @snapcal/ai-agent tsx src/eval/seed.ts
         env:
           DATABASE_URL: ${{ secrets.EVAL_DATABASE_URL }}
+          REDIS_URL: ${{ secrets.EVAL_REDIS_URL }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          AI_AGENT_SECRET: ${{ secrets.AI_AGENT_SECRET }}
       - name: Run eval harness
         run: pnpm --filter @snapcal/ai-agent eval
         env:

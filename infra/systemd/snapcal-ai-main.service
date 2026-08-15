@@ -1,6 +1,6 @@
 [Unit]
 Description=SnapCal AI Agent - Main Production
-After=network.target
+After=network.target redis-server.service
 
 [Service]
 Type=simple
@@ -10,6 +10,7 @@ Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
 Environment=PORT=4001
+EnvironmentFile=/opt/snapcal-main/.env
 
 [Install]
 WantedBy=default.target

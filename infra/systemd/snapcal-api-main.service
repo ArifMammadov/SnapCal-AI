@@ -1,6 +1,6 @@
 [Unit]
 Description=SnapCal API - Main Production
-After=network.target
+After=network.target redis-server.service
 
 [Service]
 Type=simple
@@ -11,6 +11,7 @@ RestartSec=3
 Environment=NODE_ENV=production
 Environment=PORT=4000
 Environment=HOST=0.0.0.0
+EnvironmentFile=/opt/snapcal-main/.env
 
 [Install]
 WantedBy=default.target
