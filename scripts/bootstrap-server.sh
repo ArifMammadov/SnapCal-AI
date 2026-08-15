@@ -1,124 +1,89 @@
-#!/bin/bash
-set -euo pipefail
+# Server bootstrap for SnapCal AI
+# Run as root on the droplet 64.226.122.183
 
-cd /opt/snapcal-main
+set -e
 
-JWT_SECRET=***
-JWT_REFRESH_SECRET=***
-AI_AGENT_SECRET=***
-ADMIN_SECRET=***
+echo "=== Updating packages ==="
+apt update
+apt upgrade -y
 
-read -s -p "Enter OpenRouter API key: " OPENROUTER_API_KEY
-echo
+echo "=== Installing dependencies ==="
+apt install -y redis-server postgresql postgresql-contrib curl git
 
-DB_PASSWORD=***
+echo "=== Starting Redis ==="
+systemctl enable redis-server
+systemctl start redis-server
+redis-cli ping
 
-sed -i "s|POSTGRES_PASSWORD: .*|POSTGRES_PASSWORD: ${DB_PASSWORD}|" /opt/snapcal-main/infra/docker/docker-compose.yml
-cd /opt/snapcal-main/infra/docker
-docker compose down -v || true
-POSTGRES_PASSWORD="***" docker compose up -d postgres redis
-sleep 5
-docker exec -i docker-postgres-1 psql -U snapcal -d snapcal -c "CREATE EXTENSION IF NOT EXISTS vector;" || true
+echo "=== Starting PostgreSQL ==="
+systemctl enable postgresql
+systemctl start postgresql
 
-cat > apps/api/.env << EOL
+echo "=== Creating database and user ==="
+sudo -u postgres psql << 'PSQL'
+DROP DATABASE IF EXISTS snapcal_main;
+DROP USER IF EXISTS snapcal;
+CREATE USER snapcal WITH ENCRYPTED PASSWORD 'SnapCal_DB_Pass_2026!';
+CREATE DATABASE snapcal_main OWNER snapcal;
+GRANT ALL PRIVILEGES ON DATABASE snapcal_main TO snapcal;
+\c snapcal_main
+GRANT ALL ON SCHEMA public TO snapcal;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO snapcal;
+PSQL
+
+echo "=== Ensuring app directory exists ==="
+mkdir -p /opt/snapcal-main
+
+echo "=== Writing .env ==="
+cat > /opt/snapcal-main/.env << 'ENV'
 NODE_ENV=production
 PORT=4000
 HOST=0.0.0.0
-DATABASE_URL=postgresql://snapcal:***@localhost:5432/snapcal?schema=public&connection_limit=20&pgbouncer=true
-DATABASE_READ_URL=postgresql://snapcal:***@localhost:5432/snapcal?schema=public&connection_limit=20&pgbouncer=true
-DATABASE_DIRECT_URL=postgresql://snapcal:***@localhost:5432/snapcal?schema=public
+DATABASE_URL=postgresql://snapcal:SnapCal_DB_Pass_2026!@localhost:5432/snapcal_main
+DATABASE_READ_URL=postgresql://snapcal:SnapCal_DB_Pass_2026!@localhost:5432/snapcal_main
 REDIS_URL=redis://localhost:6379
-JWT_SECRET=***
-JWT_REFRESH_SECRET=***
-ADMIN_SECRET=***
-AI_AGENT_URL=http://localhost:4001
-AI_AGENT_SECRET=***
+JWT_SECRET=SnapCal_JWT_Secret_Change_Me_2026_Long_String
+JWT_REFRESH_SECRET=SnapCal_JWT_Refresh_Secret_Change_Me_2026_Long_String
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
+OPENROUTER_API_KEY=your_openrouter_api_key_here
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+ADMIN_SECRET=SnapCal_Admin_Secret_Change_Me_2026
+AI_AGENT_SECRET=SnapCal_AI_Agent_Secret_Change_Me_2026
+AGENT_SECRET=SnapCal_AI_Agent_Secret_Change_Me_2026
 MOBILE_APP_URL=https://snapcal.health
-ADMIN_APP_URL=https://snapcal.health
-OPENROUTER_API_KEY=***
-STRIPE_SECRET_KEY=***
-STRIPE_WEBHOOK_SECRET=***
-TELEGRAM_BOT_TOKEN=***
-EOL
+ADMIN_APP_URL=https://snapcal.health/admin
+AI_AGENT_URL=http://localhost:4001
+API_SERVICE_URL=http://localhost:4000
+ENV
 
-cat > apps/ai-agent/.env << EOL
-NODE_ENV=production
-PORT=4001
-HOST=0.0.0.0
-DATABASE_URL=postgresql://snapcal:***@localhost:5432/snapcal?schema=public&connection_limit=20&pgbouncer=true
-DATABASE_READ_URL=postgresql://snapcal:***@localhost:5432/snapcal?schema=public&connection_limit=20&pgbouncer=true
-REDIS_URL=redis://localhost:6379
-AGENT_SECRET=***
-OPENROUTER_API_KEY=***
-EOL
+chmod 600 /opt/snapcal-main/.env
 
-cat > apps/telegram-bot/.env << EOL
-NODE_ENV=production
-TELEGRAM_BOT_TOKEN=***
-DATABASE_URL=postgresql://snapcal:***@localhost:5432/snapcal?schema=public&pgbouncer=true
-REDIS_URL=redis://localhost:6379
-EOL
+echo "=== Copying .env to preprod/test ==="
+cp /opt/snapcal-main/.env /opt/snapcal-preprod/.env
+cp /opt/snapcal-main/.env /opt/snapcal-test/.env
 
-cat > apps/mobile/.env << EOL
-VITE_API_URL=https://snapcal.health/api
-VITE_AI_AGENT_URL=https://snapcal.health/ai
-EOL
-
-cat > apps/admin/.env << EOL
-VITE_API_URL=https://snapcal.health/api
-EOL
-
-cat > packages/database/.env << EOL
-DATABASE_URL=postgresql://snapcal:***@localhost:5432/snapcal?schema=public
-EOL
-
-cd /opt/snapcal-main
-pnpm install
-pnpm run build
-
+echo "=== Running Prisma migrations ==="
 cd /opt/snapcal-main/packages/database
-npx prisma migrate deploy
+DATABASE_URL="postgresql://snapcal:SnapCal_DB_Pass_2026!@localhost:5432/snapcal_main" npx prisma migrate deploy
 
-cat > /etc/nginx/sites-available/snapcal << 'NGINX'
-server {
-    listen 80;
-    server_name snapcal.health test.snapcal.health preprod.snapcal.health;
-
-    location / {
-        root /opt/snapcal-main/apps/mobile/dist;
-        try_files $uri $uri/ /index.html;
-    }
-
-    location /admin {
-        alias /opt/snapcal-main/apps/admin/dist;
-        try_files $uri $uri/ /admin/index.html;
-    }
-
-    location /api/ {
-        proxy_pass http://127.0.0.1:4000/api/;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-NGINX
-ln -sf /etc/nginx/sites-available/snapcal /etc/nginx/sites-enabled/
-rm -f /etc/nginx/sites-enabled/default
-nginx -t
-systemctl restart nginx
-
+echo "=== Copying new systemd units ==="
 cp /opt/snapcal-main/infra/systemd/snapcal-api-main.service /etc/systemd/system/
 cp /opt/snapcal-main/infra/systemd/snapcal-ai-main.service /etc/systemd/system/
+cp /opt/snapcal-main/infra/systemd/snapcal-api-preprod.service /etc/systemd/system/
+cp /opt/snapcal-main/infra/systemd/snapcal-ai-preprod.service /etc/systemd/system/
+cp /opt/snapcal-main/infra/systemd/snapcal-api-test.service /etc/systemd/system/
+cp /opt/snapcal-main/infra/systemd/snapcal-ai-test.service /etc/systemd/system/
+
+echo "=== Reloading systemd and restarting services ==="
 systemctl daemon-reload
+systemctl restart snapcal-api-main snapcal-ai-main
 systemctl enable snapcal-api-main snapcal-ai-main
-systemctl start snapcal-api-main snapcal-ai-main
 
-sleep 5
-echo "=== API health ==="
-curl -s http://localhost:4000/health || echo "API not responding"
-echo "=== AI health ==="
-curl -s http://localhost:4001/health || echo "AI not responding"
+echo "=== Waiting for services ==="
+sleep 10
 
-echo "Bootstrap complete."
+echo "=== Health checks ==="
+curl -s -o /dev/null -w 'API health: %{http_code}\n' http://localhost:4000/health
+curl -s -o /dev/null -w 'AI health: %{http_code}\n' http://localhost:4001/health
+
+echo "=== Done ==="
