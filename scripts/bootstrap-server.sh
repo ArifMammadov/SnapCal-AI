@@ -3,12 +3,14 @@
 
 set -e
 
+DB_PASS='SnapCal_DB_Pass_2026'
+
 echo "=== Updating packages ==="
 apt update
 apt upgrade -y
 
 echo "=== Installing dependencies ==="
-apt install -y redis-server postgresql postgresql-contrib curl git
+apt install -y redis-server postgresql postgresql-contrib postgresql-16-pgvector curl git
 
 echo "=== Starting Redis ==="
 systemctl enable redis-server
@@ -20,30 +22,33 @@ systemctl enable postgresql
 systemctl start postgresql
 
 echo "=== Creating database and user ==="
-sudo -u postgres psql << 'PSQL'
+sudo -u postgres psql << PSQL
 DROP DATABASE IF EXISTS snapcal_main;
 DROP USER IF EXISTS snapcal;
-CREATE USER snapcal WITH ENCRYPTED PASSWORD 'SnapCal_DB_Pass_2026!';
+CREATE USER snapcal WITH ENCRYPTED PASSWORD '${DB_PASS}';
 CREATE DATABASE snapcal_main OWNER snapcal;
-GRANT ALL PRIVILEGES ON DATABASE snapcal_main TO snapcal;
-\c snapcal_main
+PSQL
+
+sudo -u postgres psql -d snapcal_main << PSQL
+CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 GRANT ALL ON SCHEMA public TO snapcal;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO snapcal;
 PSQL
 
-echo "=== Ensuring app directory exists ==="
-mkdir -p /opt/snapcal-main
+echo "=== Ensuring app directories exist ==="
+mkdir -p /opt/snapcal-main /opt/snapcal-preprod /opt/snapcal-test
 
 echo "=== Writing .env ==="
-cat > /opt/snapcal-main/.env << 'ENV'
+cat > /opt/snapcal-main/.env << ENV
 NODE_ENV=production
 PORT=4000
 HOST=0.0.0.0
-DATABASE_URL=postgresql://snapcal:SnapCal_DB_Pass_2026!@localhost:5432/snapcal_main
-DATABASE_READ_URL=postgresql://snapcal:SnapCal_DB_Pass_2026!@localhost:5432/snapcal_main
+DATABASE_URL=postgresql://snapcal:${DB_PASS}@localhost:5432/snapcal_main
+DATABASE_READ_URL=postgresql://snapcal:${DB_PASS}@localhost:5432/snapcal_main
 REDIS_URL=redis://localhost:6379
-JWT_SECRET=SnapCal_JWT_Secret_Change_Me_2026_Long_String
-JWT_REFRESH_SECRET=SnapCal_JWT_Refresh_Secret_Change_Me_2026_Long_String
+JWT_SECRET=SnapCal_JWT_Secret_Change_Me_2026_Long_String_Min_32
+JWT_REFRESH_SECRET=SnapCal_JWT_Refresh_Secret_Change_Me_2026_Long_String_Min_32
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
 OPENROUTER_API_KEY=your_openrouter_api_key_here
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
@@ -64,7 +69,7 @@ cp /opt/snapcal-main/.env /opt/snapcal-test/.env
 
 echo "=== Running Prisma migrations ==="
 cd /opt/snapcal-main/packages/database
-DATABASE_URL="postgresql://snapcal:SnapCal_DB_Pass_2026!@localhost:5432/snapcal_main" npx prisma migrate deploy
+DATABASE_URL="postgresql://snapcal:${DB_PASS}@localhost:5432/snapcal_main" npx prisma migrate deploy
 
 echo "=== Copying new systemd units ==="
 cp /opt/snapcal-main/infra/systemd/snapcal-api-main.service /etc/systemd/system/
