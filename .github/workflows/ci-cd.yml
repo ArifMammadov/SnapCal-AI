@@ -131,6 +131,8 @@ jobs:
             pnpm --filter @snapcal/mobile build
             systemctl restart snapcal-api-main snapcal-ai-main || true
             sleep 5
+            systemctl status snapcal-api-main --no-pager || true
+            systemctl status snapcal-ai-main --no-pager || true
             curl -sf http://localhost:4000/health || (echo "API health failed"; exit 1)
             curl -sf http://localhost:4001/health || (echo "AI health failed"; exit 1)
             echo "Production deploy done"
