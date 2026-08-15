@@ -44,7 +44,7 @@ export function startKnowledgeIndexWorker(config: KnowledgeQueueConfig): Worker 
       }
       throw new Error(`Unknown job name: ${job.name}`)
     },
-    { connection: getRedis(), concurrency: 2 },
+    { connection: getRedis({ maxRetriesPerRequest: null }), concurrency: 2 },
   )
 
   worker.on('failed', (job, err) => {

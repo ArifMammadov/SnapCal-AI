@@ -6,6 +6,7 @@ import { estimateTokens } from '../llm/client.js'
 import { recordAiUsage } from '../lib/limits.js'
 
 const redisConnection = getRedis()
+const blockingRedisConnection = getRedis({ maxRetriesPerRequest: null })
 
 export const visionQueue = new Queue('vision-analysis', { connection: redisConnection })
 
@@ -37,7 +38,7 @@ export function startVisionWorker(): Worker {
       await recordAiUsage(userId, 200, outputTokens, result.message.modelUsed ?? 'unknown', 'openrouter')
       return result
     },
-    { connection: redisConnection, concurrency: 4 }
+    { connection: blockingRedisConnection, concurrency: 4 }
   )
 
   worker.on('completed', () => {
