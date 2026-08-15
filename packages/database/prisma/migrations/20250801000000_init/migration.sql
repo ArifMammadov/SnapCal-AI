@@ -46,6 +46,7 @@ CREATE TABLE "users" (
     "role" "UserRole" NOT NULL DEFAULT 'USER',
     "subscriptionStatus" "SubscriptionStatus" NOT NULL DEFAULT 'INACTIVE',
     "subscriptionPlanId" UUID,
+    "stripeCustomerId" TEXT,
     "subscriptionExpiresAt" TIMESTAMP(3),
     "trialEndsAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -261,6 +262,7 @@ CREATE TABLE "programs" (
     "level" TEXT,
     "rating" DECIMAL(2,1),
     "reviewsCount" INTEGER NOT NULL DEFAULT 0,
+    "enrolledCount" INTEGER NOT NULL DEFAULT 0,
     "emoji" TEXT,
     "gradient" TEXT,
     "tag" TEXT,
@@ -269,6 +271,93 @@ CREATE TABLE "programs" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "programs_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "notifications" (
+    "id" UUID NOT NULL,
+    "userId" UUID NOT NULL,
+    "type" TEXT NOT NULL,
+    "title" TEXT NOT NULL,
+    "body" TEXT NOT NULL,
+    "data" JSONB,
+    "isRead" BOOLEAN NOT NULL DEFAULT false,
+    "sentVia" TEXT NOT NULL DEFAULT 'in_app',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "readAt" TIMESTAMP(3),
+
+    CONSTRAINT "notifications_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "reminder_preferences" (
+    "id" UUID NOT NULL,
+    "userId" UUID NOT NULL,
+    "breakfastAt" TEXT,
+    "lunchAt" TEXT,
+    "dinnerAt" TEXT,
+    "weightDay" TEXT,
+    "weightAt" TEXT,
+    "workoutDays" TEXT[],
+    "workoutAt" TEXT,
+    "waterReminders" BOOLEAN NOT NULL DEFAULT false,
+    "enabled" BOOLEAN NOT NULL DEFAULT true,
+    "timezone" TEXT NOT NULL DEFAULT 'UTC',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "reminder_preferences_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "prompt_templates" (
+    "id" UUID NOT NULL,
+    "name" TEXT NOT NULL,
+    "skillName" TEXT,
+    "version" INTEGER NOT NULL DEFAULT 1,
+    "isActive" BOOLEAN NOT NULL DEFAULT false,
+    "previousVersionId" UUID,
+    "systemPrompt" TEXT NOT NULL,
+    "routerPrompt" TEXT,
+    "guardrails" JSONB DEFAULT '[]'::jsonb,
+    "allowedModels" TEXT[] DEFAULT '{}',
+    "fallbackModel" TEXT,
+    "experimentKey" TEXT,
+    "metadata" JSONB,
+    "createdBy" TEXT,
+    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+    "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    CONSTRAINT "prompt_templates_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "eval_runs" (
+    "id" UUID NOT NULL,
+    "promptId" UUID NOT NULL,
+    "branch" TEXT,
+    "commitSha" TEXT,
+    "results" JSONB NOT NULL,
+    "summary" JSONB NOT NULL,
+    "passed" BOOLEAN NOT NULL,
+    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    CONSTRAINT "eval_runs_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "eval_cases" (
+    "id" UUID NOT NULL,
+    "name" TEXT NOT NULL,
+    "skillName" TEXT NOT NULL,
+    "input" JSONB NOT NULL,
+    "expected" JSONB NOT NULL,
+    "tags" TEXT[] DEFAULT '{}',
+    "isActive" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+    "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    CONSTRAINT "eval_cases_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -383,6 +472,27 @@ CREATE INDEX "programs_isActive_category_idx" ON "programs"("isActive", "categor
 CREATE UNIQUE INDEX "enrollments_userId_programId_key" ON "enrollments"("userId", "programId");
 
 -- CreateIndex
+CREATE INDEX "notifications_userId_idx" ON "notifications"("userId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "notifications_userId_isRead_createdAt_idx" ON "notifications"("userId", "isRead", "createdAt");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "reminder_preferences_userId_key" ON "reminder_preferences"("userId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "prompt_templates_name_key" ON "prompt_templates"("name");
+
+-- CreateIndex
+CREATE INDEX "prompt_templates_skill_active_idx" ON "prompt_templates"("skillName", "isActive", "version" DESC);
+
+-- CreateIndex
+CREATE INDEX "eval_cases_active_skill_idx" ON "eval_cases"("isActive", "skillName");
+
+-- CreateIndex
+CREATE INDEX "eval_cases_tags_idx" ON "eval_cases" USING GIN(tags);
+
+-- CreateIndex
 CREATE INDEX "ai_audit_logs_userId_createdAt_idx" ON "ai_audit_logs"("userId", "createdAt");
 
 -- CreateIndex
@@ -429,6 +539,18 @@ ALTER TABLE "enrollments" ADD CONSTRAINT "enrollments_userId_fkey" FOREIGN KEY (
 
 -- AddForeignKey
 ALTER TABLE "enrollments" ADD CONSTRAINT "enrollments_programId_fkey" FOREIGN KEY ("programId") REFERENCES "programs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "notifications" ADD CONSTRAINT "notifications_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "reminder_preferences" ADD CONSTRAINT "reminder_preferences_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "prompt_templates" ADD CONSTRAINT "prompt_templates_previousVersionId_fkey" FOREIGN KEY ("previousVersionId") REFERENCES "prompt_templates"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "eval_runs" ADD CONSTRAINT "eval_runs_promptId_fkey" FOREIGN KEY ("promptId") REFERENCES "prompt_templates"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "ai_audit_logs" ADD CONSTRAINT "ai_audit_logs_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
