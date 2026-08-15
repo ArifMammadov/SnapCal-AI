@@ -23,7 +23,6 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @snapcal/database generate
       - run: pnpm --filter @snapcal/database build
       - run: pnpm --filter @snapcal/shared build
       - run: pnpm run typecheck
@@ -51,7 +50,7 @@ jobs:
             git fetch origin
             git checkout -f origin/test
             pnpm install --frozen-lockfile
-            pnpm --filter @snapcal/database generate
+            pnpm --filter @snapcal/database build
             pnpm --filter @snapcal/shared build
             pnpm --filter @snapcal/api build
             pnpm --filter @snapcal/ai-agent build
@@ -87,7 +86,7 @@ jobs:
             git fetch origin
             git checkout -f origin/preprod
             pnpm install --frozen-lockfile
-            pnpm --filter @snapcal/database generate
+            pnpm --filter @snapcal/database build
             pnpm --filter @snapcal/shared build
             pnpm --filter @snapcal/api build
             pnpm --filter @snapcal/ai-agent build
@@ -123,7 +122,7 @@ jobs:
             git fetch origin
             git checkout -f origin/main
             pnpm install --frozen-lockfile
-            pnpm --filter @snapcal/database generate
+            pnpm --filter @snapcal/database build
             pnpm --filter @snapcal/shared build
             pnpm --filter @snapcal/api build
             pnpm --filter @snapcal/ai-agent build
