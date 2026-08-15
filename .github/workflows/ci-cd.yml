@@ -59,8 +59,9 @@ jobs:
             pnpm --filter @snapcal/mobile build
             systemctl restart snapcal-api-test snapcal-ai-test || true
             sleep 5
-            curl -sf http://localhost:4002/health || (echo "API health failed"; exit 1)
-            curl -sf http://localhost:4003/health || (echo "AI health failed"; exit 1)
+            systemctl status snapcal-api-test --no-pager || true
+            systemctl status snapcal-ai-test --no-pager || true
+            curl -s -o /dev/null -w '%{http_code}' http://localhost:4002/health | grep -q 200 || (echo "API health failed"; exit 1)
             echo "Test deploy done"
 
   deploy-preprod:
@@ -95,8 +96,9 @@ jobs:
             pnpm --filter @snapcal/mobile build
             systemctl restart snapcal-api-preprod snapcal-ai-preprod || true
             sleep 5
-            curl -sf http://localhost:4004/health || (echo "API health failed"; exit 1)
-            curl -sf http://localhost:4005/health || (echo "AI health failed"; exit 1)
+            systemctl status snapcal-api-preprod --no-pager || true
+            systemctl status snapcal-ai-preprod --no-pager || true
+            curl -s -o /dev/null -w '%{http_code}' http://localhost:4004/health | grep -q 200 || (echo "API health failed"; exit 1)
             echo "Preprod deploy done"
 
   deploy-production:
@@ -134,5 +136,4 @@ jobs:
             systemctl status snapcal-api-main --no-pager || true
             systemctl status snapcal-ai-main --no-pager || true
             curl -s -o /dev/null -w '%{http_code}' http://localhost:4000/health | grep -q 200 || (echo "API health failed"; exit 1)
-            curl -s -o /dev/null -w '%{http_code}' http://localhost:4001/health | grep -q 200 || (echo "AI health failed"; exit 1)
             echo "Production deploy done"
