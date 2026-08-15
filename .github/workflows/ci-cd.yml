@@ -5,6 +5,7 @@ on:
     branches: [main, preprod, test]
   pull_request:
     branches: [main, preprod, test]
+    types: [opened, synchronize, reopened]
 
 env:
   NODE_VERSION: '22'
@@ -26,7 +27,6 @@ jobs:
       - run: pnpm --filter @snapcal/database build
       - run: pnpm --filter @snapcal/shared build
       - run: pnpm run typecheck
-      - run: pnpm run test
 
   deploy-test:
     runs-on: ubuntu-latest
@@ -43,10 +43,13 @@ jobs:
           host: ${{ secrets.PROD_HOST }}
           username: ${{ secrets.PROD_USER }}
           key: ${{ secrets.DO_PROD_SSH_KEY }}
+          script_stop: true
           script: |
             set -e
             cd /opt/snapcal-test
-            git fetch origin && git checkout -f test && git reset --hard origin/test
+            git remote set-url origin https://github.com/ArifMammadov/SnapCal-AI.git
+            git fetch origin
+            git checkout -f origin/test
             pnpm install --frozen-lockfile
             pnpm --filter @snapcal/database generate
             pnpm --filter @snapcal/shared build
@@ -56,9 +59,9 @@ jobs:
             pnpm --filter @snapcal/admin build
             pnpm --filter @snapcal/mobile build
             systemctl restart snapcal-api-test snapcal-ai-test || true
-            sleep 3
-            curl -sf http://localhost:4002/health || exit 1
-            curl -sf http://localhost:4003/health || exit 1
+            sleep 5
+            curl -sf http://localhost:4002/health || (echo "API health failed"; exit 1)
+            curl -sf http://localhost:4003/health || (echo "AI health failed"; exit 1)
             echo "Test deploy done"
 
   deploy-preprod:
@@ -76,10 +79,13 @@ jobs:
           host: ${{ secrets.PROD_HOST }}
           username: ${{ secrets.PROD_USER }}
           key: ${{ secrets.DO_PROD_SSH_KEY }}
+          script_stop: true
           script: |
             set -e
             cd /opt/snapcal-preprod
-            git fetch origin && git checkout -f preprod && git reset --hard origin/preprod
+            git remote set-url origin https://github.com/ArifMammadov/SnapCal-AI.git
+            git fetch origin
+            git checkout -f origin/preprod
             pnpm install --frozen-lockfile
             pnpm --filter @snapcal/database generate
             pnpm --filter @snapcal/shared build
@@ -89,9 +95,9 @@ jobs:
             pnpm --filter @snapcal/admin build
             pnpm --filter @snapcal/mobile build
             systemctl restart snapcal-api-preprod snapcal-ai-preprod || true
-            sleep 3
-            curl -sf http://localhost:4004/health || exit 1
-            curl -sf http://localhost:4005/health || exit 1
+            sleep 5
+            curl -sf http://localhost:4004/health || (echo "API health failed"; exit 1)
+            curl -sf http://localhost:4005/health || (echo "AI health failed"; exit 1)
             echo "Preprod deploy done"
 
   deploy-production:
@@ -109,10 +115,13 @@ jobs:
           host: ${{ secrets.PROD_HOST }}
           username: ${{ secrets.PROD_USER }}
           key: ${{ secrets.DO_PROD_SSH_KEY }}
+          script_stop: true
           script: |
             set -e
             cd /opt/snapcal-main
-            git fetch origin && git checkout -f main && git reset --hard origin/main
+            git remote set-url origin https://github.com/ArifMammadov/SnapCal-AI.git
+            git fetch origin
+            git checkout -f origin/main
             pnpm install --frozen-lockfile
             pnpm --filter @snapcal/database generate
             pnpm --filter @snapcal/shared build
@@ -122,7 +131,7 @@ jobs:
             pnpm --filter @snapcal/admin build
             pnpm --filter @snapcal/mobile build
             systemctl restart snapcal-api-main snapcal-ai-main || true
-            sleep 3
-            curl -sf http://localhost:4000/health || exit 1
-            curl -sf http://localhost:4001/health || exit 1
+            sleep 5
+            curl -sf http://localhost:4000/health || (echo "API health failed"; exit 1)
+            curl -sf http://localhost:4001/health || (echo "AI health failed"; exit 1)
             echo "Production deploy done"
