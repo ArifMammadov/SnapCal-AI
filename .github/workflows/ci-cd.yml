@@ -47,7 +47,7 @@ jobs:
           script: |
             set -e
             cd /opt/snapcal-test
-            git remote set-url origin https://github.com/ArifMammadov/SnapCal-AI.git
+            git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/ArifMammadov/SnapCal-AI.git
             git fetch origin
             git checkout -f origin/test
             pnpm install --frozen-lockfile
@@ -83,7 +83,7 @@ jobs:
           script: |
             set -e
             cd /opt/snapcal-preprod
-            git remote set-url origin https://github.com/ArifMammadov/SnapCal-AI.git
+            git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/ArifMammadov/SnapCal-AI.git
             git fetch origin
             git checkout -f origin/preprod
             pnpm install --frozen-lockfile
@@ -119,7 +119,7 @@ jobs:
           script: |
             set -e
             cd /opt/snapcal-main
-            git remote set-url origin https://github.com/ArifMammadov/SnapCal-AI.git
+            git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/ArifMammadov/SnapCal-AI.git
             git fetch origin
             git checkout -f origin/main
             pnpm install --frozen-lockfile
