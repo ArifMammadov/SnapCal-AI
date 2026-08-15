@@ -5,8 +5,8 @@
   "scripts": {
     "dev": "dotenv -e .env -- node --loader ts-node/esm src/index.ts",
     "build": "tsc -p tsconfig.build.json",
-    "start": "dotenv -e .env -- node dist/index.js",
-    "start:worker": "dotenv -e .env -- node dist/worker.js",
+    "start": "node dist/index.js",
+    "start:worker": "node dist/worker.js",
     "typecheck": "tsc --noEmit",
     "test": "echo 'no tests'",
     "eval": "tsx src/eval/runner.ts"
