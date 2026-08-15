@@ -1,16 +1,11 @@
 name: AI Eval
 
 on:
-  push:
-    branches: [main, preprod, develop]
-  pull_request:
-    branches: [main, preprod]
   workflow_dispatch:
 
 jobs:
   eval:
     runs-on: ubuntu-latest
-    if: secrets.EVAL_DATABASE_URL != ''
     environment:
       name: eval
     steps:
@@ -22,13 +17,22 @@ jobs:
         with:
           node-version: '22'
           cache: 'pnpm'
+
+      - name: Check required secrets
+        run: |
+          if [ -z "${{ secrets.EVAL_DATABASE_URL }}" ]; then echo "EVAL_DATABASE_URL is empty"; exit 1; fi
+          if [ -z "${{ secrets.OPENROUTER_API_KEY }}" ]; then echo "OPENROUTER_API_KEY is empty"; exit 1; fi
+          if [ -z "${{ secrets.AI_AGENT_SECRET }}" ]; then echo "AI_AGENT_SECRET is empty"; exit 1; fi
+
       - name: Install deps
         run: pnpm install --frozen-lockfile
+
       - name: Build packages
         run: |
           pnpm --filter @snapcal/database build
           pnpm --filter @snapcal/shared build
           pnpm --filter @snapcal/ai-agent build
+
       - name: Seed default prompts
         run: pnpm --filter @snapcal/ai-agent tsx src/eval/seed.ts
         env:
@@ -36,6 +40,7 @@ jobs:
           REDIS_URL: ${{ secrets.EVAL_REDIS_URL }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           AI_AGENT_SECRET: ${{ secrets.AI_AGENT_SECRET }}
+
       - name: Run eval harness
         run: pnpm --filter @snapcal/ai-agent eval
         env:
