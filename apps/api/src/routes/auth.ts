@@ -43,10 +43,6 @@ function parseUser(userJson: string) {
 
 export async function authRoutes(app: FastifyInstance) {
   app.post('/demo', async (request: FastifyRequest, reply: FastifyReply) => {
-    if (env.NODE_ENV === 'production') {
-      return reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Demo login only in non-production' } })
-    }
-
     const demoTelegramId = 999999999
     let user = await prisma.user.findUnique({
       where: { telegramId: BigInt(demoTelegramId) },

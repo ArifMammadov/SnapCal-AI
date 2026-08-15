@@ -1,7 +1,20 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { api } from '../lib/api.js'
 import { useAppStore } from '../store/index.js'
 import { Card, Button } from '../components/ui.js'
+
+declare global {
+  interface Window {
+    Telegram?: {
+      WebApp?: {
+        initData?: string
+        initDataUnsafe?: { user?: any }
+        ready: () => void
+        expand: () => void
+      }
+    }
+  }
+}
 
 export function LoginScreen() {
   const [loading, setLoading] = useState(false)
@@ -9,7 +22,27 @@ export function LoginScreen() {
   const setUser = useAppStore((s) => s.setUser)
   const setToken = useAppStore((s) => s.setToken)
 
-  const demoLogin = async () => {
+  useEffect(() => {
+    const webApp = typeof window !== 'undefined' ? window.Telegram?.WebApp : undefined
+    const initData = webApp?.initData
+    if (!initData || !webApp?.initDataUnsafe?.user) return
+
+    setLoading(true)
+    setError('')
+    api
+      .post('/auth/telegram', { initData })
+      .then((res) => {
+        const { accessToken, user } = res.data
+        setToken(accessToken)
+        setUser(user)
+      })
+      .catch((err: any) => {
+        setError(err.response?.data?.error?.message || err.message || 'Login failed')
+      })
+      .finally(() => setLoading(false))
+  }, [setToken, setUser])
+
+  const startJourney = async () => {
     setLoading(true)
     setError('')
     try {
@@ -53,12 +86,12 @@ export function LoginScreen() {
 
         {error && <div style={{ marginBottom: 16, padding: '10px 12px', background: 'var(--rose-dim)', borderRadius: 12, color: 'var(--rose)', fontSize: 13 }}>{error}</div>}
 
-        <Button variant="primary" size="lg" fullWidth onClick={demoLogin} disabled={loading}>
-          {loading ? 'Signing in...' : 'Demo Login (Browser)'}
+        <Button variant="primary" size="lg" fullWidth onClick={startJourney} disabled={loading}>
+          {loading ? 'Вход...' : 'Начать путь'}
         </Button>
 
         <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 24 }}>
-          In Telegram Mini App login will be automatic
+          В Telegram Mini App вход выполняется автоматически
         </p>
       </Card>
     </div>

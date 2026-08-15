@@ -1,17 +1,5 @@
 import { useEffect, useState } from 'react'
 
-declare global {
-  interface Window {
-    Telegram?: {
-      WebApp?: {
-        ready: () => void
-        expand: () => void
-        initDataUnsafe?: { user?: any }
-      }
-    }
-  }
-}
-
 export function useTelegram() {
   const [ready, setReady] = useState(false)
 
