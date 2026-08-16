@@ -9,7 +9,7 @@ const envSchema = z.object({
   REDIS_URL: z.string().default('redis://localhost:6379'),
   JWT_SECRET: z.string().min(32),
   JWT_REFRESH_SECRET: z.string().min(32),
-  TELEGRAM_BOT_TOKEN: z.string(),
+  TELEGRAM_BOT_TOKEN: z.string().optional().default('placeholder'),
   OPENROUTER_API_KEY: z.string().optional(),
   OPENROUTER_BASE_URL: z.string().url().default('https://openrouter.ai/api/v1'),
   OLLAMA_BASE_URL: z.string().url().default('http://localhost:11434'),
