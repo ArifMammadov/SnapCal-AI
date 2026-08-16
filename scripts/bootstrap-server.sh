@@ -1,7 +1,7 @@
 #!/bin/bash
 # Full server bootstrap for SnapCal AI
 # Run as root on a fresh Ubuntu 24.04 droplet
-# Usage: bash /opt/bootstrap.sh
+# Usage: bash /root/bootstrap.sh
 
 set -euo pipefail
 
