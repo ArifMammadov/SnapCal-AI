@@ -57,11 +57,15 @@ jobs:
             pnpm --filter @snapcal/telegram-bot build
             pnpm --filter @snapcal/admin build
             pnpm --filter @snapcal/mobile build
+            cp infra/systemd/snapcal-api-test.service /etc/systemd/system/
+            cp infra/systemd/snapcal-ai-test.service /etc/systemd/system/
+            systemctl daemon-reload
             systemctl restart snapcal-api-test snapcal-ai-test || true
             sleep 5
             systemctl status snapcal-api-test --no-pager || true
             systemctl status snapcal-ai-test --no-pager || true
-            curl -s -o /dev/null -w '%{http_code}' http://localhost:4002/health | grep -q 200 || (echo "API health failed"; exit 1)
+            curl -s -o /dev/null -w '%{http_code}' http://localhost:4004/health | grep -q 200 || (echo "API health failed"; exit 1)
+            curl -s -o /dev/null -w '%{http_code}' http://localhost:4005/health | grep -q 200 || (echo "AI health failed"; exit 1)
             echo "Test deploy done"
 
   deploy-preprod:
@@ -94,11 +98,15 @@ jobs:
             pnpm --filter @snapcal/telegram-bot build
             pnpm --filter @snapcal/admin build
             pnpm --filter @snapcal/mobile build
+            cp infra/systemd/snapcal-api-preprod.service /etc/systemd/system/
+            cp infra/systemd/snapcal-ai-preprod.service /etc/systemd/system/
+            systemctl daemon-reload
             systemctl restart snapcal-api-preprod snapcal-ai-preprod || true
             sleep 5
             systemctl status snapcal-api-preprod --no-pager || true
             systemctl status snapcal-ai-preprod --no-pager || true
-            curl -s -o /dev/null -w '%{http_code}' http://localhost:4004/health | grep -q 200 || (echo "API health failed"; exit 1)
+            curl -s -o /dev/null -w '%{http_code}' http://localhost:4002/health | grep -q 200 || (echo "API health failed"; exit 1)
+            curl -s -o /dev/null -w '%{http_code}' http://localhost:4003/health | grep -q 200 || (echo "AI health failed"; exit 1)
             echo "Preprod deploy done"
 
   deploy-production:
@@ -131,6 +139,9 @@ jobs:
             pnpm --filter @snapcal/telegram-bot build
             pnpm --filter @snapcal/admin build
             pnpm --filter @snapcal/mobile build
+            cp infra/systemd/snapcal-api-main.service /etc/systemd/system/
+            cp infra/systemd/snapcal-ai-main.service /etc/systemd/system/
+            systemctl daemon-reload
             systemctl restart snapcal-api-main snapcal-ai-main || true
             sleep 10
             systemctl status snapcal-api-main --no-pager || true
@@ -138,4 +149,5 @@ jobs:
             journalctl -u snapcal-api-main -n 20 --no-pager || true
             journalctl -u snapcal-ai-main -n 20 --no-pager || true
             curl -s -o /dev/null -w '%{http_code}' http://localhost:4000/health | grep -q 200 || (echo "API health failed"; exit 1)
+            curl -s -o /dev/null -w '%{http_code}' http://localhost:4001/health | grep -q 200 || (echo "AI health failed"; exit 1)
             echo "Production deploy done"
