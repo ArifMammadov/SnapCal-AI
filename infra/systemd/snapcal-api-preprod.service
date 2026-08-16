@@ -4,7 +4,7 @@ After=network.target redis-server.service
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/snapcal-preprod/apps/api
+WorkingDirectory=/opt/snapcal-main/apps/api
 ExecStart=/usr/bin/pnpm start
 Restart=always
 RestartSec=3
