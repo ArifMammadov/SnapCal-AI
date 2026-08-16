@@ -81,9 +81,6 @@ mkdir -p /opt/snapcal-main /opt/snapcal-preprod /opt/snapcal-test
 
 echo "=== Step 6/12: Generate .env files ==="
 cat > /opt/snapcal-main/.env <<ENV
-NODE_ENV=production
-PORT=4000
-HOST=0.0.0.0
 DATABASE_URL=postgresql://snapcal:${DB_PASS}@localhost:5432/snapcal_main
 DATABASE_READ_URL=postgresql://snapcal:${DB_PASS}@localhost:5432/snapcal_main
 REDIS_URL=redis://localhost:6379
@@ -102,9 +99,6 @@ API_SERVICE_URL=http://localhost:4000
 ENV
 
 cat > /opt/snapcal-preprod/.env <<ENV
-NODE_ENV=production
-PORT=4002
-HOST=0.0.0.0
 DATABASE_URL=postgresql://snapcal:${DB_PASS}@localhost:5432/snapcal_preprod
 DATABASE_READ_URL=postgresql://snapcal:${DB_PASS}@localhost:5432/snapcal_preprod
 REDIS_URL=redis://localhost:6379
@@ -123,9 +117,6 @@ API_SERVICE_URL=http://localhost:4002
 ENV
 
 cat > /opt/snapcal-test/.env <<ENV
-NODE_ENV=production
-PORT=4004
-HOST=0.0.0.0
 DATABASE_URL=postgresql://snapcal:${DB_PASS}@localhost:5432/snapcal_test
 DATABASE_READ_URL=postgresql://snapcal:${DB_PASS}@localhost:5432/snapcal_test
 REDIS_URL=redis://localhost:6379
