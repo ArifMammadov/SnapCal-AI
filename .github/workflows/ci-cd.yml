@@ -52,7 +52,7 @@ jobs:
             pnpm install --frozen-lockfile
             pnpm --filter @snapcal/database build
             pnpm --filter @snapcal/shared build
-            source .env
+            export $(grep -v '^#' apps/api/.env | xargs)
             cd packages/database && npx prisma migrate deploy
             cd /opt/snapcal-main
             pnpm --filter @snapcal/api build
@@ -96,7 +96,7 @@ jobs:
             pnpm install --frozen-lockfile
             pnpm --filter @snapcal/database build
             pnpm --filter @snapcal/shared build
-            source .env
+            export $(grep -v '^#' apps/api/.env | xargs)
             cd packages/database && npx prisma migrate deploy
             cd /opt/snapcal-main
             pnpm --filter @snapcal/api build
@@ -140,7 +140,7 @@ jobs:
             pnpm install --frozen-lockfile
             pnpm --filter @snapcal/database build
             pnpm --filter @snapcal/shared build
-            source .env
+            export $(grep -v '^#' apps/api/.env | xargs)
             cd packages/database && npx prisma migrate deploy
             cd /opt/snapcal-main
             pnpm --filter @snapcal/api build
