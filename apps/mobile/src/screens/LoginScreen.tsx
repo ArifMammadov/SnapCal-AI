@@ -71,30 +71,8 @@ export function LoginScreen() {
     const finishAuth = async (accessToken: string, authUser: any) => {
       if (cancelled) return
       setToken(accessToken)
-      try {
-        const statusRes = await api.get('/users/me/onboarding-status', {
-          headers: { Authorization: 'Bearer ' + accessToken },
-        })
-        if (statusRes.data.onboardingCompleted) {
-          setUser(authUser)
-          setStep('complete')
-        } else {
-          setAuthUser(authUser)
-          setOnboarding((prev) => ({
-            ...prev,
-            name: authUser.firstName || prev.name,
-            age: authUser.profile?.birthDate ? calculateAge(authUser.profile.birthDate) : prev.age,
-            gender: (authUser.profile?.gender as Gender) || prev.gender,
-            heightCm: authUser.profile?.heightCm ?? prev.heightCm,
-            currentWeightKg: authUser.profile?.currentWeightKg ?? prev.currentWeightKg,
-            targetWeightKg: authUser.profile?.targetWeightKg ?? prev.targetWeightKg,
-            primaryGoal: (authUser.profile?.primaryGoal as PrimaryGoal) || prev.primaryGoal,
-          }))
-          setStep('onboarding')
-        }
-      } catch (err: any) {
-        setStep('onboarding')
-      }
+      setUser(authUser)
+      setStep('complete')
     }
 
     const tryStartToken = async (): Promise<boolean> => {
@@ -230,16 +208,7 @@ export function LoginScreen() {
   }
 
   if (step === 'onboarding') {
-    return (
-      <OnboardingForm
-        tgUser={tgUser}
-        onboarding={onboarding}
-        setOnboarding={setOnboarding}
-        loading={loading}
-        error={error}
-        onSubmit={submitOnboarding}
-      />
-    )
+    return null
   }
 
   if (step === 'complete') {
