@@ -11,6 +11,9 @@ declare global {
         initDataUnsafe?: { user?: any }
         ready: () => void
         expand: () => void
+        onEvent?: (event: string, handler: () => void) => void
+        offEvent?: (event: string, handler: () => void) => void
+        isReady?: boolean
       }
     }
   }
@@ -38,11 +41,16 @@ function getPrimaryGoalLabel(goal: PrimaryGoal): string {
   }
 }
 
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 export function LoginScreen() {
   const [step, setStep] = useState<OnboardingStep>('login')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [tgUser, setTgUser] = useState<any>(null)
+  const [debug, setDebug] = useState<string>('')
   const setUser = useAppStore((s) => s.setUser)
   const setToken = useAppStore((s) => s.setToken)
 
@@ -58,34 +66,61 @@ export function LoginScreen() {
   const isProduction = import.meta.env.VITE_NODE_ENV === 'production' || !import.meta.env.VITE_ALLOW_DEMO
 
   useEffect(() => {
-    const webApp = typeof window !== 'undefined' ? window.Telegram?.WebApp : undefined
+    let cancelled = false
 
-    webApp?.ready()
-    webApp?.expand()
+    const runLogin = async () => {
+      const webApp = typeof window !== 'undefined' ? window.Telegram?.WebApp : undefined
 
-    let attempts = 0
-    const maxAttempts = 25
+      // Tell Telegram WebView we are ready and request expanded viewport
+      try {
+        webApp?.ready()
+        webApp?.expand()
+      } catch {
+        // ignore
+      }
 
-    const tryLogin = async () => {
+      // Wait for WebView to inject initData. It can take a while on some devices.
+      let attempts = 0
+      const maxAttempts = 60 // up to 12 seconds total
+      let lastInitDataLen = 0
+      let lastUserName = ''
+
+      while (!cancelled && attempts < maxAttempts) {
+        const initData = webApp?.initData
+        const user = webApp?.initDataUnsafe?.user
+        attempts++
+
+        if (user) {
+          setTgUser(user)
+          lastUserName = user.first_name || user.username || 'unknown'
+        }
+        lastInitDataLen = initData?.length || 0
+        setDebug(`attempt=${attempts}, initDataLen=${lastInitDataLen}, user=${lastUserName}, tgReady=${webApp?.isReady || 'unknown'}`)
+
+        if (initData && user) {
+          break
+        }
+
+        await wait(200)
+      }
+
       const initData = webApp?.initData
       const user = webApp?.initDataUnsafe?.user
-      attempts++
-
-      if (user) setTgUser(user)
 
       if (!initData || !user) {
-        if (attempts < maxAttempts) {
-          setTimeout(tryLogin, 200)
-          return
-        }
+        if (cancelled) return
+        setDebug(`no initData after ${maxAttempts} attempts. initDataLen=${lastInitDataLen}, user=${lastUserName}`)
         if (isProduction) {
-          setError('Пожалуйста, откройте приложение через Telegram.')
+          setError('Не удалось получить данные Telegram. Попробуйте закрыть и открыть приложение заново.')
         }
         setLoading(false)
         return
       }
 
+      if (cancelled) return
       setError('')
+      setDebug(`sending /auth/telegram, user=${user.first_name || user.username || 'unknown'}`)
+
       try {
         const res = await api.post('/auth/telegram', { initData })
         const { accessToken, user } = res.data
@@ -101,18 +136,25 @@ export function LoginScreen() {
           setStep('onboarding')
         }
       } catch (err: any) {
-        setError(err.response?.data?.error?.message || err.message || 'Login failed')
+        const serverMsg = err.response?.data?.error?.message || ''
+        const serverCode = err.response?.data?.error?.code || ''
+        setError(serverMsg || err.message || 'Login failed')
+        setDebug(`auth error code=${serverCode}, msg=${serverMsg}`)
       } finally {
         setLoading(false)
       }
     }
 
-    tryLogin()
+    runLogin()
+    return () => {
+      cancelled = true
+    }
   }, [setToken, setUser, isProduction])
 
   const handleDemoLogin = async () => {
     setLoading(true)
     setError('')
+    setDebug('demo login requested')
     try {
       const res = await api.post('/auth/demo')
       const { accessToken, user } = res.data
@@ -197,7 +239,10 @@ export function LoginScreen() {
         {error && <div style={{ marginBottom: 16, padding: '10px 12px', background: 'var(--rose-dim)', borderRadius: 12, color: 'var(--rose)', fontSize: 13 }}>{error}</div>}
 
         {loading ? (
-          <p style={{ color: 'var(--text-secondary)' }}>Вход...</p>
+          <>
+            <p style={{ color: 'var(--text-secondary)' }}>Вход...</p>
+            {debug && <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 12, wordBreak: 'break-all' }}>{debug}</p>}
+          </>
         ) : (
           <>
             {!isProduction && (
@@ -210,6 +255,7 @@ export function LoginScreen() {
                 Откройте приложение через Telegram для автоматического входа.
               </p>
             )}
+            {debug && <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 12, wordBreak: 'break-all' }}>{debug}</p>}
           </>
         )}
       </Card>
