@@ -74,10 +74,16 @@ export function LoginScreen() {
     let cancelled = false
 
     const runLogin = async () => {
+      // Debug URL immediately
+      const rawHref = typeof window !== 'undefined' ? window.location.href : 'no-window'
+      const rawSearch = typeof window !== 'undefined' ? window.location.search : 'no-search'
+      setDebug(`href=${rawHref}, search=${rawSearch}`)
+      await wait(50)
+
       // 1. Try start_token from URL first (fallback when initData is unavailable)
       const startToken = getUrlParam('start_token')
       if (startToken) {
-        setDebug('found start_token in URL')
+        setDebug(`found start_token in URL: ${startToken.slice(0, 8)}...`)
         try {
           const res = await api.post('/auth/start-token', { token: startToken })
           const { accessToken, user } = res.data
