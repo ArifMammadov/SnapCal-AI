@@ -532,3 +532,16 @@ model ReminderPreference {
 
   @@map("reminder_preferences")
 }
+
+model TelegramStartToken {
+  id         String   @id @default(uuid()) @db.Uuid
+  token      String   @unique
+  telegramId BigInt
+  usedAt     DateTime?
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([token])
+  @@index([telegramId])
+  @@map("telegram_start_tokens")
+}

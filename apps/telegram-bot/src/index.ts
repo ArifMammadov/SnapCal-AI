@@ -1,4 +1,5 @@
 import TelegramBot from 'node-telegram-bot-api'
+import crypto from 'node:crypto'
 import { env } from './lib/env.js'
 import { prisma } from '@snapcal/database'
 import { initTracing, installShutdownHandlers, logger } from '@snapcal/shared'
@@ -7,12 +8,32 @@ const bot = new TelegramBot(env.TELEGRAM_BOT_TOKEN, { polling: true })
 
 const MINI_APP_URL = env.MOBILE_APP_URL
 
+function createMiniAppUrl(telegramId: number): string {
+  const token = crypto.randomBytes(32).toString('hex')
+  const expiresAt = new Date(Date.now() + 5 * 60 * 1000)
+
+  prisma.telegramStartToken.create({
+    data: {
+      token,
+      telegramId: BigInt(telegramId),
+      expiresAt,
+    },
+  }).catch((err) => {
+    logger.warn({ err, telegramId }, 'failed to create start token')
+  })
+
+  const url = new URL(MINI_APP_URL)
+  url.searchParams.set('start_token', token)
+  return url.toString()
+}
+
 bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id
   const user = msg.from
 
   if (!user) return
 
+  const miniAppUrl = createMiniAppUrl(user.id)
   const welcomeText = `Welcome to SnapCal AI, ${user.first_name}! 🥗\nTap the button below to open your personal AI nutrition coach.`
 
   await bot.sendMessage(chatId, welcomeText, {
@@ -21,7 +42,7 @@ bot.onText(/\/start/, async (msg) => {
         [
           {
             text: 'Open SnapCal AI',
-            web_app: { url: MINI_APP_URL },
+            web_app: { url: miniAppUrl },
           },
         ],
       ],

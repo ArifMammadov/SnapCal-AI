@@ -45,6 +45,11 @@ function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+function getUrlParam(name: string): string | null {
+  if (typeof window === 'undefined') return null
+  return new URLSearchParams(window.location.search).get(name)
+}
+
 export function LoginScreen() {
   const [step, setStep] = useState<OnboardingStep>('login')
   const [loading, setLoading] = useState(true)
@@ -64,12 +69,40 @@ export function LoginScreen() {
   })
 
   const isProduction = import.meta.env.VITE_NODE_ENV === 'production' || !import.meta.env.VITE_ALLOW_DEMO
-  const isInsideTelegram = typeof window !== 'undefined' && !!window.Telegram?.WebApp?.initDataUnsafe
 
   useEffect(() => {
     let cancelled = false
 
     const runLogin = async () => {
+      // 1. Try start_token from URL first (fallback when initData is unavailable)
+      const startToken = getUrlParam('start_token')
+      if (startToken) {
+        setDebug('found start_token in URL')
+        try {
+          const res = await api.post('/auth/start-token', { token: startToken })
+          const { accessToken, user } = res.data
+          setToken(accessToken)
+          setUser(user)
+
+          const statusRes = await api.get('/users/me/onboarding-status', {
+            headers: { Authorization: 'Bearer ' + accessToken },
+          })
+          if (statusRes.data.onboardingCompleted) {
+            setStep('complete')
+          } else {
+            setStep('onboarding')
+          }
+          return
+        } catch (err: any) {
+          const serverMsg = err.response?.data?.error?.message || ''
+          setError(serverMsg || err.message || 'Start token login failed')
+          setDebug('start_token error: ' + serverMsg)
+          setLoading(false)
+          return
+        }
+      }
+
+      // 2. Try Telegram initData
       const webApp = typeof window !== 'undefined' ? window.Telegram?.WebApp : undefined
 
       try {
@@ -94,7 +127,7 @@ export function LoginScreen() {
           lastUserName = user.first_name || user.username || 'unknown'
         }
         lastInitDataLen = initData?.length || 0
-        setDebug(`attempt=${attempts}, initDataLen=${lastInitDataLen}, user=${lastUserName}, tgReady=${webApp?.isReady || 'unknown'}`)
+        setDebug(`attempt=${attempts}, initDataLen=${lastInitDataLen}, user=${lastUserName}`)
 
         if (initData && user) {
           break
@@ -150,7 +183,7 @@ export function LoginScreen() {
     return () => {
       cancelled = true
     }
-  }, [setToken, setUser, isProduction])
+  }, [setToken, setUser])
 
   const handleDemoLogin = async () => {
     setLoading(true)
@@ -246,12 +279,7 @@ export function LoginScreen() {
           </>
         ) : (
           <>
-            {!isInsideTelegram && (
-              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                Это приложение работает только внутри Telegram Mini App.
-              </p>
-            )}
-            {isInsideTelegram && !isProduction && (
+            {!isProduction && (
               <Button variant="primary" size="lg" fullWidth onClick={handleDemoLogin} disabled={loading}>
                 Начать путь
               </Button>

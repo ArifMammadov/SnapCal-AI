@@ -10,6 +10,10 @@ const telegramAuthSchema = z.object({
   initData: z.string().min(1),
 })
 
+const startTokenSchema = z.object({
+  token: z.string().min(1),
+})
+
 const refreshSchema = z.object({
   refreshToken: z.string().min(1),
 })
@@ -198,6 +202,90 @@ export async function authRoutes(app: FastifyInstance) {
       ip: request.ip,
       userAgent: request.headers['user-agent'],
       metadata: { telegramId: user.telegramId.toString() },
+      severity: 'info',
+    })
+
+    return {
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        telegramId: user.telegramId.toString(),
+        telegramUsername: user.telegramUsername,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        avatarUrl: user.avatarUrl,
+        languageCode: user.languageCode,
+        role: user.role,
+        subscriptionStatus: user.subscriptionStatus,
+        trialEndsAt: user.trialEndsAt,
+        profile: user.profile,
+      },
+    }
+  })
+
+  app.post('/start-token', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const { token } = startTokenSchema.parse(request.body)
+
+    const startToken = await prisma.telegramStartToken.findUnique({
+      where: { token },
+    })
+
+    if (!startToken || startToken.usedAt || startToken.expiresAt < new Date()) {
+      await auditLog({
+        userId: 'anonymous',
+        event: AuditEvent.LOGIN_FAILED,
+        ip: request.ip,
+        userAgent: request.headers['user-agent'],
+        metadata: { reason: 'invalid_or_expired_start_token' },
+        severity: 'warning',
+      })
+      return reply.status(401).send({ error: { code: 'INVALID_START_TOKEN', message: 'Invalid or expired start token' } })
+    }
+
+    let user = await prisma.user.findUnique({
+      where: { telegramId: startToken.telegramId },
+      include: { profile: true },
+    })
+
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          telegramId: startToken.telegramId,
+          telegramUsername: null,
+          firstName: null,
+          lastName: null,
+          avatarUrl: null,
+          languageCode: 'ru',
+          trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          profile: { create: {} },
+        },
+        include: { profile: true },
+      })
+    }
+
+    await prisma.telegramStartToken.update({
+      where: { id: startToken.id },
+      data: { usedAt: new Date() },
+    })
+
+    const accessToken = app.jwt.sign(
+      { userId: user.id, telegramId: user.telegramId.toString(), role: user.role },
+      { expiresIn: '15m' }
+    )
+    const refreshToken = app.jwt.sign(
+      { userId: user.id, type: 'refresh' },
+      { expiresIn: '7d' }
+    )
+
+    await auditLog({
+      userId: user.id,
+      event: AuditEvent.LOGIN,
+      ip: request.ip,
+      userAgent: request.headers['user-agent'],
+      metadata: { telegramId: user.telegramId.toString(), via: 'start_token' },
       severity: 'info',
     })
 
