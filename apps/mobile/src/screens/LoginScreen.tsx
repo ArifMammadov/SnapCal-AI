@@ -259,7 +259,24 @@ export function LoginScreen() {
     )
   }
 
-  return null
+  return (
+    <div
+      style={{
+        minHeight: '100vh',
+        background: 'var(--bg)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+      }}
+    >
+      <Card style={{ width: '100%', maxWidth: 340, padding: '36px 28px', textAlign: 'center' }}>
+        <div style={{ fontSize: 56, marginBottom: 16 }}>🥗</div>
+        <p style={{ color: 'var(--text-secondary)' }}>Вход...</p>
+        {debug && <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 12, wordBreak: 'break-all' }}>{debug}</p>}
+      </Card>
+    </div>
+  )
 }
 
 interface OnboardingFormProps {
@@ -522,3 +539,5 @@ function NumberField({ label, value, onChange, min, max, optional }: NumberField
     </div>
   )
 }
+
+// END LoginScreen
