@@ -40,7 +40,7 @@ function getPrimaryGoalLabel(goal: PrimaryGoal): string {
 
 export function LoginScreen() {
   const [step, setStep] = useState<OnboardingStep>('login')
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [tgUser, setTgUser] = useState<any>(null)
   const setUser = useAppStore((s) => s.setUser)
@@ -59,39 +59,55 @@ export function LoginScreen() {
 
   useEffect(() => {
     const webApp = typeof window !== 'undefined' ? window.Telegram?.WebApp : undefined
-    const initData = webApp?.initData
-    const user = webApp?.initDataUnsafe?.user
-    if (user) setTgUser(user)
 
-    if (!initData || !user) {
-      if (isProduction) {
-        setError('Пожалуйста, откройте приложение через Telegram.')
+    webApp?.ready()
+    webApp?.expand()
+
+    let attempts = 0
+    const maxAttempts = 25
+
+    const tryLogin = async () => {
+      const initData = webApp?.initData
+      const user = webApp?.initDataUnsafe?.user
+      attempts++
+
+      if (user) setTgUser(user)
+
+      if (!initData || !user) {
+        if (attempts < maxAttempts) {
+          setTimeout(tryLogin, 200)
+          return
+        }
+        if (isProduction) {
+          setError('Пожалуйста, откройте приложение через Telegram.')
+        }
+        setLoading(false)
+        return
       }
-      return
-    }
 
-    setLoading(true)
-    setError('')
-    api
-      .post('/auth/telegram', { initData })
-      .then(async (res) => {
+      setError('')
+      try {
+        const res = await api.post('/auth/telegram', { initData })
         const { accessToken, user } = res.data
         setToken(accessToken)
         setUser(user)
 
         const statusRes = await api.get('/users/me/onboarding-status', {
-          headers: { Authorization: `Bearer ${accessToken}` },
+          headers: { Authorization: 'Bearer ' + accessToken },
         })
         if (statusRes.data.onboardingCompleted) {
           setStep('complete')
         } else {
           setStep('onboarding')
         }
-      })
-      .catch((err: any) => {
+      } catch (err: any) {
         setError(err.response?.data?.error?.message || err.message || 'Login failed')
-      })
-      .finally(() => setLoading(false))
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    tryLogin()
   }, [setToken, setUser, isProduction])
 
   const handleDemoLogin = async () => {
@@ -129,7 +145,6 @@ export function LoginScreen() {
 
       await api.patch('/users/me/profile', update)
       setStep('complete')
-      // Refresh user to pull calculated goals
       const me = await api.get('/users/me')
       setUser(me.data)
     } catch (err: any) {
