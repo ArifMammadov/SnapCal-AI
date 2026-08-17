@@ -5,8 +5,9 @@ import { useAppStore } from '../store/index.js'
 import { api } from '../lib/api.js'
 import type { TrackingSummary } from '../lib/data.js'
 import { NotificationScreen } from './NotificationScreen.js'
+import { TelegramLinkSection } from './ProfileScreen.telegram.js'
 
-type ProfileSection = 'main' | 'personal' | 'goals' | 'subscription' | 'notifications' | 'settings' | 'faq' | 'support' | 'privacy' | 'terms'
+type ProfileSection = 'main' | 'personal' | 'goals' | 'subscription' | 'notifications' | 'settings' | 'faq' | 'support' | 'privacy' | 'terms' | 'telegram'
 
 function BackButton({ onBack }: { onBack: () => void }) {
   return (
@@ -361,12 +362,15 @@ export function ProfileScreen() {
   if (section === 'privacy') return <SimpleTextSection title="Privacy Policy" onBack={() => setSection('main')} content={staticContent.privacy} />
   if (section === 'terms') return <SimpleTextSection title="Terms & Conditions" onBack={() => setSection('main')} content={staticContent.terms} />
 
+  if (section === 'telegram') return <TelegramLinkSection onBack={() => setSection('main')} />
+
   const menuItems = [
     { id: 'personal' as ProfileSection, icon: '👤', label: 'Personal Information', desc: 'Name, height, weight, contact', highlight: false },
     { id: 'goals' as ProfileSection, icon: '🎯', label: 'Goals', desc: 'Targets, timeline, preferences', highlight: false },
     { id: 'subscription' as ProfileSection, icon: '⭐', label: 'Subscription', desc: `${user?.plan || 'Free'} · ${user?.plan === 'FREE' ? 'Active' : 'Active ✓'}`, highlight: true },
     { id: 'notifications' as ProfileSection, icon: '🔔', label: 'Notifications', desc: 'Reminders, history', highlight: false },
     { id: 'settings' as ProfileSection, icon: '⚙️', label: 'Settings', desc: 'Notifications, display, units', highlight: false },
+    { id: 'telegram' as ProfileSection, icon: '✈️', label: user?.telegramId ? 'Telegram connected' : 'Connect Telegram', desc: user?.telegramId ? 'Your Telegram account is linked' : 'Link Telegram for reminders and login', highlight: false },
     { id: 'faq' as ProfileSection, icon: '❓', label: 'FAQ', desc: 'Common questions answered', highlight: false },
     { id: 'support' as ProfileSection, icon: '💬', label: 'Support', desc: 'Get help from our team', highlight: false },
     { id: 'privacy' as ProfileSection, icon: '🔒', label: 'Privacy Policy', desc: 'How we handle your data', highlight: false },

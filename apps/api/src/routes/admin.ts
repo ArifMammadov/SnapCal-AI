@@ -151,7 +151,7 @@ export async function adminRoutes(app: FastifyInstance) {
     ])
 
     return {
-      data: users.map((u) => ({ ...u, telegramId: u.telegramId.toString() })),
+      data: users.map((u) => ({ ...u, telegramId: u.telegramId?.toString() ?? null })),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     }
   })
@@ -179,7 +179,7 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!user) {
       return reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'User not found' } })
     }
-    return { ...user, telegramId: user.telegramId.toString() }
+    return { ...user, telegramId: user.telegramId?.toString() ?? null }
   })
 
   app.get('/audit-logs', { preHandler: requireAdmin }, async (request: FastifyRequest) => {

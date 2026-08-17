@@ -18,6 +18,15 @@ const refreshSchema = z.object({
   refreshToken: z.string().min(1),
 })
 
+const linkTelegramSchema = z.object({
+  initData: z.string().min(1),
+})
+
+const guestSchema = z.object({
+  firstName: z.string().max(100).optional(),
+  languageCode: z.string().max(10).optional(),
+})
+
 function verifyTelegramInitData(initData: string): Record<string, string> | null {
   const urlParams = new URLSearchParams(initData)
   const hash = urlParams.get('hash')
@@ -46,6 +55,65 @@ function parseUser(userJson: string) {
 }
 
 export async function authRoutes(app: FastifyInstance) {
+  // Guest auth creates a real user without requiring Telegram initData.
+  // Used as a fallback when Telegram WebApp cannot provide initData.
+  app.post('/guest', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const body = guestSchema.parse(request.body)
+    const languageCode = getRegionLanguage(body.languageCode)
+
+    const user = await prisma.user.create({
+      data: {
+        telegramId: null,
+        telegramUsername: null,
+        firstName: body.firstName ?? 'Guest',
+        lastName: null,
+        avatarUrl: null,
+        languageCode,
+        trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        profile: { create: {} },
+      },
+      include: { profile: true },
+    })
+
+    const accessToken = app.jwt.sign(
+      { userId: user.id, telegramId: user.telegramId ? user.telegramId.toString() : undefined, role: user.role },
+      { expiresIn: '15m' }
+    )
+    const refreshToken = app.jwt.sign(
+      { userId: user.id, type: 'refresh' },
+      { expiresIn: '7d' }
+    )
+
+    await auditLog({
+      userId: user.id,
+      event: AuditEvent.LOGIN,
+      ip: request.ip,
+      userAgent: request.headers['user-agent'],
+      metadata: { via: 'guest' },
+      severity: 'info',
+    })
+
+    return {
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        telegramId: null,
+        telegramUsername: user.telegramUsername,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        avatarUrl: user.avatarUrl,
+        languageCode: user.languageCode,
+        role: user.role,
+        subscriptionStatus: user.subscriptionStatus,
+        trialEndsAt: user.trialEndsAt,
+        profile: user.profile,
+      },
+    }
+  })
+
   // Demo auth is disabled in production. It remains available in development/test and for non-Telegram browser fallback.
   app.post('/demo', {
     config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
@@ -85,7 +153,7 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     const accessToken = app.jwt.sign(
-      { userId: user.id, telegramId: user.telegramId.toString(), role: user.role },
+      { userId: user.id, telegramId: user.telegramId ? user.telegramId.toString() : undefined, role: user.role },
       { expiresIn: '15m' }
     )
     const refreshToken = app.jwt.sign(
@@ -98,7 +166,7 @@ export async function authRoutes(app: FastifyInstance) {
       refreshToken,
       user: {
         id: user.id,
-        telegramId: user.telegramId.toString(),
+        telegramId: user.telegramId?.toString() ?? null,
         telegramUsername: user.telegramUsername,
         firstName: user.firstName,
         lastName: user.lastName,
@@ -183,7 +251,7 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     const accessToken = app.jwt.sign(
-      { userId: user.id, telegramId: user.telegramId.toString(), role: user.role },
+      { userId: user.id, telegramId: user.telegramId ? user.telegramId.toString() : undefined, role: user.role },
       { expiresIn: '15m' }
     )
     const refreshToken = app.jwt.sign(
@@ -201,7 +269,7 @@ export async function authRoutes(app: FastifyInstance) {
       event: AuditEvent.LOGIN,
       ip: request.ip,
       userAgent: request.headers['user-agent'],
-      metadata: { telegramId: user.telegramId.toString() },
+      metadata: { telegramId: user.telegramId?.toString() ?? null },
       severity: 'info',
     })
 
@@ -210,7 +278,7 @@ export async function authRoutes(app: FastifyInstance) {
       refreshToken,
       user: {
         id: user.id,
-        telegramId: user.telegramId.toString(),
+        telegramId: user.telegramId?.toString() ?? null,
         telegramUsername: user.telegramUsername,
         firstName: user.firstName,
         lastName: user.lastName,
@@ -272,7 +340,7 @@ export async function authRoutes(app: FastifyInstance) {
     })
 
     const accessToken = app.jwt.sign(
-      { userId: user.id, telegramId: user.telegramId.toString(), role: user.role },
+      { userId: user.id, telegramId: user.telegramId ? user.telegramId.toString() : undefined, role: user.role },
       { expiresIn: '15m' }
     )
     const refreshToken = app.jwt.sign(
@@ -285,7 +353,7 @@ export async function authRoutes(app: FastifyInstance) {
       event: AuditEvent.LOGIN,
       ip: request.ip,
       userAgent: request.headers['user-agent'],
-      metadata: { telegramId: user.telegramId.toString(), via: 'start_token' },
+      metadata: { telegramId: user.telegramId?.toString() ?? null, via: 'start_token' },
       severity: 'info',
     })
 
@@ -294,7 +362,7 @@ export async function authRoutes(app: FastifyInstance) {
       refreshToken,
       user: {
         id: user.id,
-        telegramId: user.telegramId.toString(),
+        telegramId: user.telegramId?.toString() ?? null,
         telegramUsername: user.telegramUsername,
         firstName: user.firstName,
         lastName: user.lastName,
@@ -304,6 +372,78 @@ export async function authRoutes(app: FastifyInstance) {
         subscriptionStatus: user.subscriptionStatus,
         trialEndsAt: user.trialEndsAt,
         profile: user.profile,
+      },
+    }
+  })
+
+  app.post('/link-telegram', {
+    config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    preHandler: async (request: FastifyRequest, reply: FastifyReply) => {
+      try {
+        const payload = await request.server.jwt.verify<{ userId: string }>(request.headers.authorization?.replace('Bearer ', '') ?? '')
+        request.user = payload
+      } catch {
+        reply.status(401).send({ error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } })
+      }
+    },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const { initData } = linkTelegramSchema.parse(request.body)
+    const data = verifyTelegramInitData(initData)
+
+    if (!data) {
+      return reply.status(401).send({ error: { code: 'INVALID_INIT_DATA', message: 'Telegram init data invalid' } })
+    }
+
+    const tgUser = parseUser(data.user)
+    if (!tgUser?.id) {
+      return reply.status(401).send({ error: { code: 'NO_USER', message: 'No user in init data' } })
+    }
+
+    const existing = await prisma.user.findUnique({
+      where: { telegramId: BigInt(tgUser.id) },
+    })
+
+    if (existing && existing.id !== request.user!.userId) {
+      return reply.status(409).send({ error: { code: 'TELEGRAM_ALREADY_LINKED', message: 'This Telegram account is already linked to another profile' } })
+    }
+
+    const languageCode = getRegionLanguage(tgUser.language_code, tgUser.region)
+
+    const updated = await prisma.user.update({
+      where: { id: request.user!.userId },
+      data: {
+        telegramId: BigInt(tgUser.id),
+        telegramUsername: tgUser.username,
+        firstName: tgUser.first_name,
+        lastName: tgUser.last_name,
+        avatarUrl: tgUser.photo_url,
+        languageCode,
+      },
+      include: { profile: true },
+    })
+
+    await auditLog({
+      userId: updated.id,
+      event: AuditEvent.LOGIN,
+      ip: request.ip,
+      userAgent: request.headers['user-agent'],
+      metadata: { telegramId: updated.telegramId?.toString(), via: 'link_telegram' },
+      severity: 'info',
+    })
+
+    return {
+      user: {
+        id: updated.id,
+        telegramId: updated.telegramId?.toString() ?? null,
+        telegramUsername: updated.telegramUsername,
+        firstName: updated.firstName,
+        lastName: updated.lastName,
+        avatarUrl: updated.avatarUrl,
+        languageCode: updated.languageCode,
+        role: updated.role,
+        subscriptionStatus: updated.subscriptionStatus,
+        trialEndsAt: updated.trialEndsAt,
+        profile: updated.profile,
       },
     }
   })
@@ -321,7 +461,7 @@ export async function authRoutes(app: FastifyInstance) {
       if (!user) throw new Error('User not found')
 
       const newAccessToken = app.jwt.sign(
-        { userId: user.id, telegramId: user.telegramId.toString(), role: user.role },
+        { userId: user.id, telegramId: user.telegramId ? user.telegramId.toString() : undefined, role: user.role },
         { expiresIn: '15m' }
       )
       const newRefreshToken = app.jwt.sign(

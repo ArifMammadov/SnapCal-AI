@@ -2,22 +2,7 @@ import { useEffect, useState } from 'react'
 import { api } from '../lib/api.js'
 import { useAppStore } from '../store/index.js'
 import { Card, Button, Avatar } from '../components/ui.js'
-
-declare global {
-  interface Window {
-    Telegram?: {
-      WebApp?: {
-        initData?: string
-        initDataUnsafe?: { user?: any }
-        ready: () => void
-        expand: () => void
-        onEvent?: (event: string, handler: () => void) => void
-        offEvent?: (event: string, handler: () => void) => void
-        isReady?: boolean
-      }
-    }
-  }
-}
+import type { TelegramWebApp } from '../types/telegram.js'
 
 type OnboardingStep = 'login' | 'onboarding' | 'complete'
 type Gender = 'MALE' | 'FEMALE' | 'OTHER'
@@ -30,6 +15,7 @@ interface OnboardingData {
   currentWeightKg: number
   targetWeightKg: number | null
   primaryGoal: PrimaryGoal
+  name: string
 }
 
 function getPrimaryGoalLabel(goal: PrimaryGoal): string {
@@ -66,51 +52,43 @@ export function LoginScreen() {
     currentWeightKg: 70,
     targetWeightKg: null,
     primaryGoal: 'HEALTH',
+    name: '',
   })
-
-  const isProduction = import.meta.env.VITE_NODE_ENV === 'production' || !import.meta.env.VITE_ALLOW_DEMO
 
   useEffect(() => {
     let cancelled = false
 
-    const runLogin = async () => {
-      // Debug URL immediately
-      const rawHref = typeof window !== 'undefined' ? window.location.href : 'no-window'
-      const rawSearch = typeof window !== 'undefined' ? window.location.search : 'no-search'
-      setDebug(`href=${rawHref}, search=${rawSearch}`)
-      await wait(50)
-
-      // 1. Try start_token from URL first (fallback when initData is unavailable)
-      const startToken = getUrlParam('start_token')
-      if (startToken) {
-        setDebug(`found start_token in URL: ${startToken.slice(0, 8)}...`)
-        try {
-          const res = await api.post('/auth/start-token', { token: startToken })
-          const { accessToken, user } = res.data
-          setToken(accessToken)
-          setUser(user)
-
-          const statusRes = await api.get('/users/me/onboarding-status', {
-            headers: { Authorization: 'Bearer ' + accessToken },
-          })
-          if (statusRes.data.onboardingCompleted) {
-            setStep('complete')
-          } else {
-            setStep('onboarding')
-          }
-          return
-        } catch (err: any) {
-          const serverMsg = err.response?.data?.error?.message || ''
-          setError(serverMsg || err.message || 'Start token login failed')
-          setDebug('start_token error: ' + serverMsg)
-          setLoading(false)
-          return
-        }
+    const finishAuth = async (accessToken: string, user: any) => {
+      if (cancelled) return
+      setToken(accessToken)
+      setUser(user)
+      try {
+        const statusRes = await api.get('/users/me/onboarding-status', {
+          headers: { Authorization: 'Bearer ' + accessToken },
+        })
+        setStep(statusRes.data.onboardingCompleted ? 'complete' : 'onboarding')
+      } catch (err: any) {
+        setStep('onboarding')
       }
+    }
 
-      // 2. Try Telegram initData
+    const tryStartToken = async (): Promise<boolean> => {
+      const startToken = getUrlParam('start_token') || getUrlParam('tgWebAppStartParam')
+      if (!startToken) return false
+      setDebug(`found start_token in URL: ${startToken.slice(0, 8)}...`)
+      try {
+        const res = await api.post('/auth/start-token', { token: startToken })
+        await finishAuth(res.data.accessToken, res.data.user)
+        return true
+      } catch (err: any) {
+        const serverMsg = err.response?.data?.error?.message || err.message || ''
+        setDebug('start_token error: ' + serverMsg)
+        return false
+      }
+    }
+
+    const tryTelegramInitData = async (): Promise<boolean> => {
       const webApp = typeof window !== 'undefined' ? window.Telegram?.WebApp : undefined
-
       try {
         webApp?.ready()
         webApp?.expand()
@@ -120,69 +98,58 @@ export function LoginScreen() {
 
       let attempts = 0
       const maxAttempts = 60
-      let lastInitDataLen = 0
-      let lastUserName = ''
-
       while (!cancelled && attempts < maxAttempts) {
         const initData = webApp?.initData
-        const user = webApp?.initDataUnsafe?.user
+        const unsafeUser = webApp?.initDataUnsafe?.user
         attempts++
-
-        if (user) {
-          setTgUser(user)
-          lastUserName = user.first_name || user.username || 'unknown'
+        if (unsafeUser) {
+          setTgUser(unsafeUser)
+          setDebug(`attempt=${attempts}, initDataLen=${(initData || '').length}, user=${unsafeUser.first_name || unsafeUser.username || 'unknown'}`)
         }
-        lastInitDataLen = initData?.length || 0
-        setDebug(`attempt=${attempts}, initDataLen=${lastInitDataLen}, user=${lastUserName}`)
-
-        if (initData && user) {
-          break
+        if (initData && unsafeUser) {
+          try {
+            const res = await api.post('/auth/telegram', { initData })
+            await finishAuth(res.data.accessToken, res.data.user)
+            return true
+          } catch (err: any) {
+            const serverMsg = err.response?.data?.error?.message || err.message || ''
+            setError(serverMsg || 'Telegram login failed')
+            setDebug(`auth error: ${serverMsg}`)
+            setLoading(false)
+            return true
+          }
         }
-
         await wait(200)
       }
+      return false
+    }
 
-      const initData = webApp?.initData
-      const user = webApp?.initDataUnsafe?.user
-
-      if (!initData || !user) {
-        if (cancelled) return
-        setDebug(`no initData after ${maxAttempts} attempts. initDataLen=${lastInitDataLen}, user=${lastUserName}`)
-        if (!webApp) {
-          setError('Это приложение работает только внутри Telegram Mini App.')
-        } else {
-          setError('Не удалось получить данные Telegram. Убедитесь, что вы открыли приложение через кнопку бота.')
-        }
-        setLoading(false)
-        return
-      }
-
-      if (cancelled) return
-      setError('')
-      setDebug(`sending /auth/telegram, user=${user.first_name || user.username || 'unknown'}`)
-
+    const tryGuest = async () => {
+      setDebug((prev) => prev + '; falling back to guest auth')
       try {
-        const res = await api.post('/auth/telegram', { initData })
-        const { accessToken, user: apiUser } = res.data
-        setToken(accessToken)
-        setUser(apiUser)
-
-        const statusRes = await api.get('/users/me/onboarding-status', {
-          headers: { Authorization: 'Bearer ' + accessToken },
+        const res = await api.post('/auth/guest', {
+          firstName: onboarding.name || undefined,
+          languageCode: 'ru',
         })
-        if (statusRes.data.onboardingCompleted) {
-          setStep('complete')
-        } else {
-          setStep('onboarding')
-        }
+        await finishAuth(res.data.accessToken, res.data.user)
       } catch (err: any) {
-        const serverMsg = err.response?.data?.error?.message || ''
-        const serverCode = err.response?.data?.error?.code || ''
-        setError(serverMsg || err.message || 'Login failed')
-        setDebug(`auth error code=${serverCode}, msg=${serverMsg}`)
-      } finally {
+        const serverMsg = err.response?.data?.error?.message || err.message || 'Guest login failed'
+        setError(serverMsg)
+        setDebug('guest auth error: ' + serverMsg)
         setLoading(false)
       }
+    }
+
+    const runLogin = async () => {
+      const rawHref = typeof window !== 'undefined' ? window.location.href : 'no-window'
+      const rawSearch = typeof window !== 'undefined' ? window.location.search : 'no-search'
+      setDebug(`href=${rawHref}, search=${rawSearch}`)
+      await wait(50)
+
+      if (await tryStartToken()) return
+      if (await tryTelegramInitData()) return
+      if (cancelled) return
+      await tryGuest()
     }
 
     runLogin()
@@ -190,23 +157,6 @@ export function LoginScreen() {
       cancelled = true
     }
   }, [setToken, setUser])
-
-  const handleDemoLogin = async () => {
-    setLoading(true)
-    setError('')
-    setDebug('demo login requested')
-    try {
-      const res = await api.post('/auth/demo')
-      const { accessToken, user } = res.data
-      setToken(accessToken)
-      setUser(user)
-      setStep('onboarding')
-    } catch (err: any) {
-      setError(err.response?.data?.error?.message || err.message || 'Login failed')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const submitOnboarding = async () => {
     setLoading(true)
@@ -216,6 +166,7 @@ export function LoginScreen() {
       birthDate.setFullYear(birthDate.getFullYear() - onboarding.age)
 
       const update = {
+        firstName: onboarding.name || onboarding.name || 'Гость',
         birthDate: birthDate.toISOString(),
         gender: onboarding.gender,
         heightCm: onboarding.heightCm,
@@ -278,18 +229,9 @@ export function LoginScreen() {
 
         {error && <div style={{ marginBottom: 16, padding: '10px 12px', background: 'var(--rose-dim)', borderRadius: 12, color: 'var(--rose)', fontSize: 13 }}>{error}</div>}
 
-        {loading ? (
+        {loading && (
           <>
             <p style={{ color: 'var(--text-secondary)' }}>Вход...</p>
-            {debug && <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 12, wordBreak: 'break-all' }}>{debug}</p>}
-          </>
-        ) : (
-          <>
-            {!isProduction && (
-              <Button variant="primary" size="lg" fullWidth onClick={handleDemoLogin} disabled={loading}>
-                Начать путь
-              </Button>
-            )}
             {debug && <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 12, wordBreak: 'break-all' }}>{debug}</p>}
           </>
         )}
@@ -335,11 +277,21 @@ function OnboardingForm({ tgUser, onboarding, setOnboarding, loading, error, onS
           textAlign: 'center',
         }}
       >
-        {tgUser && (
+        {tgUser ? (
           <div style={{ marginBottom: 20 }}>
             <Avatar src={tgUser.photo_url} fallback={tgUser.first_name?.[0] || '👤'} size={64} />
             <p style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', margin: '8px 0 0' }}>
               Привет, {tgUser.first_name || 'друг'}!
+            </p>
+          </div>
+        ) : (
+          <div style={{ marginBottom: 20 }}>
+            <Avatar fallback={onboarding.name?.[0] || '👤'} size={64} />
+            <p style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', margin: '8px 0 0' }}>
+              Привет!
+            </p>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '4px 0 0' }}>
+              Telegram не поделился данными — введите имя вручную.
             </p>
           </div>
         )}
@@ -354,6 +306,29 @@ function OnboardingForm({ tgUser, onboarding, setOnboarding, loading, error, onS
         {error && <div style={{ marginBottom: 16, padding: '10px 12px', background: 'var(--rose-dim)', borderRadius: 12, color: 'var(--rose)', fontSize: 13 }}>{error}</div>}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, textAlign: 'left' }}>
+          {!tgUser && (
+            <div>
+              <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'block', marginBottom: 8 }}>Ваше имя</label>
+              <input
+                type="text"
+                value={onboarding.name}
+                onChange={(e) => setOnboarding({ ...onboarding, name: e.target.value })}
+                placeholder="Как к вам обращаться?"
+                style={{
+                  width: '100%',
+                  padding: '12px 14px',
+                  borderRadius: 12,
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-input)',
+                  color: 'var(--text-primary)',
+                  fontSize: 16,
+                  fontFamily: 'inherit',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+          )}
+
           <NumberField
             label="Сколько вам лет?"
             value={onboarding.age}

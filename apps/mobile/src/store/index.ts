@@ -2,7 +2,8 @@ import { create } from 'zustand'
 
 export interface User {
   id: string
-  telegramId?: string
+  telegramId?: string | null
+  telegramUsername?: string | null
   firstName: string
   lastName?: string | null
   username?: string | null

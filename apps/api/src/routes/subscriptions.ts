@@ -69,7 +69,7 @@ const subscriptionRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance
     let stripeCustomerId = user.stripeCustomerId
     if (!stripeCustomerId) {
       const customer = await stripe.customers.create({
-        metadata: { telegramId: user.telegramId.toString(), userId: user.id },
+        metadata: { telegramId: user.telegramId?.toString() ?? '', userId: user.id },
       })
       stripeCustomerId = customer.id
       await prisma.user.update({

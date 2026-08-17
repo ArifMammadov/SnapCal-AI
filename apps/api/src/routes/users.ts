@@ -45,7 +45,7 @@ export const userRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
     if (!user) return null
     return {
       ...user,
-      telegramId: user.telegramId.toString(),
+      telegramId: user.telegramId?.toString() ?? null,
       subscriptions: user.subscriptions.map((s: { stripeSubscriptionId: string | null }) => ({
         ...s,
         stripeSubscriptionId: s.stripeSubscriptionId ?? undefined,

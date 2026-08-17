@@ -26,7 +26,7 @@ const exportRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
       user: user
         ? {
             id: user.id,
-            telegramId: user.telegramId.toString(),
+            telegramId: user.telegramId?.toString() ?? null,
             telegramUsername: user.telegramUsername,
             firstName: user.firstName,
             lastName: user.lastName,
