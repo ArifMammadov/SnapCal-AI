@@ -63,6 +63,7 @@ export function LoginScreen() {
     primaryGoal: 'HEALTH',
     name: '',
   })
+  const [authUser, setAuthUser] = useState<any>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -78,6 +79,7 @@ export function LoginScreen() {
           setUser(authUser)
           setStep('complete')
         } else {
+          setAuthUser(authUser)
           setOnboarding((prev) => ({
             ...prev,
             name: authUser.firstName || prev.name,
@@ -200,13 +202,27 @@ export function LoginScreen() {
       }
 
       await api.patch('/users/me/profile', update)
-      setStep('complete')
-      const me = await api.get('/users/me')
-      setUser(me.data)
+      const savedUser = authUser
+        ? {
+            ...authUser,
+            firstName: update.firstName,
+            profile: {
+              ...(authUser.profile || {}),
+              birthDate: update.birthDate,
+              gender: update.gender,
+              heightCm: update.heightCm,
+              currentWeightKg: update.currentWeightKg,
+              targetWeightKg: update.targetWeightKg ?? null,
+              primaryGoal: update.primaryGoal,
+              activityLevel: update.activityLevel,
+            },
+          }
+        : null
+      if (savedUser) setUser(savedUser)
     } catch (err: any) {
       setError(err.response?.data?.error?.message || err.message || 'Failed to save profile')
-    } finally {
       setLoading(false)
+      return
     }
   }
 
@@ -223,44 +239,27 @@ export function LoginScreen() {
     )
   }
 
-  return (
-    <div
-      style={{
-        minHeight: '100vh',
-        background: 'var(--bg)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 24,
-      }}
-    >
-      <Card
+  if (step === 'complete') {
+    return (
+      <div
         style={{
-          width: '100%',
-          maxWidth: 340,
-          padding: '36px 28px',
-          textAlign: 'center',
+          minHeight: '100vh',
+          background: 'var(--bg)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 24,
         }}
       >
-        <div style={{ fontSize: 56, marginBottom: 16 }}>🥗</div>
-        <h1 className="font-display" style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 8px' }}>
-          SnapCal AI
-        </h1>
-        <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: '0 0 24px', lineHeight: 1.5 }}>
-          AI nutrition coach, calorie tracker, and transformation plans
-        </p>
+        <Card style={{ width: '100%', maxWidth: 340, padding: '36px 28px', textAlign: 'center' }}>
+          <div style={{ fontSize: 56, marginBottom: 16 }}>🥗</div>
+          <p style={{ color: 'var(--text-secondary)' }}>Вход...</p>
+        </Card>
+      </div>
+    )
+  }
 
-        {error && <div style={{ marginBottom: 16, padding: '10px 12px', background: 'var(--rose-dim)', borderRadius: 12, color: 'var(--rose)', fontSize: 13 }}>{error}</div>}
-
-        {loading && (
-          <>
-            <p style={{ color: 'var(--text-secondary)' }}>Вход...</p>
-            {debug && <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 12, wordBreak: 'break-all' }}>{debug}</p>}
-          </>
-        )}
-      </Card>
-    </div>
-  )
+  return null
 }
 
 interface OnboardingFormProps {
