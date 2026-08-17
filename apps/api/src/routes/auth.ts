@@ -42,7 +42,22 @@ function parseUser(userJson: string) {
 }
 
 export async function authRoutes(app: FastifyInstance) {
-  app.post('/demo', async (request: FastifyRequest, reply: FastifyReply) => {
+  // Demo auth is disabled in production. It remains available in development/test and for non-Telegram browser fallback.
+  app.post('/demo', {
+    config: { rateLimit: { max: 5, timeWindow: '1 minute' } },
+  }, async (request: FastifyRequest, reply: FastifyReply) => {
+    if (env.NODE_ENV === 'production') {
+      await auditLog({
+        userId: 'anonymous',
+        event: AuditEvent.LOGIN_FAILED,
+        ip: request.ip,
+        userAgent: request.headers['user-agent'],
+        metadata: { reason: 'demo_disabled_in_production' },
+        severity: 'warning',
+      })
+      return reply.status(403).send({ error: { code: 'DEMO_DISABLED', message: 'Demo access is disabled in production.' } })
+    }
+
     const demoTelegramId = 999999999
     let user = await prisma.user.findUnique({
       where: { telegramId: BigInt(demoTelegramId) },
@@ -80,7 +95,10 @@ export async function authRoutes(app: FastifyInstance) {
       user: {
         id: user.id,
         telegramId: user.telegramId.toString(),
+        telegramUsername: user.telegramUsername,
         firstName: user.firstName,
+        lastName: user.lastName,
+        avatarUrl: user.avatarUrl,
         languageCode: user.languageCode,
         role: user.role,
         subscriptionStatus: user.subscriptionStatus,
@@ -142,12 +160,22 @@ export async function authRoutes(app: FastifyInstance) {
         },
         include: { profile: true },
       })
-    } else if (user.languageCode !== languageCode) {
-      user = await prisma.user.update({
-        where: { id: user.id },
-        data: { languageCode },
-        include: { profile: true },
-      })
+    } else {
+      // Keep Telegram profile data in sync on every login
+      const updateData: any = {}
+      if (user.telegramUsername !== tgUser.username) updateData.telegramUsername = tgUser.username
+      if (user.firstName !== tgUser.first_name) updateData.firstName = tgUser.first_name
+      if (user.lastName !== tgUser.last_name) updateData.lastName = tgUser.last_name
+      if (user.avatarUrl !== tgUser.photo_url) updateData.avatarUrl = tgUser.photo_url
+      if (user.languageCode !== languageCode) updateData.languageCode = languageCode
+
+      if (Object.keys(updateData).length > 0) {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: updateData,
+          include: { profile: true },
+        })
+      }
     }
 
     const accessToken = app.jwt.sign(
@@ -179,7 +207,10 @@ export async function authRoutes(app: FastifyInstance) {
       user: {
         id: user.id,
         telegramId: user.telegramId.toString(),
+        telegramUsername: user.telegramUsername,
         firstName: user.firstName,
+        lastName: user.lastName,
+        avatarUrl: user.avatarUrl,
         languageCode: user.languageCode,
         role: user.role,
         subscriptionStatus: user.subscriptionStatus,

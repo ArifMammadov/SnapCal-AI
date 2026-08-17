@@ -59,7 +59,7 @@ export const userRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
       include: { profile: true },
     })
 
-    const requiredFields = ['gender', 'heightCm', 'currentWeightKg', 'birthDate', 'primaryGoal', 'activityLevel'] as const
+    const requiredFields = ['gender', 'heightCm', 'currentWeightKg', 'birthDate', 'primaryGoal'] as const
     const missing: string[] = []
     for (const field of requiredFields) {
       if (!user?.profile?.[field]) missing.push(field)

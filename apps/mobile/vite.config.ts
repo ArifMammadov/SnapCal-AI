@@ -4,6 +4,10 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  define: {
+    'import.meta.env.VITE_NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
+    'import.meta.env.VITE_ALLOW_DEMO': JSON.stringify(process.env.VITE_ALLOW_DEMO || 'true'),
+  },
   server: {
     port: 5173,
     host: '0.0.0.0',
