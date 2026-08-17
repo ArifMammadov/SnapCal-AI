@@ -52,7 +52,8 @@ jobs:
             pnpm install --frozen-lockfile
             pnpm --filter @snapcal/database build
             pnpm --filter @snapcal/shared build
-            pnpm --filter @snapcal/database exec prisma migrate deploy
+            cd packages/database && npx prisma migrate deploy
+            cd /opt/snapcal-main
             pnpm --filter @snapcal/api build
             pnpm --filter @snapcal/ai-agent build
             pnpm --filter @snapcal/telegram-bot build
@@ -94,7 +95,8 @@ jobs:
             pnpm install --frozen-lockfile
             pnpm --filter @snapcal/database build
             pnpm --filter @snapcal/shared build
-            pnpm --filter @snapcal/database exec prisma migrate deploy
+            cd packages/database && npx prisma migrate deploy
+            cd /opt/snapcal-main
             pnpm --filter @snapcal/api build
             pnpm --filter @snapcal/ai-agent build
             pnpm --filter @snapcal/telegram-bot build
@@ -136,7 +138,8 @@ jobs:
             pnpm install --frozen-lockfile
             pnpm --filter @snapcal/database build
             pnpm --filter @snapcal/shared build
-            pnpm --filter @snapcal/database exec prisma migrate deploy
+            cd packages/database && npx prisma migrate deploy
+            cd /opt/snapcal-main
             pnpm --filter @snapcal/api build
             pnpm --filter @snapcal/ai-agent build
             pnpm --filter @snapcal/telegram-bot build
