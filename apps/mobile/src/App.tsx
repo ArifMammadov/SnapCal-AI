@@ -42,7 +42,7 @@ export function App() {
   const { ready } = useTelegram()
   const user = useAppStore((s) => s.user)
   const [darkMode, setDarkMode] = useState(true)
-  const [activeTab, setActiveTab] = useState<Tab>('home')
+  const [activeTab, setActiveTab] = useState<Tab>('coach')
   const [showMarketplace, setShowMarketplace] = useState(false)
 
   if (!ready) {
