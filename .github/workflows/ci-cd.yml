@@ -1,18 +1,168 @@
--- CreateTable
-CREATE TABLE "telegram_start_tokens" (
-    "id" UUID NOT NULL,
-    "token" TEXT NOT NULL,
-    "telegramId" BIGINT NOT NULL,
-    "used" BOOLEAN NOT NULL DEFAULT false,
-    "usedAt" TIMESTAMP(3),
-    "expiresAt" TIMESTAMP(3) NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+name: CI/CD
 
-    CONSTRAINT "telegram_start_tokens_pkey" PRIMARY KEY ("id")
-);
+on:
+  push:
+    branches: [main, preprod, test]
+  pull_request:
+    branches: [main, preprod, test]
+    types: [opened, synchronize, reopened]
 
--- CreateIndex
-CREATE UNIQUE INDEX "telegram_start_tokens_token_key" ON "telegram_start_tokens"("token");
+env:
+  NODE_VERSION: '22'
 
--- CreateIndex
-CREATE INDEX "telegram_start_tokens_token_idx" ON "telegram_start_tokens"("token");
+jobs:
+  lint-and-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @snapcal/database build
+      - run: pnpm --filter @snapcal/shared build
+      - run: pnpm run typecheck
+
+  deploy-test:
+    runs-on: ubuntu-latest
+    needs: lint-and-typecheck
+    if: github.ref == 'refs/heads/test'
+    environment:
+      name: test
+      url: https://test.snapcal.health
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to test droplet
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.DO_PROD_SSH_KEY }}
+          envs: DATABASE_URL
+          script_stop: true
+          script: |
+            set -e
+            cd /opt/snapcal-test
+            git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/ArifMammadov/SnapCal-AI.git
+            git fetch origin
+            git checkout -f origin/test
+            pnpm install --frozen-lockfile
+            pnpm --filter @snapcal/database build
+            pnpm --filter @snapcal/shared build
+            cd packages/database && DATABASE_URL="$DATABASE_URL" npx prisma migrate deploy
+            cd /opt/snapcal-test
+            pnpm --filter @snapcal/api build
+            pnpm --filter @snapcal/ai-agent build
+            pnpm --filter @snapcal/telegram-bot build
+            pnpm --filter @snapcal/admin build
+            pnpm --filter @snapcal/mobile build
+            cp infra/systemd/snapcal-api-test.service /etc/systemd/system/
+            cp infra/systemd/snapcal-ai-test.service /etc/systemd/system/
+            systemctl daemon-reload
+            systemctl restart snapcal-api-test snapcal-ai-test || true
+            sleep 5
+            systemctl status snapcal-api-test --no-pager || true
+            systemctl status snapcal-ai-test --no-pager || true
+            curl -s -o /dev/null -w '%{http_code}' http://localhost:4004/health | grep -q 200 || (echo "API health failed"; exit 1)
+            curl -s -o /dev/null -w '%{http_code}' http://localhost:4005/health | grep -q 200 || (echo "AI health failed"; exit 1)
+            echo "Test deploy done"
+
+  deploy-preprod:
+    runs-on: ubuntu-latest
+    needs: lint-and-typecheck
+    if: github.ref == 'refs/heads/preprod'
+    environment:
+      name: preprod
+      url: https://preprod.snapcal.health
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to preprod droplet
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.DO_PROD_SSH_KEY }}
+          envs: DATABASE_URL
+          script_stop: true
+          script: |
+            set -e
+            cd /opt/snapcal-preprod
+            git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/ArifMammadov/SnapCal-AI.git
+            git fetch origin
+            git checkout -f origin/preprod
+            pnpm install --frozen-lockfile
+            pnpm --filter @snapcal/database build
+            pnpm --filter @snapcal/shared build
+            cd packages/database && DATABASE_URL="$DATABASE_URL" npx prisma migrate deploy
+            cd /opt/snapcal-preprod
+            pnpm --filter @snapcal/api build
+            pnpm --filter @snapcal/ai-agent build
+            pnpm --filter @snapcal/telegram-bot build
+            pnpm --filter @snapcal/admin build
+            pnpm --filter @snapcal/mobile build
+            cp infra/systemd/snapcal-api-preprod.service /etc/systemd/system/
+            cp infra/systemd/snapcal-ai-preprod.service /etc/systemd/system/
+            systemctl daemon-reload
+            systemctl restart snapcal-api-preprod snapcal-ai-preprod || true
+            sleep 5
+            systemctl status snapcal-api-preprod --no-pager || true
+            systemctl status snapcal-ai-preprod --no-pager || true
+            curl -s -o /dev/null -w '%{http_code}' http://localhost:4002/health | grep -q 200 || (echo "API health failed"; exit 1)
+            curl -s -o /dev/null -w '%{http_code}' http://localhost:4003/health | grep -q 200 || (echo "AI health failed"; exit 1)
+            echo "Preprod deploy done"
+
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: lint-and-typecheck
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: https://snapcal.health
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy main to production droplet
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.DO_PROD_SSH_KEY }}
+          envs: DATABASE_URL
+          script_stop: true
+          script: |
+            set -e
+            cd /opt/snapcal-main
+            git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/ArifMammadov/SnapCal-AI.git
+            git fetch origin
+            git checkout -f origin/main
+            pnpm install --frozen-lockfile
+            pnpm --filter @snapcal/database build
+            pnpm --filter @snapcal/shared build
+            cd packages/database && DATABASE_URL="$DATABASE_URL" npx prisma migrate deploy
+            cd /opt/snapcal-main
+            pnpm --filter @snapcal/api build
+            pnpm --filter @snapcal/ai-agent build
+            pnpm --filter @snapcal/telegram-bot build
+            pnpm --filter @snapcal/admin build
+            pnpm --filter @snapcal/mobile build
+            cp infra/systemd/snapcal-api-main.service /etc/systemd/system/
+            cp infra/systemd/snapcal-ai-main.service /etc/systemd/system/
+            systemctl daemon-reload
+            systemctl restart snapcal-api-main snapcal-ai-main || true
+            sleep 10
+            systemctl status snapcal-api-main --no-pager || true
+            systemctl status snapcal-ai-main --no-pager || true
+            journalctl -u snapcal-api-main -n 20 --no-pager || true
+            journalctl -u snapcal-ai-main -n 20 --no-pager || true
+            curl -s -o /dev/null -w '%{http_code}' http://localhost:4000/health | grep -q 200 || (echo "API health failed"; exit 1)
+            curl -s -o /dev/null -w '%{http_code}' http://localhost:4001/health | grep -q 200 || (echo "AI health failed"; exit 1)
+            echo "Production deploy done"
