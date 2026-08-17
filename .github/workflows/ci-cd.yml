@@ -34,6 +34,8 @@ jobs:
     environment:
       name: test
       url: https://test.snapcal.health
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
       - uses: actions/checkout@v4
       - name: Deploy to test droplet
@@ -42,6 +44,7 @@ jobs:
           host: ${{ secrets.PROD_HOST }}
           username: ${{ secrets.PROD_USER }}
           key: ${{ secrets.DO_PROD_SSH_KEY }}
+          envs: DATABASE_URL
           script_stop: true
           script: |
             set -e
@@ -52,11 +55,8 @@ jobs:
             pnpm install --frozen-lockfile
             pnpm --filter @snapcal/database build
             pnpm --filter @snapcal/shared build
-            set -a
-            . /opt/snapcal-main/apps/api/.env
-            set +a
-            cd packages/database && npx prisma migrate deploy
-            cd /opt/snapcal-main
+            cd packages/database && DATABASE_URL="$DATABASE_URL" npx prisma migrate deploy
+            cd /opt/snapcal-test
             pnpm --filter @snapcal/api build
             pnpm --filter @snapcal/ai-agent build
             pnpm --filter @snapcal/telegram-bot build
@@ -80,6 +80,8 @@ jobs:
     environment:
       name: preprod
       url: https://preprod.snapcal.health
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
       - uses: actions/checkout@v4
       - name: Deploy to preprod droplet
@@ -88,6 +90,7 @@ jobs:
           host: ${{ secrets.PROD_HOST }}
           username: ${{ secrets.PROD_USER }}
           key: ${{ secrets.DO_PROD_SSH_KEY }}
+          envs: DATABASE_URL
           script_stop: true
           script: |
             set -e
@@ -98,11 +101,8 @@ jobs:
             pnpm install --frozen-lockfile
             pnpm --filter @snapcal/database build
             pnpm --filter @snapcal/shared build
-            set -a
-            . /opt/snapcal-main/apps/api/.env
-            set +a
-            cd packages/database && npx prisma migrate deploy
-            cd /opt/snapcal-main
+            cd packages/database && DATABASE_URL="$DATABASE_URL" npx prisma migrate deploy
+            cd /opt/snapcal-preprod
             pnpm --filter @snapcal/api build
             pnpm --filter @snapcal/ai-agent build
             pnpm --filter @snapcal/telegram-bot build
@@ -126,6 +126,8 @@ jobs:
     environment:
       name: production
       url: https://snapcal.health
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
       - uses: actions/checkout@v4
       - name: Deploy main to production droplet
@@ -134,6 +136,7 @@ jobs:
           host: ${{ secrets.PROD_HOST }}
           username: ${{ secrets.PROD_USER }}
           key: ${{ secrets.DO_PROD_SSH_KEY }}
+          envs: DATABASE_URL
           script_stop: true
           script: |
             set -e
@@ -144,10 +147,7 @@ jobs:
             pnpm install --frozen-lockfile
             pnpm --filter @snapcal/database build
             pnpm --filter @snapcal/shared build
-            set -a
-            . /opt/snapcal-main/apps/api/.env
-            set +a
-            cd packages/database && npx prisma migrate deploy
+            cd packages/database && DATABASE_URL="$DATABASE_URL" npx prisma migrate deploy
             cd /opt/snapcal-main
             pnpm --filter @snapcal/api build
             pnpm --filter @snapcal/ai-agent build
