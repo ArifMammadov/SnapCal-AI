@@ -2,10 +2,11 @@
 CREATE TABLE "telegram_start_tokens" (
     "id" UUID NOT NULL,
     "token" TEXT NOT NULL,
-    "telegram_id" BIGINT NOT NULL,
+    "telegramId" BIGINT NOT NULL,
     "used" BOOLEAN NOT NULL DEFAULT false,
-    "expires_at" TIMESTAMP(3) NOT NULL,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "usedAt" TIMESTAMP(3),
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "telegram_start_tokens_pkey" PRIMARY KEY ("id")
 );
