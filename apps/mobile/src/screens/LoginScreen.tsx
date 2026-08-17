@@ -355,7 +355,7 @@ function OnboardingForm({ tgUser, onboarding, setOnboarding, loading, error, onS
           <NumberField
             label="Сколько вам лет?"
             value={onboarding.age}
-            onChange={(v) => setOnboarding({ ...onboarding, age: v })}
+            onChange={(v: number | null) => setOnboarding({ ...onboarding, age: v ?? 18 })}
             min={10}
             max={120}
           />
@@ -390,7 +390,7 @@ function OnboardingForm({ tgUser, onboarding, setOnboarding, loading, error, onS
           <NumberField
             label="Рост (см)"
             value={onboarding.heightCm}
-            onChange={(v) => setOnboarding({ ...onboarding, heightCm: v })}
+            onChange={(v: number | null) => setOnboarding({ ...onboarding, heightCm: v ?? 170 })}
             min={50}
             max={300}
           />
@@ -398,15 +398,15 @@ function OnboardingForm({ tgUser, onboarding, setOnboarding, loading, error, onS
           <NumberField
             label="Текущий вес (кг)"
             value={onboarding.currentWeightKg}
-            onChange={(v) => setOnboarding({ ...onboarding, currentWeightKg: v })}
+            onChange={(v: number | null) => setOnboarding({ ...onboarding, currentWeightKg: v ?? 70 })}
             min={20}
             max={300}
           />
 
           <NumberField
             label="Желаемый вес (кг) — необязательно"
-            value={onboarding.targetWeightKg ?? 0}
-            onChange={(v) => setOnboarding({ ...onboarding, targetWeightKg: v === 0 ? null : v })}
+            value={onboarding.targetWeightKg}
+            onChange={(v: number | null) => setOnboarding({ ...onboarding, targetWeightKg: v === null ? null : v })}
             min={20}
             max={300}
             optional
@@ -450,31 +450,63 @@ function OnboardingForm({ tgUser, onboarding, setOnboarding, loading, error, onS
 
 interface NumberFieldProps {
   label: string
-  value: number | ''
-  onChange: (v: number) => void
+  value: number | '' | null
+  onChange: (v: number | null) => void
   min: number
   max: number
   optional?: boolean
 }
 
 function NumberField({ label, value, onChange, min, max, optional }: NumberFieldProps) {
+  const [draft, setDraft] = useState(formatValue(value))
+
+  useEffect(() => {
+    setDraft(formatValue(value))
+  }, [value])
+
+  function formatValue(v: number | '' | null): string {
+    if (v === null || v === '') return ''
+    return String(v)
+  }
+
+  function clamp(n: number | null): number | null {
+    if (n === null) return optional ? null : min
+    if (n < min) return min
+    if (n > max) return max
+    return n
+  }
+
+  function commit(raw: string) {
+    if (raw === '' || raw === '-' || raw === '.' || raw === ',') {
+      const fallback = optional ? null : min
+      onChange(fallback)
+      setDraft(formatValue(fallback))
+      return
+    }
+    const normalized = raw.replace(',', '.')
+    const n = Number(normalized)
+    if (Number.isNaN(n)) {
+      setDraft(formatValue(value))
+      return
+    }
+    const final = clamp(n)
+    onChange(final)
+    setDraft(formatValue(final))
+  }
+
   return (
     <div>
       <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'block', marginBottom: 8 }}>
         {label}
       </label>
       <input
-        type="number"
+        type="text"
         inputMode="decimal"
-        value={value}
-        onChange={(e) => {
-          const raw = e.target.value
-          if (raw === '') {
-            if (optional) onChange(min)
-            return
-          }
-          const n = Number(raw)
-          if (!Number.isNaN(n)) onChange(Math.min(max, Math.max(min, n)))
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={(e) => commit(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commit((e.target as HTMLInputElement).value)
         }}
         style={{
           width: '100%',
