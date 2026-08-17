@@ -15,6 +15,7 @@ export const requireAuth = async (request: FastifyRequest, reply: FastifyReply) 
 }
 
 const updateProfileSchema = z.object({
+  firstName: z.string().min(1).max(100).optional(),
   birthDate: z.string().datetime().optional(),
   gender: z.enum(['MALE', 'FEMALE', 'OTHER']).optional(),
   heightCm: z.number().int().min(50).max(300).optional(),
@@ -81,6 +82,10 @@ export const userRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
   app.patch('/me/profile', async (request: FastifyRequest) => {
     const data = updateProfileSchema.parse(request.body)
     const userId = request.user!.userId
+
+    if (data.firstName) {
+      await prisma.user.update({ where: { id: userId }, data: { firstName: data.firstName } })
+    }
 
     const existing = await prisma.profile.findUnique({ where: { userId } })
 

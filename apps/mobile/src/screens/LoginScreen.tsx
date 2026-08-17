@@ -202,6 +202,7 @@ export function LoginScreen() {
       }
 
       await api.patch('/users/me/profile', update)
+      setStep('complete')
       const savedUser = authUser
         ? {
             ...authUser,
@@ -219,7 +220,9 @@ export function LoginScreen() {
           }
         : null
       if (savedUser) setUser(savedUser)
+      if (!savedUser) setError('Unable to finalize login')
     } catch (err: any) {
+      console.error('[submitOnboarding error]', err)
       setError(err.response?.data?.error?.message || err.message || 'Failed to save profile')
       setLoading(false)
       return
