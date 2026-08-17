@@ -31,6 +31,15 @@ function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+function calculateAge(birthDate: string): number {
+  const today = new Date()
+  const birth = new Date(birthDate)
+  let age = today.getFullYear() - birth.getFullYear()
+  const m = today.getMonth() - birth.getMonth()
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--
+  return age
+}
+
 function getUrlParam(name: string): string | null {
   if (typeof window === 'undefined') return null
   return new URLSearchParams(window.location.search).get(name)
@@ -58,15 +67,29 @@ export function LoginScreen() {
   useEffect(() => {
     let cancelled = false
 
-    const finishAuth = async (accessToken: string, user: any) => {
+    const finishAuth = async (accessToken: string, authUser: any) => {
       if (cancelled) return
       setToken(accessToken)
-      setUser(user)
       try {
         const statusRes = await api.get('/users/me/onboarding-status', {
           headers: { Authorization: 'Bearer ' + accessToken },
         })
-        setStep(statusRes.data.onboardingCompleted ? 'complete' : 'onboarding')
+        if (statusRes.data.onboardingCompleted) {
+          setUser(authUser)
+          setStep('complete')
+        } else {
+          setOnboarding((prev) => ({
+            ...prev,
+            name: authUser.firstName || prev.name,
+            age: authUser.profile?.birthDate ? calculateAge(authUser.profile.birthDate) : prev.age,
+            gender: (authUser.profile?.gender as Gender) || prev.gender,
+            heightCm: authUser.profile?.heightCm ?? prev.heightCm,
+            currentWeightKg: authUser.profile?.currentWeightKg ?? prev.currentWeightKg,
+            targetWeightKg: authUser.profile?.targetWeightKg ?? prev.targetWeightKg,
+            primaryGoal: (authUser.profile?.primaryGoal as PrimaryGoal) || prev.primaryGoal,
+          }))
+          setStep('onboarding')
+        }
       } catch (err: any) {
         setStep('onboarding')
       }
@@ -166,7 +189,7 @@ export function LoginScreen() {
       birthDate.setFullYear(birthDate.getFullYear() - onboarding.age)
 
       const update = {
-        firstName: onboarding.name || onboarding.name || 'Гость',
+        firstName: onboarding.name || 'Гость',
         birthDate: birthDate.toISOString(),
         gender: onboarding.gender,
         heightCm: onboarding.heightCm,
