@@ -64,6 +64,7 @@ export function LoginScreen() {
   })
 
   const isProduction = import.meta.env.VITE_NODE_ENV === 'production' || !import.meta.env.VITE_ALLOW_DEMO
+  const isInsideTelegram = typeof window !== 'undefined' && !!window.Telegram?.WebApp?.initDataUnsafe
 
   useEffect(() => {
     let cancelled = false
@@ -71,7 +72,6 @@ export function LoginScreen() {
     const runLogin = async () => {
       const webApp = typeof window !== 'undefined' ? window.Telegram?.WebApp : undefined
 
-      // Tell Telegram WebView we are ready and request expanded viewport
       try {
         webApp?.ready()
         webApp?.expand()
@@ -79,9 +79,8 @@ export function LoginScreen() {
         // ignore
       }
 
-      // Wait for WebView to inject initData. It can take a while on some devices.
       let attempts = 0
-      const maxAttempts = 60 // up to 12 seconds total
+      const maxAttempts = 60
       let lastInitDataLen = 0
       let lastUserName = ''
 
@@ -110,8 +109,10 @@ export function LoginScreen() {
       if (!initData || !user) {
         if (cancelled) return
         setDebug(`no initData after ${maxAttempts} attempts. initDataLen=${lastInitDataLen}, user=${lastUserName}`)
-        if (isProduction) {
-          setError('Не удалось получить данные Telegram. Попробуйте закрыть и открыть приложение заново.')
+        if (!webApp) {
+          setError('Это приложение работает только внутри Telegram Mini App.')
+        } else {
+          setError('Не удалось получить данные Telegram. Убедитесь, что вы открыли приложение через кнопку бота.')
         }
         setLoading(false)
         return
@@ -123,9 +124,9 @@ export function LoginScreen() {
 
       try {
         const res = await api.post('/auth/telegram', { initData })
-        const { accessToken, user } = res.data
+        const { accessToken, user: apiUser } = res.data
         setToken(accessToken)
-        setUser(user)
+        setUser(apiUser)
 
         const statusRes = await api.get('/users/me/onboarding-status', {
           headers: { Authorization: 'Bearer ' + accessToken },
@@ -245,15 +246,15 @@ export function LoginScreen() {
           </>
         ) : (
           <>
-            {!isProduction && (
+            {!isInsideTelegram && (
+              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                Это приложение работает только внутри Telegram Mini App.
+              </p>
+            )}
+            {isInsideTelegram && !isProduction && (
               <Button variant="primary" size="lg" fullWidth onClick={handleDemoLogin} disabled={loading}>
                 Начать путь
               </Button>
-            )}
-            {isProduction && (
-              <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                Откройте приложение через Telegram для автоматического входа.
-              </p>
             )}
             {debug && <p style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 12, wordBreak: 'break-all' }}>{debug}</p>}
           </>
