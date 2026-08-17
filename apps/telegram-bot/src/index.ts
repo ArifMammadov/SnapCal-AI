@@ -28,23 +28,34 @@ bot.onText(/\/start/, async (msg) => {
     },
   })
 
-  await prisma.user.upsert({
-    where: { telegramId: BigInt(user.id) },
-    create: {
-      telegramId: BigInt(user.id),
-      telegramUsername: user.username,
-      firstName: user.first_name,
-      lastName: user.last_name,
-      languageCode: user.language_code ?? 'en',
-      trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      profile: { create: {} },
-    },
-    update: {
-      telegramUsername: user.username,
-      firstName: user.first_name,
-      lastName: user.last_name,
-    },
-  })
+  try {
+    await prisma.user.upsert({
+      where: { telegramId: BigInt(user.id) },
+      create: {
+        telegramId: BigInt(user.id),
+        telegramUsername: user.username,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        languageCode: user.language_code ?? 'en',
+        trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        profile: { create: {} },
+      },
+      update: {
+        telegramUsername: user.username,
+        firstName: user.first_name,
+        lastName: user.last_name,
+      },
+    })
+  } catch (err) {
+    logger.warn({ err, telegramId: user.id }, 'failed to upsert user from /start')
+  }
+})
+
+bot.on('web_app_data', async (msg) => {
+  const user = msg.from
+  const data = msg.web_app_data?.data
+  if (!user || !data) return
+  logger.info({ telegramId: user.id, data }, 'received web_app_data')
 })
 
 export async function sendTelegramNotification(telegramId: bigint, text: string, options?: TelegramBot.SendMessageOptions) {
