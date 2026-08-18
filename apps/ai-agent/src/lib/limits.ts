@@ -19,9 +19,9 @@ const DEFAULT_LIMITS: Record<string, LimitConfig> = {
   TRIAL: { maxRequestsPerDay: 1000, maxTokensPerDay: 200_000, maxCostUsdPerDay: 10, maxRequestsPerMinute: 30 },
   ACTIVE: { maxRequestsPerDay: 1000, maxTokensPerDay: 200_000, maxCostUsdPerDay: 10, maxRequestsPerMinute: 30 },
   TRIALING: { maxRequestsPerDay: 1000, maxTokensPerDay: 200_000, maxCostUsdPerDay: 10, maxRequestsPerMinute: 30 },
-  INACTIVE: { maxRequestsPerDay: 1, maxTokensPerDay: 2_000, maxCostUsdPerDay: 0.05, maxRequestsPerMinute: 5 },
-  CANCELED: { maxRequestsPerDay: 1, maxTokensPerDay: 2_000, maxCostUsdPerDay: 0.05, maxRequestsPerMinute: 5 },
-  PAST_DUE: { maxRequestsPerDay: 0, maxTokensPerDay: 0, maxCostUsdPerDay: 0, maxRequestsPerMinute: 0 },
+  INACTIVE: { maxRequestsPerDay: 100, maxTokensPerDay: 20_000, maxCostUsdPerDay: 1, maxRequestsPerMinute: 10 },
+  CANCELED: { maxRequestsPerDay: 100, maxTokensPerDay: 20_000, maxCostUsdPerDay: 1, maxRequestsPerMinute: 10 },
+  PAST_DUE: { maxRequestsPerDay: 10, maxTokensPerDay: 2_000, maxCostUsdPerDay: 0.2, maxRequestsPerMinute: 2 },
 }
 
 function getWindowKey(userId: string, suffix: string): string {
