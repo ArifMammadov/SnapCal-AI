@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { Button } from '../components/ui.js'
 import { useChat, type ChatMessage } from '../lib/data.js'
+import { useAppStore } from '../store/index.js'
 
 const suggestedPrompts = [
   '📸 Analyze a food photo',
@@ -11,17 +12,28 @@ const suggestedPrompts = [
   '💧 Am I drinking enough water?',
 ]
 
+const LOCALE = typeof navigator !== 'undefined' ? navigator.language : 'en'
+const IS_RUSSIAN = /^ru/.test(LOCALE)
+
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
+function detectConfirmation(text: string): boolean {
+  const lower = text.toLowerCase().trim()
+  return ['да', 'yes', 'д', 'y', 'ок', 'ok', 'давай', 'запиши'].includes(lower)
+}
+
 export function AICoachScreen() {
-  const { messages, sending, sendMessage, sendPhoto, logMetric } = useChat()
+  const user = useAppStore((s) => s.user)
+  const { messages, sending, sendMessage, sendPhoto, logMetric, setMessages, clearHistory } = useChat()
   const [input, setInput] = useState('')
   const [previewImage, setPreviewImage] = useState<string | null>(null)
+  const [listening, setListening] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const recognitionRef = useRef<any>(null)
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -29,19 +41,78 @@ export function AICoachScreen() {
     }
   }, [messages, sending])
 
-  const handleSend = () => {
+  const handleSend = useCallback(() => {
     const text = input.trim()
     if (!text || sending) return
     setInput('')
+
+    // Check for pending metric confirmation before sending to AI
+    const pending = findPendingMetric(messages)
+    if (pending && detectConfirmation(text)) {
+      // Remove the pending confirmation message from UI
+      setMessages((prev) => prev.filter((m) => m.id !== pending.confirmationMessageId))
+      logMetric(pending.metricType, pending.value, true)
+      return
+    }
+
     sendMessage(text)
-  }
+  }, [input, sending, messages, setMessages, logMetric, sendMessage])
+
+  const handleNewChat = useCallback(async () => {
+    if (window.confirm(IS_RUSSIAN ? 'Очистить историю чата?' : 'Clear chat history?')) {
+      const ok = await clearHistory()
+      if (ok) inputRef.current?.focus()
+    }
+  }, [clearHistory])
 
   const quickActions = [
-    { label: '💧 Вода', prompt: 'Log 250 ml of water', metric: ['WATER_ML', 250] as const },
-    { label: '😴 Сон', prompt: 'Log 7.5 hours of sleep', metric: ['SLEEP_H', 7.5] as const },
-    { label: '⚖️ Вес', prompt: 'Log weight', metric: ['WEIGHT_KG', 0] as const },
-    { label: '👟 Шаги', prompt: 'Log 5000 steps', metric: ['STEPS', 5000] as const },
+    { label: '💧 Вода', metric: ['WATER_ML', 250] as const },
+    { label: '😴 Сон', metric: ['SLEEP_H', 7.5] as const },
+    { label: '⚖️ Вес', metric: ['WEIGHT_KG', 0] as const },
+    { label: '👟 Шаги', metric: ['STEPS', 5000] as const },
   ]
+
+  const handleQuickMetric = useCallback((metricType: 'WATER_ML' | 'SLEEP_H' | 'WEIGHT_KG' | 'STEPS', value: number) => {
+    if (metricType === 'WEIGHT_KG') {
+      const weightStr = window.prompt(IS_RUSSIAN ? 'Введите ваш вес в кг' : 'Enter your weight in kg')
+      const weight = Number(weightStr)
+      if (!weightStr || Number.isNaN(weight) || weight <= 0) return
+      logMetric('WEIGHT_KG', weight, false)
+      return
+    }
+    logMetric(metricType, value, false)
+  }, [logMetric])
+
+  const toggleVoice = useCallback(() => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      window.alert(IS_RUSSIAN ? 'Голосовой ввод не поддерживается в этом браузере.' : 'Voice input is not supported in this browser.')
+      return
+    }
+    if (listening) {
+      recognitionRef.current?.stop()
+      return
+    }
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    const recognition = new SpeechRecognition()
+    recognition.lang = user?.languageCode ?? LOCALE
+    recognition.interimResults = false
+    recognition.maxAlternatives = 1
+    recognition.onstart = () => setListening(true)
+    recognition.onend = () => setListening(false)
+    recognition.onresult = (event: any) => {
+      const transcript = event.results?.[0]?.[0]?.transcript ?? ''
+      setInput((prev) => (prev ? `${prev} ${transcript}` : transcript))
+      inputRef.current?.focus()
+    }
+    recognition.onerror = () => {
+      setListening(false)
+      window.alert(IS_RUSSIAN ? 'Не удалось распознать голос. Попробуйте ещё раз.' : 'Could not recognize voice. Please try again.')
+    }
+    recognitionRef.current = recognition
+    recognition.start()
+  }, [listening, user?.languageCode])
+
+  const greeting = buildGreeting(user)
 
   const renderMessage = (msg: ChatMessage) => {
     const isUser = msg.role === 'USER'
@@ -161,44 +232,68 @@ export function AICoachScreen() {
           flexShrink: 0,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ position: 'relative' }}>
-            <div
-              style={{
-                width: 44,
-                height: 44,
-                borderRadius: '50%',
-                background: 'linear-gradient(135deg, var(--purple), var(--blue))',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 20,
-              }}
-            >
-              🤖
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ position: 'relative' }}>
+              <div
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: '50%',
+                  background: 'linear-gradient(135deg, var(--purple), var(--blue))',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 20,
+                }}
+              >
+                🤖
+              </div>
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 1,
+                  right: 1,
+                  width: 10,
+                  height: 10,
+                  borderRadius: '50%',
+                  background: 'var(--green)',
+                  border: '2px solid var(--bg-card)',
+                }}
+              />
             </div>
-            <div
-              style={{
-                position: 'absolute',
-                bottom: 1,
-                right: 1,
-                width: 10,
-                height: 10,
-                borderRadius: '50%',
-                background: 'var(--green)',
-                border: '2px solid var(--bg-card)',
-              }}
-            />
+            <div>
+              <h1 className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+                SnapCal AI Coach
+              </h1>
+              <p style={{ fontSize: 12, color: 'var(--green)', margin: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span className="pulse-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green)', display: 'inline-block' }} />
+                Online · Nutrition & Fitness Expert
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-              SnapCal AI Coach
-            </h1>
-            <p style={{ fontSize: 12, color: 'var(--green)', margin: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span className="pulse-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green)', display: 'inline-block' }} />
-              Online · Nutrition & Fitness Expert
-            </p>
-          </div>
+          <button
+            onClick={handleNewChat}
+            aria-label={IS_RUSSIAN ? 'Новый чат' : 'New chat'}
+            title={IS_RUSSIAN ? 'Новый чат' : 'New chat'}
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: '50%',
+              background: 'var(--bg-elevated)',
+              border: '1px solid var(--border)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              color: 'var(--text-secondary)',
+              flexShrink: 0,
+            }}
+          >
+            <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+            </svg>
+          </button>
         </div>
       </header>
 
@@ -216,7 +311,7 @@ export function AICoachScreen() {
         {quickActions.map((a) => (
           <button
             key={a.label}
-            onClick={() => logMetric(a.metric[0], a.metric[1])}
+            onClick={() => handleQuickMetric(a.metric[0], a.metric[1])}
             className="chip"
             style={{
               flexShrink: 0,
@@ -289,7 +384,7 @@ export function AICoachScreen() {
                 }}
               >
                 <p style={{ fontSize: 14, color: 'var(--text-primary)', margin: 0, lineHeight: 1.5 }}>
-                  Good morning! 👋 I'm your AI nutrition coach. I've analyzed your stats — you're doing great this week. How can I help you today?
+                  {greeting}
                 </p>
               </div>
             </div>
@@ -437,7 +532,7 @@ export function AICoachScreen() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              placeholder="Ask about nutrition or fitness..."
+              placeholder={IS_RUSSIAN ? 'Спросите о питании или тренировках...' : 'Ask about nutrition or fitness...'}
               style={{
                 flex: 1,
                 background: 'none',
@@ -452,26 +547,30 @@ export function AICoachScreen() {
           </div>
 
           <button
-            onClick={handleSend}
-            aria-label={input.trim() ? 'Send message' : 'Voice message'}
+            onClick={input.trim() ? handleSend : toggleVoice}
+            aria-label={input.trim() ? 'Send message' : listening ? 'Stop voice input' : 'Voice message'}
             style={{
               width: 42,
               height: 42,
               borderRadius: '50%',
-              background: input.trim() ? 'var(--green)' : 'var(--bg-elevated)',
-              border: input.trim() ? 'none' : '1px solid var(--border)',
+              background: input.trim() ? 'var(--green)' : listening ? 'var(--rose)' : 'var(--bg-elevated)',
+              border: input.trim() || listening ? 'none' : '1px solid var(--border)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
               flexShrink: 0,
               transition: 'background 0.2s ease',
-              color: input.trim() ? '#fff' : 'var(--text-secondary)',
+              color: input.trim() || listening ? '#fff' : 'var(--text-secondary)',
             }}
           >
             {input.trim() ? (
               <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
                 <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+              </svg>
+            ) : listening ? (
+              <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+                <rect x="6" y="6" width="12" height="12" rx="2" />
               </svg>
             ) : (
               <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round">
@@ -484,4 +583,28 @@ export function AICoachScreen() {
       </div>
     </div>
   )
+}
+
+function buildGreeting(user: { firstName?: string | null; languageCode?: string } | null): string {
+  const isRu = user?.languageCode ? /^ru/.test(user.languageCode) : IS_RUSSIAN
+  const name = user?.firstName?.trim()
+  const greeting = isRu
+    ? `Привет${name ? ', ' + name : ''}! 👋 Я ваш AI-коуч по питанию и фитнесу. Задавайте вопросы, присылайте фото еды или просто расскажите, что вы съели — я помогу с подсчётом калорий и макросов.`
+    : `Good morning${name ? ', ' + name : ''}! 👋 I'm your AI nutrition coach. Ask questions, send food photos, or tell me what you ate — I'll help track calories and macros.`
+  return greeting
+}
+
+function findPendingMetric(messages: ChatMessage[]): { metricType: 'WATER_ML' | 'SLEEP_H' | 'WEIGHT_KG' | 'STEPS'; value: number; confirmationMessageId: string } | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i]
+    if (msg.role === 'AI' && msg.metadata?.pendingMetric) {
+      return {
+        metricType: msg.metadata.pendingMetric.metricType,
+        value: msg.metadata.pendingMetric.value,
+        confirmationMessageId: msg.id,
+      }
+    }
+    if (msg.role === 'USER') break
+  }
+  return null
 }

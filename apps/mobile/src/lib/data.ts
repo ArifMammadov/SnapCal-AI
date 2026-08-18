@@ -71,6 +71,10 @@ export interface ChatMessage {
   type: 'TEXT' | 'FOOD_ANALYSIS' | 'MACRO_CARD'
   content: string
   createdAt: string
+  metadata?: {
+    pendingMetric?: { metricType: 'WATER_ML' | 'SLEEP_H' | 'WEIGHT_KG' | 'STEPS'; value: number }
+    [key: string]: any
+  }
   attachments?: {
     foodData?: {
       name: string
@@ -321,6 +325,16 @@ export function useChat() {
       .finally(() => setLoadingHistory(false))
   }, [])
 
+  const clearHistory = useCallback(async () => {
+    try {
+      await api.post('/ai/clear-history')
+      setMessages([])
+      return true
+    } catch (err: any) {
+      return false
+    }
+  }, [])
+
   const sendMessage = useCallback(async (content: string) => {
     if (!content.trim()) return
     const userMsg: ChatMessage = {
@@ -402,7 +416,18 @@ export function useChat() {
     }
   }, [])
 
-  const logMetric = useCallback(async (metricType: 'WATER_ML' | 'SLEEP_H' | 'WEIGHT_KG' | 'STEPS', value: number) => {
+  const logMetric = useCallback(async (metricType: 'WATER_ML' | 'SLEEP_H' | 'WEIGHT_KG' | 'STEPS', value: number, confirmed = true) => {
+    if (!confirmed) {
+      return setMessages((prev) => [...prev, {
+        id: (Date.now()).toString(),
+        role: 'AI',
+        type: 'TEXT',
+        content: formatMetricConfirmation(metricType, value),
+        createdAt: new Date().toISOString(),
+        metadata: { pendingMetric: { metricType, value } },
+      }])
+    }
+
     try {
       await api.post('/tracking/metric', { metricType, value })
       const labels: Record<string, string> = {
@@ -411,11 +436,12 @@ export function useChat() {
         WEIGHT_KG: 'Вес',
         STEPS: 'Шаги',
       }
+      const unit = metricType === 'WATER_ML' ? ' мл' : metricType === 'STEPS' ? '' : metricType === 'WEIGHT_KG' ? ' кг' : ' ч'
       setMessages((prev) => [...prev, {
         id: (Date.now()).toString(),
         role: 'AI',
         type: 'TEXT',
-        content: `Записал: ${labels[metricType]} ${value}${metricType === 'WATER_ML' ? ' мл' : metricType === 'STEPS' ? '' : metricType === 'WEIGHT_KG' ? ' кг' : ' ч'}.`,
+        content: `✅ Записал: ${labels[metricType]} ${value}${unit}.`,
         createdAt: new Date().toISOString(),
       }])
     } catch (err: any) {
@@ -429,5 +455,20 @@ export function useChat() {
     }
   }, [])
 
-  return { messages, sending, loadingHistory, sendMessage, sendPhoto, logMetric, setMessages }
+  return { messages, sending, loadingHistory, sendMessage, sendPhoto, logMetric, setMessages, clearHistory }
+}
+
+function formatMetricConfirmation(metricType: string, value: number): string {
+  switch (metricType) {
+    case 'WATER_ML':
+      return `Записать ${value} мл воды в дневной рацион? Ответьте «да» для подтверждения.`
+    case 'SLEEP_H':
+      return `Записать ${value} ч сна? Ответьте «да» для подтверждения.`
+    case 'WEIGHT_KG':
+      return `Записать вес ${value} кг? Ответьте «да» для подтверждения.`
+    case 'STEPS':
+      return `Записать ${value} шагов? Ответьте «да» для подтверждения.`
+    default:
+      return `Записать значение ${value}? Ответьте «да» для подтверждения.`
+  }
 }

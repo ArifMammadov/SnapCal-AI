@@ -92,8 +92,10 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
     }
   })
 
-  app.get('/limits', async (request: FastifyRequest) => {
-    return checkAiLimit(request.user!.userId)
+  app.post('/clear-history', async (request: FastifyRequest) => {
+    const userId = request.user!.userId
+    await prisma.chatMessage.deleteMany({ where: { userId } })
+    return { success: true, deletedCount: await prisma.chatMessage.count({ where: { userId } }) }
   })
 
   app.post('/chat', {
