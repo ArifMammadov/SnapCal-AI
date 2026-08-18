@@ -63,7 +63,7 @@ export async function indexArticleVector(
       .map((row) => {
         const embeddingLiteral = `[${row.embedding!.join(',')}]`
         return prisma.$executeRawUnsafe(
-          `INSERT INTO knowledge_chunks (id, article_id, chunk_index, content, embedding)
+          `INSERT INTO knowledge_chunks (id, articleId, chunk_index, content, embedding)
            VALUES (gen_random_uuid(), $1::uuid, $2, $3, $4::vector)`,
           articleId,
           row.chunkIndex,
@@ -96,15 +96,15 @@ export async function searchKnowledgeChunks(
   const rows = await prismaRead.$queryRawUnsafe<ChunkRow[]>(
     `SELECT
        kc.id,
-       kc.article_id AS "articleId",
-       kc.chunk_index AS "chunkIndex",
+       kc."articleId" AS "articleId",
+       kc."chunkIndex" AS "chunkIndex",
        kc.content,
        ka.title,
-       ka.source_url AS "sourceUrl",
+       ka."sourceUrl" AS "sourceUrl",
        kc.embedding <=> $1::vector AS distance
      FROM knowledge_chunks kc
-     JOIN knowledge_articles ka ON ka.id = kc.article_id
-     WHERE ka.is_published = true
+     JOIN knowledge_articles ka ON ka.id = kc."articleId"
+     WHERE ka."isPublished" = true
        AND kc.embedding <=> $1::vector < $2
      ORDER BY distance ASC
      LIMIT $3`,
@@ -120,8 +120,8 @@ export async function getUnindexedArticles() {
   return prismaRead.$queryRawUnsafe<{ id: string }[]>(
     `SELECT ka.id
      FROM knowledge_articles ka
-     LEFT JOIN knowledge_chunks kc ON kc.article_id = ka.id
-     WHERE ka.is_published = true
+     LEFT JOIN knowledge_chunks kc ON kc."articleId" = ka.id
+     WHERE ka."isPublished" = true
      GROUP BY ka.id
      HAVING COUNT(kc.id) = 0
      LIMIT 100`,
