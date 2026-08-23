@@ -1,8 +1,12 @@
 import axios from 'axios'
 import { env } from '../lib/env.js'
 import { prisma } from '@snapcal/database'
-import { logger } from '@snapcal/shared'
+import { getRedis, logger } from '@snapcal/shared'
 import { parseFoodJson, saveFoodLogFromAnalysis } from '../lib/foodAnalysis.js'
+
+const redis = getRedis()
+
+const VISION_JOB_TTL_SECONDS = 600
 
 const agent = axios.create({
   baseURL: env.AI_AGENT_URL,
@@ -35,12 +39,33 @@ export interface AnalyzePhotoResult {
   }
 }
 
-export async function enqueuePhotoAnalysis(userId: string, imageUrl: string): Promise<{ jobId: string; statusUrl: string }> {
+export async function enqueuePhotoAnalysis(userId: string, imageUrl: string): Promise<{ jobId: string; statusUrl: string; messageId: string }> {
+  const userMessage = await prisma.chatMessage.create({
+    data: { userId, role: 'USER', type: 'TEXT', content: '[food photo]', attachments: { imageUrl } },
+  })
+
   const { data } = await agent.post('/analyze-photo', { userId, imageUrl })
   if (!data.jobId || !data.statusUrl) {
     throw new Error('AI agent did not return async job details')
   }
-  return { jobId: data.jobId, statusUrl: data.statusUrl }
+
+  await redis.setex(
+    `vision:${data.jobId}`,
+    VISION_JOB_TTL_SECONDS,
+    JSON.stringify({ userId, imageUrl, messageId: userMessage.id }),
+  )
+
+  return { jobId: data.jobId, statusUrl: data.statusUrl, messageId: userMessage.id }
+}
+
+export async function getVisionJobContext(jobId: string): Promise<{ userId: string; imageUrl: string; messageId: string } | null> {
+  const raw = await redis.get(`vision:${jobId}`)
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as { userId: string; imageUrl: string; messageId: string }
+  } catch {
+    return null
+  }
 }
 
 export async function pollPhotoAnalysisStatus(jobId: string): Promise<{ state: string; result?: any; failedReason?: string }> {
@@ -51,9 +76,9 @@ export async function pollPhotoAnalysisStatus(jobId: string): Promise<{ state: s
 export async function finalizePhotoAnalysis(
   userId: string,
   imageUrl: string,
-  userMessageId: string,
+  jobId: string,
 ): Promise<AnalyzePhotoResult> {
-  const status = await pollPhotoAnalysisStatus(userMessageId)
+  const status = await pollPhotoAnalysisStatus(jobId)
   if (status.state !== 'completed' || !status.result) {
     throw new Error(status.failedReason || 'Vision analysis did not complete')
   }

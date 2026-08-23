@@ -385,6 +385,18 @@ export function useChat() {
     setMessages((prev) => [...prev, userMsg])
     setSending(true)
 
+    let jobId: string | null = null
+
+    const addErrorMessage = (text: string) => {
+      setMessages((prev) => [...prev, {
+        id: (Date.now() + 1).toString(),
+        role: 'AI',
+        type: 'TEXT',
+        content: text,
+        createdAt: new Date().toISOString(),
+      }])
+    }
+
     try {
       const form = new FormData()
       form.append('file', file)
@@ -392,26 +404,68 @@ export function useChat() {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
 
-      const analyzeRes = await api.post<{ message: ChatMessage }>('/ai/analyze-photo', { imageUrl: uploadRes.data.url })
-      const ai = analyzeRes.data.message
-      setMessages((prev) => [...prev, {
-        id: ai.id || `${Date.now()}-ai`,
-        role: ai.role || 'AI',
-        type: ai.type || 'FOOD_ANALYSIS',
-        content: ai.content || 'Here is what I found in your photo.',
-        createdAt: ai.createdAt || new Date().toISOString(),
-        attachments: ai.attachments,
-      }])
-    } catch (err: any) {
-      const aiMsg: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: 'AI',
-        type: 'TEXT',
-        content: err.message || 'Sorry, I could not analyze this photo. Please try again.',
-        createdAt: new Date().toISOString(),
+      const analyzeRes = await api.post<{ accepted?: boolean; jobId?: string; statusUrl?: string; messageId?: string; message?: ChatMessage }>('/ai/analyze-photo', { imageUrl: uploadRes.data.url })
+
+      // Fallback: old sync behavior (if server returns message immediately)
+      if (analyzeRes.data?.message) {
+        const ai = analyzeRes.data.message
+        setMessages((prev) => [...prev, {
+          id: ai.id || `${Date.now()}-ai`,
+          role: ai.role || 'AI',
+          type: ai.type || 'FOOD_ANALYSIS',
+          content: ai.content || 'Here is what I found in your photo.',
+          createdAt: ai.createdAt || new Date().toISOString(),
+          attachments: ai.attachments,
+        }])
+        return
       }
-      setMessages((prev) => [...prev, aiMsg])
+
+      if (!analyzeRes.data?.jobId) {
+        throw new Error('No response from photo analysis service')
+      }
+
+      jobId = analyzeRes.data.jobId
+
+      // Poll async vision analysis status
+      const poll = async (): Promise<ChatMessage | null> => {
+        const maxAttempts = 60
+        const delayMs = 1500
+        for (let i = 0; i < maxAttempts; i++) {
+          await new Promise((resolve) => setTimeout(resolve, delayMs))
+          const res = await api.get<{ jobId?: string; state?: string; failedReason?: string; message?: ChatMessage; error?: { message?: string } }>(`/ai/analyze-photo/${jobId}`)
+
+          if (res.data?.message) {
+            return res.data.message
+          }
+
+          const state = res.data?.state
+          if (state === 'failed') {
+            throw new Error(res.data?.failedReason || 'Photo analysis failed')
+          }
+          if (res.data?.error?.message) {
+            throw new Error(res.data.error.message)
+          }
+        }
+        throw new Error('Photo analysis timed out. Please try again.')
+      }
+
+      const ai = await poll()
+      if (ai) {
+        setMessages((prev) => [...prev, {
+          id: ai.id || `${Date.now()}-ai`,
+          role: ai.role || 'AI',
+          type: ai.type || 'FOOD_ANALYSIS',
+          content: ai.content || 'Here is what I found in your photo.',
+          createdAt: ai.createdAt || new Date().toISOString(),
+          attachments: ai.attachments,
+        }])
+      }
+    } catch (err: any) {
+      addErrorMessage(err.message || 'Sorry, I could not analyze this photo. Please try again.')
     } finally {
+      if (jobId) {
+        URL.revokeObjectURL(localUrl)
+      }
       setSending(false)
     }
   }, [])

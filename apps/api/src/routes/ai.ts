@@ -5,7 +5,7 @@ import { prisma } from '@snapcal/database'
 import { requireAuth } from './users.js'
 import { env } from '../lib/env.js'
 import { DEFAULT_FREE_AI_DAILY_LIMIT } from '@snapcal/shared'
-import { enqueuePhotoAnalysis, finalizePhotoAnalysis, pollPhotoAnalysisStatus } from '../lib/aiAgentClient.js'
+import { enqueuePhotoAnalysis, finalizePhotoAnalysis, getVisionJobContext, pollPhotoAnalysisStatus } from '../lib/aiAgentClient.js'
 import { checkAiLimit } from '../lib/subscriptionLimits.js'
 
 const agent = axios.create({
@@ -198,13 +198,13 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
     })
 
     try {
-      const { jobId, statusUrl } = await enqueuePhotoAnalysis(userId, imageUrl)
+      const { jobId, statusUrl, messageId } = await enqueuePhotoAnalysis(userId, imageUrl)
 
       return {
         accepted: true,
         jobId,
         statusUrl,
-        messageId: userMessage.id,
+        messageId,
       }
     } catch (err: any) {
       const errorMessage = axios.isAxiosError(err) && !err.response
@@ -254,8 +254,14 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
     }
 
     try {
-      const { imageUrl } = analyzePhotoSchema.parse(request.body)
-      const result = await finalizePhotoAnalysis(userId, imageUrl, jobId)
+      const ctx = await getVisionJobContext(jobId)
+      if (!ctx) {
+        return reply.status(404).send({ error: { code: 'JOB_NOT_FOUND', message: 'Photo analysis job not found or expired' } })
+      }
+      if (ctx.userId !== userId) {
+        return reply.status(403).send({ error: { code: 'FORBIDDEN', message: 'Not your photo analysis job' } })
+      }
+      const result = await finalizePhotoAnalysis(userId, ctx.imageUrl, jobId)
       return reply.send(result)
     } catch (err: any) {
       return reply.status(500).send({
