@@ -22,9 +22,17 @@ async function buildApp() {
   })
   await app.register(cors, { origin: true, credentials: true })
   await app.register(rateLimit, {
-    max: 60,
+    max: (req) => {
+      const remote = req.ip ?? req.socket?.remoteAddress ?? 'unknown'
+      // Internal API → no rate limit; external users → per-user/IP limit
+      return isPrivateIp(remote) ? 10000 : 60
+    },
     timeWindow: '1 minute',
-    keyGenerator: (req) => (req as { user?: { userId: string } }).user?.userId ?? req.ip,
+    keyGenerator: (req) => {
+      const remote = req.ip ?? req.socket?.remoteAddress ?? 'unknown'
+      if (isPrivateIp(remote)) return `internal:${remote}`
+      return (req as { user?: { userId: string } }).user?.userId ?? remote
+    },
     skipOnError: false,
     redis: getRedis(),
     errorResponseBuilder: (_req, context) => ({
@@ -34,6 +42,16 @@ async function buildApp() {
       retryAfter: context.after,
     }),
   })
+
+  function isPrivateIp(ip: string): boolean {
+    if (ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1') return true
+    if (ip.startsWith('10.') || ip.startsWith('192.168.')) return true
+    if (ip.startsWith('172.')) {
+      const second = Number(ip.split('.')[1])
+      if (second >= 16 && second <= 31) return true
+    }
+    return false
+  }
 
   await app.register(agentRoutes)
 

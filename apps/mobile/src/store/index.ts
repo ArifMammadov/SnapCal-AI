@@ -47,7 +47,9 @@ interface AppState {
   user: User | null
   setUser: (user: User | null) => void
   token: string | null
+  refreshToken: string | null
   setToken: (token: string | null) => void
+  setRefreshToken: (refreshToken: string | null) => void
   logout: () => void
 }
 
@@ -57,13 +59,20 @@ export const useAppStore = create<AppState>((set) => ({
   user: null,
   setUser: (user) => set({ user }),
   token: localStorage.getItem('snapcal_access_token'),
+  refreshToken: localStorage.getItem('snapcal_refresh_token'),
   setToken: (token) => {
     if (token) localStorage.setItem('snapcal_access_token', token)
     else localStorage.removeItem('snapcal_access_token')
     set({ token })
   },
+  setRefreshToken: (refreshToken: string | null) => {
+    if (refreshToken) localStorage.setItem('snapcal_refresh_token', refreshToken)
+    else localStorage.removeItem('snapcal_refresh_token')
+    set({ refreshToken })
+  },
   logout: () => {
     localStorage.removeItem('snapcal_access_token')
-    set({ user: null, token: null })
+    localStorage.removeItem('snapcal_refresh_token')
+    set({ user: null, token: null, refreshToken: null })
   },
 }))

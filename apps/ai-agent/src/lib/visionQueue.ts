@@ -38,7 +38,7 @@ export function startVisionWorker(): Worker {
       await recordAiUsage(userId, 200, outputTokens, result.message.modelUsed ?? 'unknown', 'openrouter')
       return result
     },
-    { connection: blockingRedisConnection, concurrency: 4 }
+    { connection: blockingRedisConnection, concurrency: 6 }
   )
 
   worker.on('completed', () => {

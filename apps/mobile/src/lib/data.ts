@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { api } from './api.js'
+import { compressImageFile } from './imageCompression.js'
 
 export interface TrackingSummary {
   date: string
@@ -373,19 +374,8 @@ export function useChat() {
   }, [])
 
   const sendPhoto = useCallback(async (file: File) => {
-    const localUrl = URL.createObjectURL(file)
-    const userMsg: ChatMessage = {
-      id: Date.now().toString(),
-      role: 'USER',
-      type: 'TEXT',
-      content: '[food photo]',
-      createdAt: new Date().toISOString(),
-      attachments: { imageUrl: localUrl },
-    }
-    setMessages((prev) => [...prev, userMsg])
+    let localUrl: string | null = null
     setSending(true)
-
-    let jobId: string | null = null
 
     const addErrorMessage = (text: string) => {
       setMessages((prev) => [...prev, {
@@ -397,9 +387,24 @@ export function useChat() {
       }])
     }
 
+    let jobId: string | null = null
+
     try {
+      const compressed = await compressImageFile(file, { maxWidth: 1024, maxHeight: 1024, quality: 0.8 })
+      localUrl = URL.createObjectURL(compressed)
+
+      const userMsg: ChatMessage = {
+        id: Date.now().toString(),
+        role: 'USER',
+        type: 'TEXT',
+        content: '[food photo]',
+        createdAt: new Date().toISOString(),
+        attachments: { imageUrl: localUrl },
+      }
+      setMessages((prev) => [...prev, userMsg])
+
       const form = new FormData()
-      form.append('file', file)
+      form.append('file', compressed)
       const uploadRes = await api.post<{ url: string }>('/tracking/upload', form, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
@@ -463,7 +468,7 @@ export function useChat() {
     } catch (err: any) {
       addErrorMessage(err.message || 'Sorry, I could not analyze this photo. Please try again.')
     } finally {
-      if (jobId) {
+      if (localUrl) {
         URL.revokeObjectURL(localUrl)
       }
       setSending(false)

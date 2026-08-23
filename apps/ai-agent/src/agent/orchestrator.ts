@@ -1,5 +1,6 @@
 import crypto from 'node:crypto'
 import { prisma } from '@snapcal/database'
+import { getRedis, logger } from '@snapcal/shared'
 import { resolveSkill } from './promptResolver.js'
 import type { ChatInput, ChatOutput, ToolContext } from '../types/index.js'
 import { callLlm, callVisionLlm } from '../llm/client.js'
@@ -14,6 +15,29 @@ import { getUserSummary, searchKnowledge, recommendProgram, analyzePhoto, logFoo
 
 const FALLBACK_MODEL = 'gpt-4o-mini'
 const MAX_OUTPUT_TOKENS = 1024
+const VISION_CACHE_TTL_SECONDS = 60 * 60 * 24 // 24h
+const redis = getRedis()
+
+function visionCacheKey(imageUrl: string): string {
+  return `vision-cache:${crypto.createHash('sha256').update(imageUrl).digest('hex')}`
+}
+
+async function getCachedVisionResult(imageUrl: string): Promise<string | null> {
+  try {
+    return await redis.get(visionCacheKey(imageUrl))
+  } catch (err) {
+    logger.warn({ err }, 'vision cache read failed')
+    return null
+  }
+}
+
+async function setCachedVisionResult(imageUrl: string, content: string): Promise<void> {
+  try {
+    await redis.setex(visionCacheKey(imageUrl), VISION_CACHE_TTL_SECONDS, content)
+  } catch (err) {
+    logger.warn({ err }, 'vision cache write failed')
+  }
+}
 
 interface RouteResult {
   skillName: string
@@ -34,9 +58,8 @@ async function routeSkillRegex(input: ChatInput): Promise<RouteResult> {
   if (hasVoice) return { skillName: 'nutrition', toolNames: [], confidence: 0.6 }
   if (/\b(weight|goal|plan|program|workout|exercise|training)\b/i.test(lower)) return { skillName: 'fitness', toolNames: ['recommendProgram'], confidence: 0.75 }
   if (/\b(calorie|kcal|meal|food|eat|ate|breakfast|lunch|dinner|snack)\b/i.test(lower)) return { skillName: 'nutrition', toolNames: ['logFood', 'searchKnowledge'], confidence: 0.8 }
-  if (/\b(hello|hi|who are you|help)\b/i.test(lower)) return { skillName: 'coach', toolNames: [], confidence: 0.7 }
 
-  return { skillName: 'coach', toolNames: ['searchKnowledge'], confidence: 0.55 }
+  return { skillName: 'coach', toolNames: [], confidence: 0.55 }
 }
 
 interface OrchestratorRouteResult {
@@ -83,6 +106,53 @@ function getUserLanguage(user: { languageCode?: string | null; regionCode?: stri
   return user?.languageCode ?? 'en'
 }
 
+async function saveAiResponse(
+  userId: string,
+  content: string,
+  skillName: string,
+  modelUsed: string,
+  startTime: number,
+): Promise<ChatOutput> {
+  const chat = await prisma.chatMessage.create({
+    data: {
+      userId,
+      role: 'AI',
+      content,
+      modelUsed,
+      latencyMs: Date.now() - startTime,
+    },
+  })
+
+  void auditLog({
+    userId,
+    action: 'AI_CHAT',
+    metadata: {
+      skillName,
+      modelUsed,
+      latencyMs: Date.now() - startTime,
+      confidence: 1,
+      toolsUsed: [],
+    },
+  })
+
+  const latencySeconds = (Date.now() - startTime) / 1000
+  aiLatencyHistogram.observe({ skill: skillName, model: modelUsed }, latencySeconds)
+  aiRequestsTotal.inc({ skill: skillName, model: modelUsed, status: 'success' })
+
+  return {
+    message: {
+      id: chat.id,
+      role: 'ai',
+      content,
+      type: 'text',
+      modelUsed,
+      usedFallback: false,
+      skillName,
+      confidence: 1,
+    },
+  }
+}
+
 export async function handleChat(input: ChatInput): Promise<ChatOutput> {
   const { userId, message, attachments } = input
   const start = Date.now()
@@ -95,6 +165,18 @@ export async function handleChat(input: ChatInput): Promise<ChatOutput> {
   if (safeMessage && isPromptInjection(safeMessage)) {
     void auditLog({ userId, action: 'PROMPT_INJECTION_BLOCKED', metadata: { preview: safeMessage.slice(0, 200) } })
     return { message: { id: 'blocked', role: 'ai', content: 'I cannot process this request. Please ask a nutrition or fitness question.' } }
+  }
+
+  // Fast-path greetings: avoid LLM latency for small talk
+  const greetingMatch = safeMessage.match(/^(привет|здравствуй|здравствуйте|приветствую|hi|hello|hey|hola)\s*[!.?]*$/i)
+  if (greetingMatch && !attachments?.length) {
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { firstName: true, languageCode: true } })
+    const name = user?.firstName ? `, ${user.firstName}` : ''
+    const lang = user?.languageCode ?? 'en'
+    const greeting = lang === 'ru'
+      ? `Привет${name}! Я SnapCal AI — ваш персональный нутрициолог и фитнес-коуч. Спрашивайте про питание, тренировки или пришлите фото еды, и я рассчитаю калории.`
+      : `Hi${name}! I'm SnapCal AI — your personal nutritionist and fitness coach. Ask about nutrition, workouts, or send a food photo and I'll estimate the calories.`
+    return saveAiResponse(userId, greeting, 'coach', 'greeting', start)
   }
 
   const route = await routeSkill(input)
@@ -122,12 +204,15 @@ export async function handleChat(input: ChatInput): Promise<ChatOutput> {
     },
   }
 
-  const toolResults = await runTools(route.toolNames, context)
+  // Skip knowledge search for pure coaching/small-talk to reduce latency
+  const shouldSearchKnowledge = route.skillName === 'nutrition' || route.skillName === 'fitness' || route.skillName === 'marketplace'
+  const toolNames = shouldSearchKnowledge ? route.toolNames : route.toolNames.filter((n) => n !== 'searchKnowledge')
+  const toolResults = await runTools(toolNames, context)
 
   const history = await prisma.chatMessage.findMany({
     where: { userId },
     orderBy: { createdAt: 'desc' },
-    take: 10,
+    take: 5,
   })
 
   const facts = await prisma.userFact.findMany({ where: { userId } })
@@ -154,9 +239,16 @@ Respond in a helpful, concise way in the user's language. Do not provide medical
     try {
       const imageUrl = context.attachments?.find((a) => a.type === 'image')?.url
       if (imageUrl) {
-        const visionResult = await callVisionLlm(imageUrl)
-        content = visionResult.content
-        modelUsed = visionResult.model
+        const cached = await getCachedVisionResult(imageUrl)
+        if (cached) {
+          content = cached
+          modelUsed = 'cached'
+        } else {
+          const visionResult = await callVisionLlm(imageUrl)
+          content = visionResult.content
+          modelUsed = visionResult.model
+          await setCachedVisionResult(imageUrl, content)
+        }
       } else {
         content = JSON.stringify({ error: 'No image provided' })
       }

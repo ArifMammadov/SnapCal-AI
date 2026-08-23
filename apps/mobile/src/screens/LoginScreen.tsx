@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api } from '../lib/api.js'
+import { api, setAuthTokens } from '../lib/api.js'
 import { useAppStore } from '../store/index.js'
 import { Card, Button, Avatar } from '../components/ui.js'
 import type { TelegramWebApp } from '../types/telegram.js'
@@ -53,6 +53,7 @@ export function LoginScreen() {
   const [debug, setDebug] = useState<string>('')
   const setUser = useAppStore((s) => s.setUser)
   const setToken = useAppStore((s) => s.setToken)
+  const setRefreshToken = useAppStore((s) => s.setRefreshToken)
 
   const [onboarding, setOnboarding] = useState<OnboardingData>({
     age: 30,
@@ -68,9 +69,11 @@ export function LoginScreen() {
   useEffect(() => {
     let cancelled = false
 
-    const finishAuth = async (accessToken: string, authUser: any) => {
+    const finishAuth = async (accessToken: string, refreshToken: string, authUser: any) => {
       if (cancelled) return
+      setAuthTokens(accessToken, refreshToken)
       setToken(accessToken)
+      setRefreshToken(refreshToken)
       setUser(authUser)
       setStep('complete')
     }
@@ -81,7 +84,7 @@ export function LoginScreen() {
       setDebug(`found start_token in URL: ${startToken.slice(0, 8)}...`)
       try {
         const res = await api.post('/auth/start-token', { token: startToken })
-        await finishAuth(res.data.accessToken, res.data.user)
+        await finishAuth(res.data.accessToken, res.data.refreshToken, res.data.user)
         return true
       } catch (err: any) {
         const serverMsg = err.response?.data?.error?.message || err.message || ''
@@ -112,7 +115,7 @@ export function LoginScreen() {
         if (initData && unsafeUser) {
           try {
             const res = await api.post('/auth/telegram', { initData })
-            await finishAuth(res.data.accessToken, res.data.user)
+            await finishAuth(res.data.accessToken, res.data.refreshToken, res.data.user)
             return true
           } catch (err: any) {
             const serverMsg = err.response?.data?.error?.message || err.message || ''
@@ -134,7 +137,7 @@ export function LoginScreen() {
           firstName: onboarding.name || undefined,
           languageCode: 'ru',
         })
-        await finishAuth(res.data.accessToken, res.data.user)
+        await finishAuth(res.data.accessToken, res.data.refreshToken, res.data.user)
       } catch (err: any) {
         const serverMsg = err.response?.data?.error?.message || err.message || 'Guest login failed'
         setError(serverMsg)
@@ -159,7 +162,7 @@ export function LoginScreen() {
     return () => {
       cancelled = true
     }
-  }, [setToken, setUser])
+  }, [setToken, setRefreshToken, setUser])
 
   const submitOnboarding = async () => {
     setLoading(true)

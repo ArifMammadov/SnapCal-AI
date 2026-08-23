@@ -189,9 +189,9 @@ export async function callVisionLlm(imageUrl: string): Promise<LlmResponse> {
   const { data } = await axios.post(
     `${env.OPENROUTER_BASE_URL}/chat/completions`,
     {
-      model: 'openai/gpt-4o',
+      model: 'openai/gpt-4o-mini',
       messages,
-      max_tokens: 512,
+      max_tokens: 256,
       temperature: 0.2,
       response_format: { type: 'json_object' },
     },
@@ -200,13 +200,13 @@ export async function callVisionLlm(imageUrl: string): Promise<LlmResponse> {
         Authorization: authHeader(),
         'Content-Type': 'application/json',
       },
-      timeout: 60000,
+      timeout: 25000,
     }
   )
 
   return {
     content: data.choices?.[0]?.message?.content ?? '',
-    model: 'openai/gpt-4o',
+    model: 'openai/gpt-4o-mini',
     provider: 'openrouter',
   }
 }

@@ -79,7 +79,7 @@ export async function authRoutes(app: FastifyInstance) {
 
     const accessToken = app.jwt.sign(
       { userId: user.id, telegramId: user.telegramId ? user.telegramId.toString() : undefined, role: user.role },
-      { expiresIn: '15m' }
+      { expiresIn: '1h' }
     )
     const refreshToken = app.jwt.sign(
       { userId: user.id, type: 'refresh' },
@@ -154,7 +154,7 @@ export async function authRoutes(app: FastifyInstance) {
 
     const accessToken = app.jwt.sign(
       { userId: user.id, telegramId: user.telegramId ? user.telegramId.toString() : undefined, role: user.role },
-      { expiresIn: '15m' }
+      { expiresIn: '1h' }
     )
     const refreshToken = app.jwt.sign(
       { userId: user.id, type: 'refresh' },
@@ -252,7 +252,7 @@ export async function authRoutes(app: FastifyInstance) {
 
     const accessToken = app.jwt.sign(
       { userId: user.id, telegramId: user.telegramId ? user.telegramId.toString() : undefined, role: user.role },
-      { expiresIn: '15m' }
+      { expiresIn: '1h' }
     )
     const refreshToken = app.jwt.sign(
       { userId: user.id, type: 'refresh' },
@@ -341,7 +341,7 @@ export async function authRoutes(app: FastifyInstance) {
 
     const accessToken = app.jwt.sign(
       { userId: user.id, telegramId: user.telegramId ? user.telegramId.toString() : undefined, role: user.role },
-      { expiresIn: '15m' }
+      { expiresIn: '1h' }
     )
     const refreshToken = app.jwt.sign(
       { userId: user.id, type: 'refresh' },
@@ -462,7 +462,7 @@ export async function authRoutes(app: FastifyInstance) {
 
       const newAccessToken = app.jwt.sign(
         { userId: user.id, telegramId: user.telegramId ? user.telegramId.toString() : undefined, role: user.role },
-        { expiresIn: '15m' }
+        { expiresIn: '1h' }
       )
       const newRefreshToken = app.jwt.sign(
         { userId: user.id, type: 'refresh' },
