@@ -1,5 +1,6 @@
+import crypto from 'node:crypto'
 import { Queue, Worker, Job } from 'bullmq'
-import { getRedis } from '@snapcal/shared'
+import { getRedis, logger } from '@snapcal/shared'
 import { visionQueueJobsTotal } from '../lib/metrics.js'
 import { analyzeFoodPhoto } from '../agent/orchestrator.js'
 import { estimateTokens } from '../llm/client.js'
@@ -31,12 +32,37 @@ export function startVisionWorker(): Worker {
   const worker = new Worker(
     'vision-analysis',
     async (job: Job<VisionJobData>) => {
-      visionQueueJobsTotal.inc({ state: 'completed' })
       const { userId, imageUrl } = job.data
-      const result = await analyzeFoodPhoto(userId, imageUrl)
-      const outputTokens = estimateTokens(result.message.content)
-      await recordAiUsage(userId, 200, outputTokens, result.message.modelUsed ?? 'unknown', 'openrouter')
-      return result
+      try {
+        const result = await analyzeFoodPhoto(userId, imageUrl)
+        const outputTokens = estimateTokens(result.message.content)
+        await recordAiUsage(userId, 200, outputTokens, result.message.modelUsed ?? 'unknown', 'openrouter')
+        return result
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Vision analysis failed'
+        logger.error({ err, userId, imageUrl, jobId: job.id }, `Vision job failed: ${errorMessage}`)
+        // Return a graceful fallback so the API polling can complete
+        const fallback: VisionJobResult = {
+          message: {
+            id: crypto.randomUUID(),
+            role: 'ai',
+            content: JSON.stringify({
+              name: 'Could not identify food',
+              calories: 0,
+              proteinG: 0,
+              carbsG: 0,
+              fatG: 0,
+              serving: 'unknown',
+              suggestedMealType: 'SNACK',
+              error: errorMessage,
+            }),
+            type: 'text',
+            modelUsed: 'fallback',
+            usedFallback: true,
+          },
+        }
+        return fallback
+      }
     },
     { connection: blockingRedisConnection, concurrency: 6 }
   )

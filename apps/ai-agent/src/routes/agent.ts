@@ -1,3 +1,4 @@
+import crypto from 'node:crypto'
 import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import { env } from '../lib/env.js'
 import { z } from 'zod'
@@ -79,6 +80,32 @@ const agentRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
     const status = await getVisionJobStatus(jobId)
     if (status.status === 'not_found') {
       return reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Job not found' } })
+    }
+    // If the job failed, still return 200 with failedReason so the API can stop polling
+    if (status.status === 'failed' && !status.result) {
+      return reply.send({
+        status: 'failed',
+        failedReason: status.failedReason ?? 'Vision analysis failed',
+        result: {
+          message: {
+            id: crypto.randomUUID(),
+            role: 'ai',
+            content: JSON.stringify({
+              name: 'Could not identify food',
+              calories: 0,
+              proteinG: 0,
+              carbsG: 0,
+              fatG: 0,
+              serving: 'unknown',
+              suggestedMealType: 'SNACK',
+              error: status.failedReason ?? 'Vision analysis failed',
+            }),
+            type: 'text',
+            modelUsed: 'fallback',
+            usedFallback: true,
+          },
+        },
+      })
     }
     return reply.send(status)
   })

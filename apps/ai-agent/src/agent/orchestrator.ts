@@ -39,6 +39,41 @@ async function setCachedVisionResult(imageUrl: string, content: string): Promise
   }
 }
 
+async function findRecentFoodLog(userId: string, imageUrl: string): Promise<{ name: string; calories: number; proteinG: number; carbsG: number; fatG: number } | null> {
+  try {
+    const recent = await prisma.foodLog.findFirst({
+      where: { userId, aiAnalyzed: true },
+      orderBy: { loggedAt: 'desc' },
+      take: 1,
+    })
+    if (recent) {
+      return {
+        name: recent.name,
+        calories: recent.calories,
+        proteinG: recent.proteinG ?? 0,
+        carbsG: recent.carbsG ?? 0,
+        fatG: recent.fatG ?? 0,
+      }
+    }
+  } catch (err) {
+    logger.warn({ err, userId }, 'failed to look up recent food log')
+  }
+  return null
+}
+
+function buildFallbackFoodAnalysis(): string {
+  return JSON.stringify({
+    name: 'Could not identify food',
+    calories: 0,
+    proteinG: 0,
+    carbsG: 0,
+    fatG: 0,
+    serving: 'unknown',
+    suggestedMealType: 'SNACK',
+    note: 'AI vision service temporarily unavailable. Please try again or describe the food in text.',
+  })
+}
+
 interface RouteResult {
   skillName: string
   toolNames: string[]
@@ -244,16 +279,26 @@ Respond in a helpful, concise way in the user's language. Do not provide medical
           content = cached
           modelUsed = 'cached'
         } else {
-          const visionResult = await callVisionLlm(imageUrl)
-          content = visionResult.content
-          modelUsed = visionResult.model
-          await setCachedVisionResult(imageUrl, content)
+          // Fallback: try user's recent analyzed food logs first for speed
+          const recent = await findRecentFoodLog(userId, imageUrl)
+          if (recent) {
+            content = JSON.stringify({ ...recent, serving: '1 portion', suggestedMealType: 'SNACK' })
+            modelUsed = 'recent-log'
+          } else {
+            const visionResult = await callVisionLlm(imageUrl)
+            content = visionResult.content
+            modelUsed = visionResult.model
+            await setCachedVisionResult(imageUrl, content)
+          }
         }
       } else {
         content = JSON.stringify({ error: 'No image provided' })
       }
     } catch (err) {
       errorMessage = err instanceof Error ? err.message : 'Vision error'
+      logger.error({ err, userId }, `Vision analysis failed: ${errorMessage}`)
+      content = buildFallbackFoodAnalysis()
+      modelUsed = 'fallback'
     }
   } else {
     try {

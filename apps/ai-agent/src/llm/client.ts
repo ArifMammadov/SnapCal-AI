@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { env } from '../lib/env.js'
+import { logger } from '@snapcal/shared'
 
 export interface LlmMessage {
   role: 'system' | 'user' | 'assistant'
