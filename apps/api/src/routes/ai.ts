@@ -102,9 +102,23 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
     config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
   }, async (request: FastifyRequest, reply) => {
     const userId = request.user!.userId
-    const limit = await checkAiLimit(userId)
-    if (!limit.allowed) {
-      return reply.status(429).send({ error: { code: limit.reason, message: limit.paywallMessage || 'AI daily limit reached. Upgrade to Pro.' } })
+    // Text chat should not consume the daily free scan budget; only photo analysis does.
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { trialEndsAt: true, subscriptionStatus: true } })
+    if (!user) {
+      return reply.status(401).send({ error: { code: 'UNAUTHORIZED', message: 'Пользователь не найден. Войдите снова.' } })
+    }
+    const now = new Date()
+    const isPremium = (user.trialEndsAt && user.trialEndsAt > now) || ['active', 'trialing'].includes(user.subscriptionStatus.toLowerCase())
+    if (!isPremium) {
+      // Free users get up to 10 text messages per day to keep the coach usable while scans are limited.
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0)
+      const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0)
+      const textMessagesToday = await prisma.chatMessage.count({
+        where: { userId, role: 'USER', type: 'TEXT', createdAt: { gte: start, lt: end } },
+      })
+      if (textMessagesToday >= 10) {
+        return reply.status(429).send({ error: { code: 'DAILY_TEXT_LIMIT_REACHED', message: 'Бесплатный лимит текстовых сообщений на сегодня исчерпан. Оформите подписку SnapCal Pro для безлимитного общения.' } })
+      }
     }
 
     const { message, attachments } = chatSchema.parse(request.body)
