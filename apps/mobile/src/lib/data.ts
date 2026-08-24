@@ -437,13 +437,13 @@ export function useChat() {
         const delayMs = 1000
         for (let i = 0; i < maxAttempts; i++) {
           await new Promise((resolve) => setTimeout(resolve, delayMs))
-          const res = await api.get<{ jobId?: string; state?: string; failedReason?: string; message?: ChatMessage; error?: { message?: string } }>(`/ai/analyze-photo/${jobId}`)
+          const res = await api.get<{ jobId?: string; status?: string; failedReason?: string; message?: ChatMessage; error?: { message?: string } }>(`/ai/analyze-photo/${jobId}`)
 
           if (res.data?.message) {
             return res.data.message
           }
 
-          const state = res.data?.state
+          const state = res.data?.status
           if (state === 'failed') {
             throw new Error(res.data?.failedReason || 'Photo analysis failed')
           }

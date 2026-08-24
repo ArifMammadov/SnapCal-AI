@@ -245,14 +245,13 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
 
     const status = await pollPhotoAnalysisStatus(jobId)
 
-    if (status.state !== 'completed') {
+    if (status.status !== 'completed') {
       return reply.send({
         jobId,
-        state: status.state,
+        status: status.status,
         failedReason: status.failedReason,
       })
     }
-
     try {
       const ctx = await getVisionJobContext(jobId)
       if (!ctx) {

@@ -68,7 +68,7 @@ export async function getVisionJobContext(jobId: string): Promise<{ userId: stri
   }
 }
 
-export async function pollPhotoAnalysisStatus(jobId: string): Promise<{ state: string; result?: any; failedReason?: string }> {
+export async function pollPhotoAnalysisStatus(jobId: string): Promise<{ status: string; result?: any; failedReason?: string }> {
   const { data } = await agent.get(`/vision-status/${jobId}`)
   return data
 }
@@ -79,7 +79,7 @@ export async function finalizePhotoAnalysis(
   jobId: string,
 ): Promise<AnalyzePhotoResult> {
   const status = await pollPhotoAnalysisStatus(jobId)
-  if (status.state !== 'completed' || !status.result) {
+  if (status.status !== 'completed' || !status.result) {
     throw new Error(status.failedReason || 'Vision analysis did not complete')
   }
 
