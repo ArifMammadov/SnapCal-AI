@@ -103,13 +103,17 @@ export function LoginScreen() {
       }
 
       let attempts = 0
-      const maxAttempts = 60
+      const maxAttempts = 120
       while (!cancelled && attempts < maxAttempts) {
         const initData = webApp?.initData
         const unsafeUser = webApp?.initDataUnsafe?.user
         attempts++
         if (unsafeUser) {
           setTgUser(unsafeUser)
+          setOnboarding((prev) => ({
+            ...prev,
+            name: prev.name || unsafeUser.first_name || unsafeUser.username || '',
+          }))
           setDebug(`attempt=${attempts}, initDataLen=${(initData || '').length}, user=${unsafeUser.first_name || unsafeUser.username || 'unknown'}`)
         }
         if (initData && unsafeUser) {
@@ -125,7 +129,7 @@ export function LoginScreen() {
             return true
           }
         }
-        await wait(200)
+        await wait(250)
       }
       return false
     }
