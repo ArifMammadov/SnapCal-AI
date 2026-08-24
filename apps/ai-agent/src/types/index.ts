@@ -8,6 +8,7 @@ export interface ChatInput {
   messageId: string
   message?: string
   attachments?: Attachment[]
+  user?: any
 }
 
 export interface ChatMessage {

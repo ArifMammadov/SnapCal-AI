@@ -220,11 +220,13 @@ export async function handleChat(input: ChatInput): Promise<ChatOutput> {
     return { message: { id: 'unavailable', role: 'ai', content: 'This feature is temporarily unavailable.' } }
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    include: { profile: true },
-  })
-  logger.info({ userId, found: !!user }, 'handleChat user lookup')
+  const userFromInput = input.user
+  const user = userFromInput
+    ? (userFromInput as any)
+    : await prisma.user.findUnique({
+        where: { id: userId },
+        include: { profile: true },
+      })
   if (!user) {
     return { message: { id: 'unauthorized', role: 'ai', content: 'User not found. Please log in again.' } }
   }
@@ -405,5 +407,12 @@ Respond in a helpful, concise way in the user's language. Do not provide medical
 }
 
 export async function analyzeFoodPhoto(userId: string, imageUrl: string): Promise<ChatOutput> {
-  return handleChat({ userId, messageId: crypto.randomUUID(), message: 'Analyze this food photo', attachments: [{ type: 'image', url: imageUrl }] })
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { profile: true },
+  })
+  if (!user) {
+    return { message: { id: 'unauthorized', role: 'ai', content: 'User not found. Please log in again.' } }
+  }
+  return handleChat({ userId, messageId: crypto.randomUUID(), message: 'Analyze this food photo', attachments: [{ type: 'image', url: imageUrl }], user })
 }
