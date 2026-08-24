@@ -33,6 +33,7 @@ export function startVisionWorker(): Worker {
     'vision-analysis',
     async (job: Job<VisionJobData>) => {
       const { userId, imageUrl } = job.data
+      logger.info({ userId, imageUrl, jobId: job.id }, 'vision worker processing job')
       try {
         const result = await analyzeFoodPhoto(userId, imageUrl)
         const outputTokens = estimateTokens(result.message.content)

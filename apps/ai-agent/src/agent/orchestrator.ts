@@ -224,6 +224,7 @@ export async function handleChat(input: ChatInput): Promise<ChatOutput> {
     where: { id: userId },
     include: { profile: true },
   })
+  logger.info({ userId, found: !!user }, 'handleChat user lookup')
   if (!user) {
     return { message: { id: 'unauthorized', role: 'ai', content: 'User not found. Please log in again.' } }
   }
