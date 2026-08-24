@@ -70,7 +70,7 @@ async function start() {
   const app = await buildApp()
   let worker: ReturnType<typeof startVisionWorker> | undefined
 
-  if (!env.WORKER_ONLY) {
+  if (env.WORKER_ONLY === 'true') {
     worker = startVisionWorker()
     if (worker) onShutdown(() => worker!.close())
   }
