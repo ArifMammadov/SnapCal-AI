@@ -433,8 +433,8 @@ export function useChat() {
 
       // Poll async vision analysis status
       const poll = async (): Promise<ChatMessage | null> => {
-        const maxAttempts = 60
-        const delayMs = 1500
+        const maxAttempts = 30
+        const delayMs = 1000
         for (let i = 0; i < maxAttempts; i++) {
           await new Promise((resolve) => setTimeout(resolve, delayMs))
           const res = await api.get<{ jobId?: string; state?: string; failedReason?: string; message?: ChatMessage; error?: { message?: string } }>(`/ai/analyze-photo/${jobId}`)

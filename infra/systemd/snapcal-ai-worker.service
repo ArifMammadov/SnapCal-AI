@@ -1,14 +1,14 @@
 [Unit]
-Description=SnapCal AI Vision Queue Worker
-After=network.target redis.service
+Description=SnapCal AI Vision Queue Worker - Main Production
+After=network.target redis-server.service
 
 [Service]
 Type=simple
-User=snapcal
-WorkingDirectory=/opt/snapcal/ai-agent
+User=root
+WorkingDirectory=/opt/snapcal-main/apps/ai-agent
 Environment=NODE_ENV=production
-EnvironmentFile=/opt/snapcal/ai-agent/.env
-ExecStart=/usr/bin/node dist/worker.js
+EnvironmentFile=/opt/snapcal-main/.env
+ExecStart=/usr/bin/pnpm start:worker
 Restart=always
 RestartSec=5
 

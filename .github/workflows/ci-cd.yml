@@ -62,10 +62,18 @@ jobs:
             pnpm --filter @snapcal/telegram-bot build
             pnpm --filter @snapcal/admin build
             pnpm --filter @snapcal/mobile build
+            # Deploy nginx configs for static uploads and SPA fallback
+            cp infra/nginx/snapcal.health.conf /etc/nginx/sites-enabled/snapcal.health.conf
+            cp infra/nginx/preprod.snapcal.health.conf /etc/nginx/sites-enabled/preprod.snapcal.health.conf
+            cp infra/nginx/test.snapcal.health.conf /etc/nginx/sites-enabled/test.snapcal.health.conf
+            rm -f /etc/nginx/sites-enabled/*.bak.* /etc/nginx/sites-enabled/*~
+            nginx -t
+            systemctl reload nginx
             cp infra/systemd/snapcal-api-test.service /etc/systemd/system/
             cp infra/systemd/snapcal-ai-test.service /etc/systemd/system/
+            cp infra/systemd/snapcal-ai-worker.service /etc/systemd/system/
             systemctl daemon-reload
-            systemctl restart snapcal-api-test snapcal-ai-test || true
+            systemctl restart snapcal-api-test snapcal-ai-test snapcal-ai-worker || true
             sleep 5
             systemctl status snapcal-api-test --no-pager || true
             systemctl status snapcal-ai-test --no-pager || true
@@ -108,10 +116,18 @@ jobs:
             pnpm --filter @snapcal/telegram-bot build
             pnpm --filter @snapcal/admin build
             pnpm --filter @snapcal/mobile build
+            # Deploy nginx configs for static uploads and SPA fallback
+            cp infra/nginx/snapcal.health.conf /etc/nginx/sites-enabled/snapcal.health.conf
+            cp infra/nginx/preprod.snapcal.health.conf /etc/nginx/sites-enabled/preprod.snapcal.health.conf
+            cp infra/nginx/test.snapcal.health.conf /etc/nginx/sites-enabled/test.snapcal.health.conf
+            rm -f /etc/nginx/sites-enabled/*.bak.* /etc/nginx/sites-enabled/*~
+            nginx -t
+            systemctl reload nginx
             cp infra/systemd/snapcal-api-preprod.service /etc/systemd/system/
             cp infra/systemd/snapcal-ai-preprod.service /etc/systemd/system/
+            cp infra/systemd/snapcal-ai-worker.service /etc/systemd/system/
             systemctl daemon-reload
-            systemctl restart snapcal-api-preprod snapcal-ai-preprod || true
+            systemctl restart snapcal-api-preprod snapcal-ai-preprod snapcal-ai-worker || true
             sleep 5
             systemctl status snapcal-api-preprod --no-pager || true
             systemctl status snapcal-ai-preprod --no-pager || true
@@ -154,10 +170,18 @@ jobs:
             pnpm --filter @snapcal/telegram-bot build
             pnpm --filter @snapcal/admin build
             pnpm --filter @snapcal/mobile build
+            # Deploy nginx configs for static uploads and SPA fallback
+            cp infra/nginx/snapcal.health.conf /etc/nginx/sites-enabled/snapcal.health.conf
+            cp infra/nginx/preprod.snapcal.health.conf /etc/nginx/sites-enabled/preprod.snapcal.health.conf
+            cp infra/nginx/test.snapcal.health.conf /etc/nginx/sites-enabled/test.snapcal.health.conf
+            rm -f /etc/nginx/sites-enabled/*.bak.* /etc/nginx/sites-enabled/*~
+            nginx -t
+            systemctl reload nginx
             cp infra/systemd/snapcal-api-main.service /etc/systemd/system/
             cp infra/systemd/snapcal-ai-main.service /etc/systemd/system/
+            cp infra/systemd/snapcal-ai-worker.service /etc/systemd/system/
             systemctl daemon-reload
-            systemctl restart snapcal-api-main snapcal-ai-main || true
+            systemctl restart snapcal-api-main snapcal-ai-main snapcal-ai-worker || true
             sleep 10
             systemctl status snapcal-api-main --no-pager || true
             systemctl status snapcal-ai-main --no-pager || true
