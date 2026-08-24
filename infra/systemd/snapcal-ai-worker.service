@@ -7,6 +7,7 @@ Type=simple
 User=root
 WorkingDirectory=/opt/snapcal-main/apps/ai-agent
 Environment=NODE_ENV=production
+Environment=WORKER_ONLY=true
 EnvironmentFile=/opt/snapcal-main/.env
 ExecStart=/usr/bin/pnpm start:worker
 Restart=always
