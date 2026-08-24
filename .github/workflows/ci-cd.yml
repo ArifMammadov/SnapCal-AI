@@ -181,12 +181,14 @@ jobs:
             cp infra/systemd/snapcal-ai-main.service /etc/systemd/system/
             cp infra/systemd/snapcal-ai-worker.service /etc/systemd/system/
             systemctl daemon-reload
-            systemctl restart snapcal-api-main snapcal-ai-main snapcal-ai-worker || true
+            systemctl restart snapcal-api-main snapcal-ai-main snapcal-ai-worker
             sleep 10
             systemctl status snapcal-api-main --no-pager || true
             systemctl status snapcal-ai-main --no-pager || true
+            systemctl status snapcal-ai-worker --no-pager || true
             journalctl -u snapcal-api-main -n 20 --no-pager || true
             journalctl -u snapcal-ai-main -n 20 --no-pager || true
+            journalctl -u snapcal-ai-worker -n 20 --no-pager || true
             curl -s -o /dev/null -w '%{http_code}' http://localhost:4000/health | grep -q 200 || (echo "API health failed"; exit 1)
             curl -s -o /dev/null -w '%{http_code}' http://localhost:4001/health | grep -q 200 || (echo "AI health failed"; exit 1)
             echo "Production deploy done"

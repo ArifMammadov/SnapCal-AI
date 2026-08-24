@@ -24,7 +24,11 @@ const linkTelegramSchema = z.object({
 
 const guestSchema = z.object({
   firstName: z.string().max(100).optional(),
+  lastName: z.string().max(100).optional(),
   languageCode: z.string().max(10).optional(),
+  telegramId: z.union([z.string(), z.number()]).optional(),
+  telegramUsername: z.string().max(100).optional(),
+  avatarUrl: z.string().url().optional(),
 })
 
 function verifyTelegramInitData(initData: string): Record<string, string> | null {
@@ -62,20 +66,27 @@ export async function authRoutes(app: FastifyInstance) {
   }, async (request: FastifyRequest, reply: FastifyReply) => {
     const body = guestSchema.parse(request.body)
     const languageCode = getRegionLanguage(body.languageCode)
+    const telegramId = body.telegramId ? BigInt(body.telegramId) : null
 
-    const user = await prisma.user.create({
-      data: {
-        telegramId: null,
-        telegramUsername: null,
-        firstName: body.firstName ?? 'Guest',
-        lastName: null,
-        avatarUrl: null,
-        languageCode,
-        trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        profile: { create: {} },
-      },
-      include: { profile: true },
-    })
+    const existingByTelegram = telegramId
+      ? await prisma.user.findUnique({ where: { telegramId }, include: { profile: true } })
+      : null
+
+    const user = existingByTelegram
+      ? existingByTelegram
+      : await prisma.user.create({
+          data: {
+            telegramId,
+            telegramUsername: body.telegramUsername ?? null,
+            firstName: body.firstName ?? 'Guest',
+            lastName: body.lastName ?? null,
+            avatarUrl: body.avatarUrl ?? null,
+            languageCode,
+            trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+            profile: { create: {} },
+          },
+          include: { profile: true },
+        })
 
     const accessToken = app.jwt.sign(
       { userId: user.id, telegramId: user.telegramId ? user.telegramId.toString() : undefined, role: user.role },

@@ -135,11 +135,16 @@ export function LoginScreen() {
     }
 
     const tryGuest = async () => {
+      const unsafeUser = typeof window !== 'undefined' ? window.Telegram?.WebApp?.initDataUnsafe?.user : undefined
       setDebug((prev) => prev + '; falling back to guest auth')
       try {
         const res = await api.post('/auth/guest', {
-          firstName: onboarding.name || undefined,
+          firstName: onboarding.name || unsafeUser?.first_name || undefined,
+          lastName: unsafeUser?.last_name || undefined,
           languageCode: 'ru',
+          telegramId: unsafeUser?.id,
+          telegramUsername: unsafeUser?.username,
+          avatarUrl: unsafeUser?.photo_url,
         })
         await finishAuth(res.data.accessToken, res.data.refreshToken, res.data.user)
       } catch (err: any) {
