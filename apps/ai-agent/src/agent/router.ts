@@ -81,16 +81,16 @@ function parseRouterJson(content: string): { skillName: string; confidence: numb
 function defaultToolsForSkill(skillName: string): string[] {
   switch (skillName) {
     case 'nutrition':
-      return ['getUserSummary', 'searchKnowledge']
+      return ['getUserSummary', 'searchKnowledge', 'webSearch']
     case 'fitness':
-      return ['getUserSummary', 'searchKnowledge', 'recommendProgram']
+      return ['getUserSummary', 'searchKnowledge', 'recommendProgram', 'webSearch']
     case 'food_vision':
       return ['analyzePhoto']
     case 'marketplace':
-      return ['getUserSummary', 'recommendProgram']
+      return ['getUserSummary', 'recommendProgram', 'webSearch']
     case 'onboarding':
       return ['getUserSummary']
     default:
-      return ['getUserSummary', 'searchKnowledge']
+      return ['getUserSummary', 'searchKnowledge', 'webSearch']
   }
 }

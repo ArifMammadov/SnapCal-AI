@@ -11,7 +11,7 @@ import { routeSkillLlm } from './router.js'
 import { aiCostTotal, aiErrorsTotal, aiLatencyHistogram, aiRequestsTotal } from '../lib/metrics.js'
 import { auditLog } from '../audit/index.js'
 import { updateMemory } from '../memory/index.js'
-import { getUserSummary, searchKnowledge, recommendProgram, analyzePhoto, logFood, logActivity } from '../tools/index.js'
+import { getUserSummary, searchKnowledge, recommendProgram, analyzePhoto, logFood, logActivity, webSearch } from '../tools/index.js'
 
 const FALLBACK_MODEL = 'gpt-4o-mini'
 const MAX_OUTPUT_TOKENS = 1024
@@ -130,6 +130,9 @@ async function runTools(toolNames: string[], context: ToolContext): Promise<Reco
       case 'logActivity':
         results[name] = await logActivity(context)
         break
+      case 'webSearch':
+        results[name] = await webSearch(context)
+        break
       default:
         results[name] = { success: false, error: 'Unknown tool' }
     }
@@ -221,7 +224,7 @@ export async function handleChat(input: ChatInput): Promise<ChatOutput> {
     route.skillName = 'nutrition'
     route.toolNames = route.toolNames.filter((n) => n !== 'analyzePhoto')
     if (route.toolNames.length === 0) {
-      route.toolNames = ['getUserSummary', 'searchKnowledge']
+      route.toolNames = ['getUserSummary', 'searchKnowledge', 'webSearch']
     }
   }
   const skill = await resolveSkill(route.skillName as any)
@@ -253,7 +256,10 @@ export async function handleChat(input: ChatInput): Promise<ChatOutput> {
 
   // Skip knowledge search for pure coaching/small-talk to reduce latency
   const shouldSearchKnowledge = route.skillName === 'nutrition' || route.skillName === 'fitness' || route.skillName === 'marketplace'
-  const toolNames = shouldSearchKnowledge ? route.toolNames : route.toolNames.filter((n) => n !== 'searchKnowledge')
+  const shouldWebSearch = shouldSearchKnowledge
+  const toolNames = shouldSearchKnowledge
+    ? route.toolNames
+    : route.toolNames.filter((n) => n !== 'searchKnowledge' && n !== 'webSearch')
   const toolResults = await runTools(toolNames, context)
 
   const history = await prisma.chatMessage.findMany({
@@ -275,7 +281,9 @@ ${JSON.stringify(toolResults, null, 2)}
 Recent chat history (newest first):
 ${history.map((h: { role: string; content: string }) => `${h.role}: ${h.content.slice(0, 200)}`).join('\n')}
 
-Respond in a helpful, concise way in the user's language. Do not provide medical diagnoses. Keep your answer under 3 paragraphs.`
+Respond in a helpful, concise way in the user's language. Do not provide medical diagnoses. Keep your answer under 3 paragraphs.
+
+When answering nutrition or fitness questions, prefer web search results for fresh facts and numbers.`
 
   const model = skill.allowedModels[0] ?? FALLBACK_MODEL
   let content = ''

@@ -28,8 +28,9 @@ export async function getUserSummary(context: ToolContext): Promise<ToolResult> 
 }
 
 import { searchKnowledgeWithVector } from './knowledge.js'
+import { webSearch } from './webSearch.js'
 
-export { searchKnowledgeWithVector as searchKnowledge }
+export { searchKnowledgeWithVector as searchKnowledge, webSearch }
 
 export async function recommendProgram(context: ToolContext): Promise<ToolResult> {
   const { userId } = context

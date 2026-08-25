@@ -18,6 +18,10 @@ export const env = z.object({
   AGENT_SECRET: z.string().min(16),
   WORKER_ONLY: z.enum(['true', 'false']).default('false'),
   OTEL_EXPORTER_OTLP_HEADERS: z.string().optional(),
+  BRAVE_API_KEY: z.string().optional(),
+  SERPAPI_KEY: z.string().optional(),
+  VISION_MODEL: z.string().default('deepseek/deepseek-v4-flash-vision-exp'),
+  WEB_SEARCH_MODEL: z.string().default('openai/gpt-4o-mini'),
 }).parse(process.env)
 
 export type Env = typeof env

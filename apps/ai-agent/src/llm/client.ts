@@ -187,27 +187,37 @@ export async function callVisionLlm(imageUrl: string): Promise<LlmResponse> {
     },
   ]
 
-  const { data } = await axios.post(
-    `${env.OPENROUTER_BASE_URL}/chat/completions`,
-    {
-      model: 'openai/gpt-4o-mini',
-      messages,
-      max_tokens: 256,
-      temperature: 0.2,
-      response_format: { type: 'json_object' },
-    },
-    {
-      headers: {
-        Authorization: authHeader(),
-        'Content-Type': 'application/json',
-      },
-      timeout: 25000,
-    }
-  )
+  const visionModel = env.VISION_MODEL
+  const fallbackModel = 'openai/gpt-4o-mini'
 
-  return {
-    content: data.choices?.[0]?.message?.content ?? '',
-    model: 'openai/gpt-4o-mini',
-    provider: 'openrouter',
+  for (const model of [visionModel, fallbackModel]) {
+    try {
+      const { data } = await axios.post(
+        `${env.OPENROUTER_BASE_URL}/chat/completions`,
+        {
+          model,
+          messages,
+          max_tokens: 256,
+          temperature: 0.2,
+          response_format: { type: 'json_object' },
+        },
+        {
+          headers: {
+            Authorization: authHeader(),
+            'Content-Type': 'application/json',
+          },
+          timeout: 25000,
+        }
+      )
+
+      const content = data.choices?.[0]?.message?.content ?? ''
+      if (content) {
+        return { content, model, provider: 'openrouter' }
+      }
+    } catch (err) {
+      logger.warn({ err, model }, 'vision model failed, trying fallback')
+    }
   }
+
+  throw new Error('All vision models failed')
 }
