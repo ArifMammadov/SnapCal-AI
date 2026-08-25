@@ -59,20 +59,33 @@ export async function saveDishToKnowledge(
       imageUrl,
     })
 
-    const slugBase = dish.name.toLowerCase().replace(/[^a-z0-9а-яё]+/g, '-').replace(/^-|-$/g, '')
+    const slugBase = dish.name.toLowerCase().replace(/[^a-z0-9а-яё0-9]+/g, '-').replace(/^-|-$/g, '')
     const slug = `${slugBase}-${Date.now()}`
 
-    const article = await prisma.knowledgeArticle.create({
-      data: {
-        title: dish.name,
-        slug,
-        content,
-        category: 'food',
-        tags: ['food', 'ai-analyzed', dish.suggestedMealType.toLowerCase(), ...(dish.ingredients ?? [])],
-        sourceUrl: imageUrl,
-        createdBy: userId,
-      },
+    const existing = await prisma.knowledgeArticle.findFirst({
+      where: { title: dish.name, sourceUrl: imageUrl || null },
     })
+
+    const article = existing
+      ? await prisma.knowledgeArticle.update({
+          where: { id: existing.id },
+          data: {
+            content,
+            tags: ['food', 'ai-analyzed', dish.suggestedMealType.toLowerCase(), ...(dish.ingredients ?? [])],
+            updatedAt: new Date(),
+          },
+        })
+      : await prisma.knowledgeArticle.create({
+          data: {
+            title: dish.name,
+            slug,
+            content,
+            category: 'food',
+            tags: ['food', 'ai-analyzed', dish.suggestedMealType.toLowerCase(), ...(dish.ingredients ?? [])],
+            sourceUrl: imageUrl,
+            createdBy: userId,
+          },
+        })
 
     const embedding = await generateEmbedding(
       `${dish.name}. ${dish.ingredients?.join(', ') ?? ''}. ${dish.serving}. ${dish.calories} kcal.`,

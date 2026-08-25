@@ -351,7 +351,7 @@ If the user asks what to eat today, use their food preferences and recent meals 
           structured = formatFoodAnalysisCard(foodData, { ...stats, lang })
           content = structuredResponseToText(structured, lang)
           await saveDishToKnowledge(foodData, userId, imageUrl)
-          await recordFoodPreference(userId, foodData.name, foodData.ingredients ?? [])
+          await recordFoodPreference(userId, foodData.name, foodData.ingredients ?? [], foodData.confidence)
         }
       } else {
         content = JSON.stringify({ error: 'No image provided' })

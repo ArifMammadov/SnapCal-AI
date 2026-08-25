@@ -47,11 +47,18 @@ export async function extractFoodPreferences(userId: string, content: string) {
   }
 }
 
-export async function recordFoodPreference(userId: string, foodName: string, ingredients: string[]) {
+export async function recordFoodPreference(userId: string, foodName: string, ingredients: string[], confidence = 0.5) {
   try {
+    const lowerName = foodName.toLowerCase()
+    const skipNames = ['unknown', 'could not identify food', 'could not identify', 'unidentified']
+    if (skipNames.some((n) => lowerName.includes(n))) return
+    if (confidence < 0.5) return
+
     await upsertFact(userId, 'recent_food', foodName, 0.9)
     for (const ingredient of ingredients.slice(0, 5)) {
-      await upsertFact(userId, `ingredient:${ingredient.toLowerCase()}`, ingredient.toLowerCase(), 0.7)
+      const ing = ingredient.toLowerCase().trim()
+      if (!ing || skipNames.some((n) => ing.includes(n))) continue
+      await upsertFact(userId, `ingredient:${ing}`, ing, 0.7)
     }
   } catch {
     // ignore
