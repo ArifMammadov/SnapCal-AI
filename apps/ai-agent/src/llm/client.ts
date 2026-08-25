@@ -182,7 +182,7 @@ export async function callVisionLlm(imageUrl: string): Promise<LlmResponse> {
       role: 'user',
       content: [
         { type: 'text', text: 'What food is in this photo and what are its macros?' },
-        { type: 'image_url', image_url: { url: imageUrl, detail: 'low' } },
+        { type: 'image_url', image_url: { url: imageUrl, detail: 'auto' } },
       ],
     },
   ]
