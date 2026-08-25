@@ -20,6 +20,7 @@ export const env = z.object({
   OTEL_EXPORTER_OTLP_HEADERS: z.string().optional(),
   BRAVE_API_KEY: z.string().optional(),
   SERPAPI_KEY: z.string().optional(),
+  USDA_API_KEY: z.string().optional(),
   VISION_MODEL: z.string().default('openai/gpt-4o'),
   WEB_SEARCH_MODEL: z.string().default('openai/gpt-4o-mini'),
 }).parse(process.env)

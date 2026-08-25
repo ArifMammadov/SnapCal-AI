@@ -12,6 +12,7 @@ import { aiCostTotal, aiErrorsTotal, aiLatencyHistogram, aiRequestsTotal } from 
 import { auditLog } from '../audit/index.js'
 import { updateMemory } from '../memory/index.js'
 import { getUserSummary, searchKnowledge, recommendProgram, analyzePhoto, logFood, logActivity, webSearch } from '../tools/index.js'
+import { correctFoodMacrosWithUsda } from '../lib/foodNutrition.js'
 
 const FALLBACK_MODEL = 'gpt-4o-mini'
 const MAX_OUTPUT_TOKENS = 1024
@@ -72,6 +73,24 @@ function buildFallbackFoodAnalysis(): string {
     suggestedMealType: 'SNACK',
     note: 'AI vision service temporarily unavailable. Please try again or describe the food in text.',
   })
+}
+
+function safeParseFoodJson(content: string): { name: string; calories: number; proteinG: number; carbsG: number; fatG: number; serving: string; suggestedMealType: string } | null {
+  try {
+    const raw = JSON.parse(content)
+    if (!raw || typeof raw.name !== 'string') return null
+    return {
+      name: raw.name,
+      calories: Number(raw.calories) || 0,
+      proteinG: Number(raw.proteinG) || 0,
+      carbsG: Number(raw.carbsG) || 0,
+      fatG: Number(raw.fatG) || 0,
+      serving: String(raw.serving || '1 portion'),
+      suggestedMealType: String(raw.suggestedMealType || 'SNACK'),
+    }
+  } catch {
+    return null
+  }
 }
 
 interface RouteResult {
@@ -306,8 +325,23 @@ When answering nutrition or fitness questions, prefer web search results for fre
             modelUsed = 'recent-log'
           } else {
             const visionResult = await callVisionLlm(imageUrl)
-            content = visionResult.content
-            modelUsed = visionResult.model
+            let parsed = safeParseFoodJson(visionResult.content)
+            if (parsed) {
+              const corrected = await correctFoodMacrosWithUsda(parsed.name, parsed.serving, {
+                calories: parsed.calories,
+                proteinG: parsed.proteinG,
+                carbsG: parsed.carbsG,
+                fatG: parsed.fatG,
+              })
+              if (corrected) {
+                parsed = { ...parsed, ...corrected }
+                modelUsed = `${visionResult.model}+USDA`
+              } else {
+                modelUsed = visionResult.model
+              }
+            }
+            content = JSON.stringify(parsed ?? visionResult.content)
+            modelUsed = modelUsed || visionResult.model
             await setCachedVisionResult(imageUrl, content)
           }
         }
