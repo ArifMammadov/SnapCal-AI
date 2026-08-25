@@ -487,6 +487,7 @@ enum MessageType {
   FOOD_ANALYSIS
   MACRO_CARD
   VOICE
+  STRUCTURED
 }
 
 enum FeedbackRating {

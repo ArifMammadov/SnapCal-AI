@@ -45,6 +45,19 @@ interface AiAgentResponse {
       serving: string
       suggestedMealType: string
     }
+    structured?: {
+      emoji: string
+      mealLabel: string
+      foodName: string
+      calories: number
+      proteinG: number
+      carbsG: number
+      fatG: number
+      serving: string
+      evaluation: string
+      recommendations: { emoji: string; text: string }[]
+      dailyProgress: { consumed: number; target: number; unit: string }
+    }
     usedFallback?: boolean
   }
 }
@@ -145,7 +158,9 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
           type: (aiResponse.message.type?.toUpperCase() as any) ?? 'TEXT',
           content: aiResponse.message.content,
           modelUsed: aiResponse.message.modelUsed,
-          attachments: aiResponse.message.foodData ? { foodData: aiResponse.message.foodData } : undefined,
+          attachments: aiResponse.message.foodData || aiResponse.message.structured
+            ? { foodData: aiResponse.message.foodData, structured: aiResponse.message.structured }
+            : undefined,
         },
       })
 
@@ -156,6 +171,7 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
           type: (aiResponse.message.type?.toUpperCase() as any) ?? 'TEXT',
           content: aiResponse.message.content,
           foodData: aiResponse.message.foodData,
+          structured: aiResponse.message.structured,
           timestamp: aiMessage.createdAt.toISOString(),
         },
       }

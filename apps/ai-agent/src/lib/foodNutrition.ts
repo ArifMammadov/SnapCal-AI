@@ -23,8 +23,7 @@ interface UsdaFood {
 }
 
 export async function lookupUsdaNutrition(name: string): Promise<NutritionPer100g | null> {
-  const key = env.USDA_API_KEY
-  if (!key) return null
+  const key = env.USDA_API_KEY || 'DEMO_KEY'
   try {
     const res = await fetch(
       `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(name)}&dataType=Foundation,SR%20Legacy&pageSize=1&api_key=${key}`,
@@ -75,6 +74,8 @@ function scaleToServing(nutrition: NutritionPer100g, servingG: number): Nutritio
 
 export function estimateServingG(servingText: string): number {
   const lower = servingText.toLowerCase()
+  const weightMatch = lower.match(/(\d+(?:\.\d+)?)\s*(g|грамм|грамма|гр)/i)
+  if (weightMatch) return parseFloat(weightMatch[1])
   if (/plate|bowl|dish|portion|serving/.test(lower)) return 250
   if (/sandwich|wrap|burger|panini/.test(lower)) return 200
   if (/cup/.test(lower)) return 200
@@ -110,4 +111,8 @@ export async function correctFoodMacrosWithUsda(
     sourceName: per100g.sourceName,
     sourceUrl: per100g.sourceUrl,
   }
+}
+
+export async function findUsdaByName(name: string): Promise<NutritionPer100g | null> {
+  return lookupUsdaNutrition(name)
 }

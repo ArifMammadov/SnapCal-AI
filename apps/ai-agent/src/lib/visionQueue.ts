@@ -22,9 +22,23 @@ export interface VisionJobResult {
     id: string
     role: 'ai'
     content: string
-    type: 'text'
+    type: 'text' | 'STRUCTURED'
     modelUsed?: string
     usedFallback?: boolean
+    structured?: {
+      emoji: string
+      mealLabel: string
+      foodName: string
+      calories: number
+      proteinG: number
+      carbsG: number
+      fatG: number
+      serving: string
+      evaluation: string
+      recommendations: { emoji: string; text: string }[]
+      dailyProgress: { consumed: number; target: number; unit: string }
+    }
+    foodData?: any
   }
 }
 
@@ -55,6 +69,7 @@ export function startVisionWorker(): Worker {
               fatG: 0,
               serving: 'unknown',
               suggestedMealType: 'SNACK',
+              confidence: 0,
               error: errorMessage,
             }),
             type: 'text',

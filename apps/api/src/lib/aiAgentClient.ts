@@ -32,8 +32,21 @@ export interface AnalyzePhotoResult {
     id: string
     role: 'ai'
     content: string
-    type: 'FOOD_ANALYSIS' | 'TEXT'
+    type: 'FOOD_ANALYSIS' | 'TEXT' | 'STRUCTURED'
     foodData?: ReturnType<typeof parseFoodJson>
+    structured?: {
+      emoji: string
+      mealLabel: string
+      foodName: string
+      calories: number
+      proteinG: number
+      carbsG: number
+      fatG: number
+      serving: string
+      evaluation: string
+      recommendations: { emoji: string; text: string }[]
+      dailyProgress: { consumed: number; target: number; unit: string }
+    }
     imageUrl: string
     timestamp: string
   }
@@ -93,10 +106,10 @@ export async function finalizePhotoAnalysis(
     data: {
       userId,
       role: 'AI',
-      type: 'FOOD_ANALYSIS',
+      type: (status.result.message?.type === 'STRUCTURED' ? 'STRUCTURED' : 'FOOD_ANALYSIS') as any, // TODO: remove cast after migration applied
       content,
       modelUsed: status.result.message?.modelUsed,
-      attachments: { foodData, imageUrl },
+      attachments: { foodData, imageUrl, structured: status.result.message?.structured },
     },
   })
 
@@ -104,9 +117,10 @@ export async function finalizePhotoAnalysis(
     message: {
       id: aiMessage.id,
       role: 'ai',
-      type: 'FOOD_ANALYSIS',
+      type: (status.result.message?.type === 'STRUCTURED' ? 'STRUCTURED' : 'FOOD_ANALYSIS') as any, // TODO: remove cast after migration applied
       content,
       foodData,
+      structured: status.result.message?.structured,
       imageUrl,
       timestamp: aiMessage.createdAt.toISOString(),
     },

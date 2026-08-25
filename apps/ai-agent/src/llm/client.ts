@@ -176,12 +176,25 @@ export async function callVisionLlm(imageUrl: string): Promise<LlmResponse> {
     {
       role: 'system',
       content:
-        'You are a food recognition expert. Analyze the food photo and return ONLY a valid JSON object with no markdown formatting. Fields: name (string), calories (integer), proteinG (number), carbsG (number), fatG (number), serving (string, e.g. "1 plate"), suggestedMealType (one of: BREAKFAST, LUNCH, DINNER, SNACK).',
+        `You are a food recognition expert. Analyze the food photo and return ONLY a valid JSON object with no markdown formatting.
+
+Required fields:
+- name (string): specific dish name in user-friendly form
+- calories (integer)
+- proteinG, carbsG, fatG (numbers)
+- serving (string, e.g. "1 plate ~350 g")
+- suggestedMealType (one of: BREAKFAST, LUNCH, DINNER, SNACK)
+- confidence (number 0.0-1.0): how sure you are about the dish identification
+- ingredients (string[]): visible/main ingredients
+- alternativeNames (string[]): 1-2 alternative names if ambiguous
+
+If you are not sure what the dish is, set confidence below 0.75 and give your best guess in "name".
+Estimate portion size from the photo and scale macros accordingly.`,
     },
     {
       role: 'user',
       content: [
-        { type: 'text', text: 'What food is in this photo and what are its macros?' },
+        { type: 'text', text: 'What food is in this photo, what are its macros, and how confident are you?' },
         { type: 'image_url', image_url: { url: imageUrl, detail: 'auto' } },
       ],
     },
@@ -197,7 +210,7 @@ export async function callVisionLlm(imageUrl: string): Promise<LlmResponse> {
         {
           model,
           messages,
-          max_tokens: 256,
+          max_tokens: 512,
           temperature: 0.2,
           response_format: { type: 'json_object' },
         },

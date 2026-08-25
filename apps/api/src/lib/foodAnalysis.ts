@@ -9,6 +9,9 @@ const foodDataSchema = z.object({
   fatG: z.number().min(0),
   serving: z.string().optional(),
   suggestedMealType: z.enum(['BREAKFAST', 'LUNCH', 'DINNER', 'SNACK']).optional(),
+  confidence: z.number().min(0).max(1).optional(),
+  ingredients: z.array(z.string()).optional(),
+  alternativeNames: z.array(z.string()).optional(),
 })
 
 export type ParsedFoodData = z.infer<typeof foodDataSchema>

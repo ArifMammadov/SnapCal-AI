@@ -2,7 +2,7 @@ import crypto from 'node:crypto'
 import { prisma } from '@snapcal/database'
 import { getRedis, logger } from '@snapcal/shared'
 import { resolveSkill } from './promptResolver.js'
-import type { ChatInput, ChatOutput, ToolContext } from '../types/index.js'
+import type { ChatInput, ChatOutput, ToolContext, FoodAnalysisData, StructuredAiResponse } from '../types/index.js'
 import { callLlm, callVisionLlm } from '../llm/client.js'
 import { applyGuardrails, containsPromptLeakage, isPromptInjection, sanitizeUserInput } from '../guardrails/index.js'
 import { estimateCost, recordAiUsage } from '../lib/limits.js'
@@ -10,13 +10,16 @@ import { estimateTokens } from '../llm/client.js'
 import { routeSkillLlm } from './router.js'
 import { aiCostTotal, aiErrorsTotal, aiLatencyHistogram, aiRequestsTotal } from '../lib/metrics.js'
 import { auditLog } from '../audit/index.js'
-import { updateMemory } from '../memory/index.js'
+import { updateMemory, recordFoodPreference, getFoodPreferences } from '../memory/index.js'
 import { getUserSummary, searchKnowledge, recommendProgram, analyzePhoto, logFood, logActivity, webSearch } from '../tools/index.js'
-import { correctFoodMacrosWithUsda } from '../lib/foodNutrition.js'
+import { correctFoodMacrosWithUsda, lookupUsdaNutrition } from '../lib/foodNutrition.js'
+import { formatFoodAnalysisCard, formatLowConfidenceQuestion, structuredResponseToText } from '../lib/responseFormatter.js'
+import { findDishInKnowledge, saveDishToKnowledge } from '../lib/knowledgeBase.js'
 
 const FALLBACK_MODEL = 'gpt-4o-mini'
 const MAX_OUTPUT_TOKENS = 1024
 const VISION_CACHE_TTL_SECONDS = 60 * 60 * 24 // 24h
+const LOW_CONFIDENCE_THRESHOLD = 0.75
 const redis = getRedis()
 
 function visionCacheKey(imageUrl: string): string {
@@ -40,30 +43,8 @@ async function setCachedVisionResult(imageUrl: string, content: string): Promise
   }
 }
 
-async function findRecentFoodLog(userId: string, imageUrl: string): Promise<{ name: string; calories: number; proteinG: number; carbsG: number; fatG: number } | null> {
-  try {
-    const recent = await prisma.foodLog.findFirst({
-      where: { userId, aiAnalyzed: true },
-      orderBy: { loggedAt: 'desc' },
-      take: 1,
-    })
-    if (recent) {
-      return {
-        name: recent.name,
-        calories: recent.calories,
-        proteinG: recent.proteinG ?? 0,
-        carbsG: recent.carbsG ?? 0,
-        fatG: recent.fatG ?? 0,
-      }
-    }
-  } catch (err) {
-    logger.warn({ err, userId }, 'failed to look up recent food log')
-  }
-  return null
-}
-
-function buildFallbackFoodAnalysis(): string {
-  return JSON.stringify({
+function buildFallbackFoodAnalysis(): FoodAnalysisData {
+  return {
     name: 'Could not identify food',
     calories: 0,
     proteinG: 0,
@@ -71,11 +52,12 @@ function buildFallbackFoodAnalysis(): string {
     fatG: 0,
     serving: 'unknown',
     suggestedMealType: 'SNACK',
+    confidence: 0,
     note: 'AI vision service temporarily unavailable. Please try again or describe the food in text.',
-  })
+  } as any
 }
 
-function safeParseFoodJson(content: string): { name: string; calories: number; proteinG: number; carbsG: number; fatG: number; serving: string; suggestedMealType: string } | null {
+function safeParseFoodJson(content: string): FoodAnalysisData | null {
   try {
     const raw = JSON.parse(content)
     if (!raw || typeof raw.name !== 'string') return null
@@ -86,11 +68,19 @@ function safeParseFoodJson(content: string): { name: string; calories: number; p
       carbsG: Number(raw.carbsG) || 0,
       fatG: Number(raw.fatG) || 0,
       serving: String(raw.serving || '1 portion'),
-      suggestedMealType: String(raw.suggestedMealType || 'SNACK'),
+      suggestedMealType: validateMealType(raw.suggestedMealType),
+      confidence: typeof raw.confidence === 'number' ? Math.max(0, Math.min(1, raw.confidence)) : 0.9,
+      ingredients: Array.isArray(raw.ingredients) ? raw.ingredients : [],
+      alternativeNames: Array.isArray(raw.alternativeNames) ? raw.alternativeNames : [],
     }
   } catch {
     return null
   }
+}
+
+function validateMealType(value: unknown): 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK' {
+  const valid = ['BREAKFAST', 'LUNCH', 'DINNER', 'SNACK']
+  return valid.includes(String(value)) ? (String(value) as any) : 'SNACK'
 }
 
 interface RouteResult {
@@ -163,50 +153,23 @@ function getUserLanguage(user: { languageCode?: string | null; regionCode?: stri
   return user?.languageCode ?? 'en'
 }
 
-async function saveAiResponse(
-  userId: string,
-  content: string,
-  skillName: string,
-  modelUsed: string,
-  startTime: number,
-): Promise<ChatOutput> {
-  const chat = await prisma.chatMessage.create({
-    data: {
-      userId,
-      role: 'AI',
-      content,
-      modelUsed,
-      latencyMs: Date.now() - startTime,
-    },
+async function getTodayStats(userId: string, profile?: { dailyCalories?: number | null } | null) {
+  const now = new Date()
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0)
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0)
+
+  const todayLogs = await prisma.foodLog.findMany({
+    where: { userId, loggedAt: { gte: start, lt: end } },
+    select: { calories: true, name: true },
   })
 
-  void auditLog({
-    userId,
-    action: 'AI_CHAT',
-    metadata: {
-      skillName,
-      modelUsed,
-      latencyMs: Date.now() - startTime,
-      confidence: 1,
-      toolsUsed: [],
-    },
-  })
-
-  const latencySeconds = (Date.now() - startTime) / 1000
-  aiLatencyHistogram.observe({ skill: skillName, model: modelUsed }, latencySeconds)
-  aiRequestsTotal.inc({ skill: skillName, model: modelUsed, status: 'success' })
-
+  const consumedKcal = todayLogs.reduce((sum, l) => sum + (l.calories || 0), 0)
+  const targetKcal = profile?.dailyCalories ?? 2000
   return {
-    message: {
-      id: chat.id,
-      role: 'ai',
-      content,
-      type: 'text',
-      modelUsed,
-      usedFallback: false,
-      skillName,
-      confidence: 1,
-    },
+    consumedKcal,
+    targetKcal,
+    remainingKcal: Math.max(0, targetKcal - consumedKcal),
+    mealHistory: todayLogs.map((l) => ({ name: l.name, calories: l.calories })),
   }
 }
 
@@ -262,12 +225,13 @@ export async function handleChat(input: ChatInput): Promise<ChatOutput> {
     return { message: { id: 'unauthorized', role: 'ai', content: 'User not found. Please log in again.' } }
   }
 
+  const lang = input.language || getUserLanguage(user)
   const context: ToolContext = {
     userId,
     message: message ?? '',
     attachments,
     metadata: {
-      language: getUserLanguage(user),
+      language: lang,
       subscriptionStatus: user.subscriptionStatus,
       region: user.regionCode ?? undefined,
     },
@@ -300,12 +264,16 @@ ${JSON.stringify(toolResults, null, 2)}
 Recent chat history (newest first):
 ${history.map((h: { role: string; content: string }) => `${h.role}: ${h.content.slice(0, 200)}`).join('\n')}
 
-Respond in a helpful, concise way in the user's language. Do not provide medical diagnoses. Keep your answer under 3 paragraphs.
+Respond in a helpful, concise way in the user's language (${lang}). Do not provide medical diagnoses. Keep your answer under 3 paragraphs.
 
-When answering nutrition or fitness questions, prefer web search results for fresh facts and numbers.`
+When answering nutrition or fitness questions, prefer web search results for fresh facts and numbers.
+
+If the user asks what to eat today, use their food preferences and recent meals from the facts above to suggest something they will enjoy.`
 
   const model = skill.allowedModels[0] ?? FALLBACK_MODEL
   let content = ''
+  let structured: StructuredAiResponse | undefined
+  let foodData: FoodAnalysisData | undefined
   let modelUsed = model
   let errorMessage = ''
 
@@ -313,19 +281,29 @@ When answering nutrition or fitness questions, prefer web search results for fre
     try {
       const imageUrl = context.attachments?.find((a) => a.type === 'image')?.url
       if (imageUrl) {
-        const cached = await getCachedVisionResult(imageUrl)
-        if (cached) {
-          content = cached
+        const cachedRaw = await getCachedVisionResult(imageUrl)
+        let parsed: FoodAnalysisData | null = cachedRaw ? safeParseFoodJson(cachedRaw) : null
+        if (parsed) {
+          content = cachedRaw as string
           modelUsed = 'cached'
         } else {
-          // Fallback: try user's recent analyzed food logs first for speed
-          const recent = await findRecentFoodLog(userId, imageUrl)
-          if (recent) {
-            content = JSON.stringify({ ...recent, serving: '1 portion', suggestedMealType: 'SNACK' })
-            modelUsed = 'recent-log'
+          // Knowledge-base lookup first
+          const known = await findDishInKnowledge(safeMessage || imageUrl)
+          if (known) {
+            parsed = {
+              name: known.title,
+              calories: known.calories,
+              proteinG: known.proteinG,
+              carbsG: known.carbsG,
+              fatG: known.fatG,
+              serving: known.serving,
+              suggestedMealType: validateMealType(known.mealType),
+              confidence: 0.95,
+            }
+            modelUsed = 'knowledge-base'
           } else {
             const visionResult = await callVisionLlm(imageUrl)
-            let parsed = safeParseFoodJson(visionResult.content)
+            parsed = safeParseFoodJson(visionResult.content)
             if (parsed) {
               const corrected = await correctFoodMacrosWithUsda(parsed.name, parsed.serving, {
                 calories: parsed.calories,
@@ -339,11 +317,41 @@ When answering nutrition or fitness questions, prefer web search results for fre
               } else {
                 modelUsed = visionResult.model
               }
+            } else {
+              parsed = buildFallbackFoodAnalysis()
+              modelUsed = visionResult.model
             }
-            content = JSON.stringify(parsed ?? visionResult.content)
-            modelUsed = modelUsed || visionResult.model
-            await setCachedVisionResult(imageUrl, content)
           }
+          content = JSON.stringify(parsed)
+          await setCachedVisionResult(imageUrl, content)
+        }
+
+        foodData = parsed as FoodAnalysisData
+
+        // Low confidence: ask user to confirm
+        if (foodData.confidence < LOW_CONFIDENCE_THRESHOLD) {
+          content = formatLowConfidenceQuestion(foodData.name, lang)
+          structured = {
+            emoji: '🔍',
+            mealLabel: lang === 'ru' ? 'Уточнение' : 'Clarification',
+            foodName: foodData.name,
+            calories: foodData.calories,
+            proteinG: foodData.proteinG,
+            carbsG: foodData.carbsG,
+            fatG: foodData.fatG,
+            serving: foodData.serving,
+            evaluation: lang === 'ru'
+              ? 'Я не уверен, что это за блюдо. Подтвердите название, чтобы я дал точные данные.'
+              : "I'm not sure what this dish is. Please confirm the name so I can give accurate data.",
+            recommendations: [],
+            dailyProgress: { consumed: 0, target: 2000, unit: 'kcal' },
+          }
+        } else {
+          const stats = await getTodayStats(userId, user?.profile)
+          structured = formatFoodAnalysisCard(foodData, { ...stats, lang })
+          content = structuredResponseToText(structured, lang)
+          await saveDishToKnowledge(foodData, userId, imageUrl)
+          await recordFoodPreference(userId, foodData.name, foodData.ingredients ?? [])
         }
       } else {
         content = JSON.stringify({ error: 'No image provided' })
@@ -351,8 +359,10 @@ When answering nutrition or fitness questions, prefer web search results for fre
     } catch (err) {
       errorMessage = err instanceof Error ? err.message : 'Vision error'
       logger.error({ err, userId }, `Vision analysis failed: ${errorMessage}`)
-      content = buildFallbackFoodAnalysis()
+      const fallback = buildFallbackFoodAnalysis()
+      content = JSON.stringify(fallback)
       modelUsed = 'fallback'
+      foodData = fallback as any
     }
   } else {
     try {
@@ -448,11 +458,60 @@ When answering nutrition or fitness questions, prefer web search results for fre
       id: chat.id,
       role: 'ai',
       content,
-      type: 'text',
+      type: structured ? 'STRUCTURED' : 'text',
+      structured,
+      foodData,
       modelUsed,
       usedFallback: !!errorMessage,
       skillName: route.skillName,
       confidence: route.confidence,
+    },
+  }
+}
+
+async function saveAiResponse(
+  userId: string,
+  content: string,
+  skillName: string,
+  modelUsed: string,
+  startTime: number,
+): Promise<ChatOutput> {
+  const chat = await prisma.chatMessage.create({
+    data: {
+      userId,
+      role: 'AI',
+      content,
+      modelUsed,
+      latencyMs: Date.now() - startTime,
+    },
+  })
+
+  void auditLog({
+    userId,
+    action: 'AI_CHAT',
+    metadata: {
+      skillName,
+      modelUsed,
+      latencyMs: Date.now() - startTime,
+      confidence: 1,
+      toolsUsed: [],
+    },
+  })
+
+  const latencySeconds = (Date.now() - startTime) / 1000
+  aiLatencyHistogram.observe({ skill: skillName, model: modelUsed }, latencySeconds)
+  aiRequestsTotal.inc({ skill: skillName, model: modelUsed, status: 'success' })
+
+  return {
+    message: {
+      id: chat.id,
+      role: 'ai',
+      content,
+      type: 'text',
+      modelUsed,
+      usedFallback: false,
+      skillName,
+      confidence: 1,
     },
   }
 }

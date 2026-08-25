@@ -98,6 +98,7 @@ const agentRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
               fatG: 0,
               serving: 'unknown',
               suggestedMealType: 'SNACK',
+              confidence: 0,
               error: status.failedReason ?? 'Vision analysis failed',
             }),
             type: 'text',
