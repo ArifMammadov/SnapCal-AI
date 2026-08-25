@@ -150,7 +150,7 @@ async function runTools(toolNames: string[], context: ToolContext): Promise<Reco
 }
 
 function getUserLanguage(user: { languageCode?: string | null; regionCode?: string | null } | null): string {
-  return user?.languageCode ?? 'en'
+  return user?.languageCode ?? 'ru'
 }
 
 async function getTodayStats(userId: string, profile?: { dailyCalories?: number | null } | null) {
@@ -192,7 +192,7 @@ export async function handleChat(input: ChatInput): Promise<ChatOutput> {
   if (greetingMatch && !attachments?.length) {
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { firstName: true, languageCode: true } })
     const name = user?.firstName ? `, ${user.firstName}` : ''
-    const lang = user?.languageCode ?? 'en'
+    const lang = user?.languageCode ?? 'ru'
     const greeting = lang === 'ru'
       ? `Привет${name}! Я SnapCal AI — ваш персональный нутрициолог и фитнес-коуч. Спрашивайте про питание, тренировки или пришлите фото еды, и я рассчитаю калории.`
       : `Hi${name}! I'm SnapCal AI — your personal nutritionist and fitness coach. Ask about nutrition, workouts, or send a food photo and I'll estimate the calories.`
@@ -264,7 +264,7 @@ ${JSON.stringify(toolResults, null, 2)}
 Recent chat history (newest first):
 ${history.map((h: { role: string; content: string }) => `${h.role}: ${h.content.slice(0, 200)}`).join('\n')}
 
-Respond in a helpful, concise way in the user's language (${lang}). Do not provide medical diagnoses. Keep your answer under 3 paragraphs.
+Respond in a helpful, concise way in the user's language (${lang}). If the user's language is not explicitly set, respond in Russian. Do not provide medical diagnoses. Keep your answer under 3 paragraphs.
 
 When answering nutrition or fitness questions, prefer web search results for fresh facts and numbers.
 

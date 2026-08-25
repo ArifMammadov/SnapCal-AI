@@ -40,6 +40,7 @@ export interface VisionJobResult {
     }
     foodData?: any
   }
+  confidence?: number
 }
 
 export function startVisionWorker(): Worker {
@@ -52,7 +53,10 @@ export function startVisionWorker(): Worker {
         const result = await analyzeFoodPhoto(userId, imageUrl)
         const outputTokens = estimateTokens(result.message.content)
         await recordAiUsage(userId, 200, outputTokens, result.message.modelUsed ?? 'unknown', 'openrouter')
-        return result
+        return {
+          ...result,
+          confidence: result.message.foodData?.confidence ?? result.message.confidence ?? 0,
+        }
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Vision analysis failed'
         logger.error({ err, userId, imageUrl, jobId: job.id }, `Vision job failed: ${errorMessage}`)
@@ -77,7 +81,7 @@ export function startVisionWorker(): Worker {
             usedFallback: true,
           },
         }
-        return fallback
+        return { ...fallback, confidence: 0 }
       }
     },
     { connection: blockingRedisConnection, concurrency: 6 }
