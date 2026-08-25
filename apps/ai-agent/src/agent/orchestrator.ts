@@ -215,7 +215,16 @@ export async function handleChat(input: ChatInput): Promise<ChatOutput> {
   }
 
   const route = await routeSkill(input)
-  const skill = await resolveSkill(route.skillName)
+  const hasImage = input.attachments?.some((a) => a.type === 'image')
+  // Never treat a text-only message as a photo-analysis request.
+  if (route.skillName === 'food_vision' && !hasImage) {
+    route.skillName = 'nutrition'
+    route.toolNames = route.toolNames.filter((n) => n !== 'analyzePhoto')
+    if (route.toolNames.length === 0) {
+      route.toolNames = ['getUserSummary', 'searchKnowledge']
+    }
+  }
+  const skill = await resolveSkill(route.skillName as any)
   if (!skill) {
     return { message: { id: 'unavailable', role: 'ai', content: 'This feature is temporarily unavailable.' } }
   }
