@@ -168,13 +168,41 @@ type GoalPlan = {
 
 function GoalsSection({ onBack }: { onBack: () => void }) {
   const [plan, setPlan] = useState<GoalPlan | null>(null)
+  const [profile, setProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    api.get('/users/me/goal-plan').then((res) => setPlan(res.data)).catch(() => null).finally(() => setLoading(false))
+    Promise.all([
+      api.get('/users/me/goal-plan').then((res) => res.data).catch(() => null),
+      api.get('/users/me').then((res) => res.data).catch(() => null),
+    ]).then(([planData, profileData]) => {
+      setPlan(planData)
+      setProfile(profileData)
+    }).finally(() => setLoading(false))
   }, [])
 
-  const targets = plan?.dailyTargets
+  const mergedPlan = plan ? {
+    ...plan,
+    primaryGoal: plan.primaryGoal || profile?.profile?.primaryGoal || 'MAINTENANCE',
+    startWeightKg: plan.startWeightKg ?? profile?.profile?.currentWeightKg ?? null,
+    targetWeightKg: plan.targetWeightKg ?? profile?.profile?.targetWeightKg ?? null,
+    totalLossKg: plan.totalLossKg ?? (profile?.profile?.currentWeightKg && profile?.profile?.targetWeightKg
+      ? +(profile.profile.currentWeightKg - profile.profile.targetWeightKg).toFixed(1)
+      : null),
+    timelineMonths: plan.timelineMonths || 6,
+    dailyTargets: {
+      calories: plan.dailyTargets?.calories ?? profile?.profile?.dailyCalories ?? null,
+      proteinG: plan.dailyTargets?.proteinG ?? profile?.profile?.dailyProteinG ?? null,
+      carbsG: plan.dailyTargets?.carbsG ?? profile?.profile?.dailyCarbsG ?? null,
+      fatG: plan.dailyTargets?.fatG ?? profile?.profile?.dailyFatG ?? null,
+      waterL: plan.dailyTargets?.waterL ?? (profile?.profile?.dailyWaterMl ? profile.profile.dailyWaterMl / 1000 : null),
+      sleepH: plan.dailyTargets?.sleepH ?? profile?.profile?.dailySleepH ?? null,
+      steps: plan.dailyTargets?.steps ?? profile?.profile?.dailySteps ?? null,
+      workoutsPerWeek: plan.dailyTargets?.workoutsPerWeek ?? (profile?.profile?.activityLevel === 'VERY_ACTIVE' ? 5 : profile?.profile?.activityLevel === 'ACTIVE' ? 4 : 3),
+    },
+  } : null
+
+  const targets = mergedPlan?.dailyTargets
 
   return (
     <div className="no-scrollbar" style={{ height: '100%', overflowY: 'auto', background: 'var(--bg)', padding: '56px 20px 24px' }}>
@@ -185,7 +213,7 @@ function GoalsSection({ onBack }: { onBack: () => void }) {
 
       {loading ? (
         <p style={{ color: 'var(--text-secondary)' }}>Loading plan…</p>
-      ) : !plan?.primaryGoal ? (
+      ) : !mergedPlan?.primaryGoal ? (
         <Card style={{ padding: 16 }}>
           <p style={{ margin: 0, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
             No AI plan yet. Tell the AI coach about your goal (for example: “I want to lose 5 kg in 2 months”) and it will build a personalized plan here.
@@ -195,20 +223,20 @@ function GoalsSection({ onBack }: { onBack: () => void }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <Card style={{ padding: 16 }}>
             <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 6px' }}>PRIMARY GOAL</p>
-            <p className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--green)', margin: 0 }}>{plan.primaryGoal?.replace(/_/g, ' ')}</p>
+            <p className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--green)', margin: 0 }}>{mergedPlan.primaryGoal?.replace(/_/g, ' ')}</p>
             <div style={{ display: 'flex', gap: 16, marginTop: 12 }}>
               <div>
                 <p style={{ fontSize: 10, color: 'var(--text-muted)', margin: 0 }}>START</p>
-                <p style={{ fontSize: 15, fontWeight: 600, margin: '2px 0 0', color: 'var(--text-primary)' }}>{plan.startWeightKg} kg</p>
+                <p style={{ fontSize: 15, fontWeight: 600, margin: '2px 0 0', color: 'var(--text-primary)' }}>{mergedPlan.startWeightKg} kg</p>
               </div>
               <div>
                 <p style={{ fontSize: 10, color: 'var(--text-muted)', margin: 0 }}>TARGET</p>
-                <p style={{ fontSize: 15, fontWeight: 600, margin: '2px 0 0', color: 'var(--text-primary)' }}>{plan.targetWeightKg} kg</p>
+                <p style={{ fontSize: 15, fontWeight: 600, margin: '2px 0 0', color: 'var(--text-primary)' }}>{mergedPlan.targetWeightKg} kg</p>
               </div>
-              {plan.totalLossKg ? (
+              {mergedPlan.totalLossKg ? (
                 <div>
                   <p style={{ fontSize: 10, color: 'var(--text-muted)', margin: 0 }}>TO LOSE</p>
-                  <p style={{ fontSize: 15, fontWeight: 600, margin: '2px 0 0', color: 'var(--rose)' }}>-{plan.totalLossKg} kg</p>
+                  <p style={{ fontSize: 15, fontWeight: 600, margin: '2px 0 0', color: 'var(--rose)' }}>-{mergedPlan.totalLossKg} kg</p>
                 </div>
               ) : null}
             </div>
@@ -236,9 +264,9 @@ function GoalsSection({ onBack }: { onBack: () => void }) {
           </Card>
 
           <Card style={{ padding: 16 }}>
-            <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 12px' }}>TIMELINE ({plan.timelineMonths} MONTHS)</p>
+            <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 12px' }}>TIMELINE ({mergedPlan.timelineMonths} MONTHS)</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {(plan.milestones ?? []).map((m) => (
+              {(mergedPlan.milestones ?? []).map((m) => (
                 <div
                   key={m.month}
                   style={{
