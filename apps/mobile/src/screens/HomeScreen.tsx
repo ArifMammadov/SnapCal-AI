@@ -36,6 +36,97 @@ const mealIcons: Record<string, string> = {
   SNACK: '🍎',
 }
 
+const basicPrograms = [
+  {
+    id: 'gym',
+    icon: '🏋️',
+    title: IS_RUSSIAN ? 'Тренажёрный зал' : 'Gym',
+    subtitle: IS_RUSSIAN ? 'Базовая силовая программа' : 'Basic strength program',
+    color: 'var(--rose)',
+    tips: IS_RUSSIAN
+      ? [
+          'Приседания со штангой — 3 подхода по 8–10 повторений',
+          'Жим лёжа — 3 подхода по 8–10 повторений',
+          'Становая тяга — 3 подхода по 6–8 повторений',
+          'Жим стоя — 3 подхода по 8–10 повторений',
+          '3 тренировки в неделю: понедельник / среда / пятница',
+        ]
+      : [
+          'Barbell squat — 3 sets of 8–10 reps',
+          'Bench press — 3 sets of 8–10 reps',
+          'Deadlift — 3 sets of 6–8 reps',
+          'Overhead press — 3 sets of 8–10 reps',
+          '3 sessions/week: Monday / Wednesday / Friday',
+        ],
+  },
+  {
+    id: 'home',
+    icon: '🏠',
+    title: IS_RUSSIAN ? 'Домашний воркаут' : 'Home Workout',
+    subtitle: IS_RUSSIAN ? 'Без оборудования, 20–30 мин' : 'No equipment, 20–30 min',
+    color: 'var(--orange)',
+    tips: IS_RUSSIAN
+      ? [
+          'Отжимания — 3 подхода по 10–15 повторений',
+          'Приседания — 3 подхода по 15–20 повторений',
+          'Выпады — 3 подхода по 10 на каждую ногу',
+          'Планка — 3 подхода по 30–60 секунд',
+          'Берпи — 3 подхода по 8–10 повторений для сжигания калорий',
+        ]
+      : [
+          'Push-ups — 3 sets of 10–15 reps',
+          'Bodyweight squats — 3 sets of 15–20 reps',
+          'Lunges — 3 sets of 10 per leg',
+          'Plank — 3 holds of 30–60 seconds',
+          'Burpees — 3 sets of 8–10 reps for calorie burn',
+        ],
+  },
+  {
+    id: 'diet',
+    icon: '🥗',
+    title: IS_RUSSIAN ? 'Диета' : 'Diet',
+    subtitle: IS_RUSSIAN ? 'Принципы здорового питания' : 'Healthy eating principles',
+    color: 'var(--green)',
+    tips: IS_RUSSIAN
+      ? [
+          'Принцип тарелки: ½ овощи, ¼ белок, ¼ сложные углеводы',
+          'Белок: 1,6–2,2 г на кг веса в зависимости от активности',
+          'Клетчатка: 25–35 г в день из овощей, фруктов, цельных злаков',
+          'Вода: 30–40 мл на кг веса в день',
+          'Дефицит 300–500 ккал для похудения, профицит 200–300 для набора массы',
+        ]
+      : [
+          'Plate rule: ½ vegetables, ¼ protein, ¼ complex carbs',
+          'Protein: 1.6–2.2 g per kg bodyweight depending on activity',
+          'Fiber: 25–35 g/day from vegetables, fruit, whole grains',
+          'Water: 30–40 ml per kg bodyweight per day',
+          '300–500 kcal deficit to lose, 200–300 kcal surplus to gain',
+        ],
+  },
+  {
+    id: 'yoga',
+    icon: '🧘',
+    title: IS_RUSSIAN ? 'Йога' : 'Yoga',
+    subtitle: IS_RUSSIAN ? 'Гибкость и восстановление' : 'Flexibility & recovery',
+    color: 'var(--purple)',
+    tips: IS_RUSSIAN
+      ? [
+          'Сурья Намаскар — 5–10 циклов для разогрева',
+          'Адхо Мукха Шванасана — 30–60 секунд для растяжки задней поверхности',
+          'Вирабхадрасана I & II — по 30 секунд с каждой стороны',
+          'Поза ребёнка — 1–2 минуты для расслабления спины',
+          'Дышите носом, 4–6 циклов в минуту, делайте 3–4 раза в неделю',
+        ]
+      : [
+          'Sun Salutation — 5–10 rounds to warm up',
+          'Downward Dog — 30–60 seconds for hamstring stretch',
+          'Warrior I & II — 30 seconds each side',
+          'Child’s pose — 1–2 minutes to release lower back',
+          'Nasal breathing, 4–6 breaths/min, practice 3–4 times/week',
+        ],
+  },
+]
+
 const metricConfig = [
   { key: 'water', label: 'Water', unit: 'L', max: 3, color: 'var(--blue)', icon: '💧', get: (s: any) => (s?.waterMl ?? 0) / 1000 },
   { key: 'sleep', label: 'Sleep', unit: 'h', max: 8, color: 'var(--purple)', icon: '🌙', get: (s: any) => s?.sleepH ?? 0 },
@@ -97,6 +188,7 @@ export function HomeScreen() {
   const { data: summary, loading } = useTrackingSummary()
   const { data: programs } = usePrograms()
   const [expandedMeal, setExpandedMeal] = useState<string | null>(null)
+  const [expandedProgram, setExpandedProgram] = useState<string | null>(null)
   const [showGoalPlan, setShowGoalPlan] = useState(false)
 
   const s = summary ?? emptySummary
@@ -489,6 +581,83 @@ export function HomeScreen() {
                       <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{item.calories} kcal</span>
                     </div>
                   ))}
+                </div>
+              )}
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section style={{ padding: '24px 20px 0' }}>
+        <div style={{ padding: '0 0 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h2 className="font-display" style={{ fontSize: 17, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+            {IS_RUSSIAN ? 'Программы' : 'Programs'}
+          </h2>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {basicPrograms.map((p) => (
+            <Card
+              key={p.id}
+              style={{ overflow: 'hidden', padding: 0 }}
+            >
+              <button
+                onClick={() => setExpandedProgram(expandedProgram === p.id ? null : p.id)}
+                style={{
+                  width: '100%',
+                  padding: '14px 16px',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  textAlign: 'left',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 14,
+                      background: `${p.color}20`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 22,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {p.icon}
+                  </div>
+                  <div>
+                    <p className="font-display" style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+                      {p.title}
+                    </p>
+                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 0' }}>
+                      {p.subtitle}
+                    </p>
+                  </div>
+                </div>
+                <ChevronDownIcon
+                  size={18}
+                  style={{
+                    color: 'var(--text-muted)',
+                    transform: expandedProgram === p.id ? 'rotate(180deg)' : 'rotate(0)',
+                    transition: 'transform 0.3s ease',
+                    flexShrink: 0,
+                  }}
+                />
+              </button>
+              {expandedProgram === p.id && (
+                <div style={{ borderTop: '1px solid var(--border)', padding: '12px 16px' }} className="fade-in">
+                  <ul style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {p.tips.map((tip, i) => (
+                      <li key={i} style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                        {tip}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
             </Card>
