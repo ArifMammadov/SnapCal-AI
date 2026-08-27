@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect, type ComponentType } from 'react'
-import { Button, Card, CircularRing, MiniProgressBar, ArrowRightIcon, ChevronDownIcon, Avatar, DumbbellIcon, HomeWorkoutIcon, SaladIcon, YogaIcon } from '../components/ui.js'
+import { useState, useMemo, useEffect } from 'react'
+import { Button, Card, CircularRing, MiniProgressBar, ArrowRightIcon, ChevronDownIcon, Avatar } from '../components/ui.js'
 import { useApp } from '../App.js'
 import { useAppStore } from '../store/index.js'
 
@@ -38,7 +38,7 @@ const mealIcons: Record<string, string> = {
 
 interface BasicProgram {
   id: string
-  icon: ComponentType<{ size?: number; style?: React.CSSProperties }>
+  imageUrl: string
   title: string
   subtitle: string
   color: string
@@ -50,7 +50,7 @@ interface BasicProgram {
 const basicPrograms: BasicProgram[] = [
   {
     id: 'gym',
-    icon: DumbbellIcon,
+    imageUrl: '/images/programs/gym.jpg',
     title: IS_RUSSIAN ? 'Тренажёрный зал' : 'Gym',
     subtitle: IS_RUSSIAN ? 'Базовая силовая программа' : 'Basic strength program',
     color: 'var(--rose)',
@@ -74,7 +74,7 @@ const basicPrograms: BasicProgram[] = [
   },
   {
     id: 'home',
-    icon: HomeWorkoutIcon,
+    imageUrl: '/images/programs/home.jpg',
     title: IS_RUSSIAN ? 'Домашний воркаут' : 'Home Workout',
     subtitle: IS_RUSSIAN ? 'Без оборудования, 20–30 мин' : 'No equipment, 20–30 min',
     color: 'var(--orange)',
@@ -98,7 +98,7 @@ const basicPrograms: BasicProgram[] = [
   },
   {
     id: 'diet',
-    icon: SaladIcon,
+    imageUrl: '/images/programs/diet.jpg',
     title: IS_RUSSIAN ? 'Диета' : 'Diet',
     subtitle: IS_RUSSIAN ? 'Принципы здорового питания' : 'Healthy eating principles',
     color: 'var(--green)',
@@ -122,7 +122,7 @@ const basicPrograms: BasicProgram[] = [
   },
   {
     id: 'yoga',
-    icon: YogaIcon,
+    imageUrl: '/images/programs/yoga.jpg',
     title: IS_RUSSIAN ? 'Йога' : 'Yoga',
     subtitle: IS_RUSSIAN ? 'Гибкость и восстановление' : 'Flexibility & recovery',
     color: 'var(--purple)',
@@ -424,8 +424,14 @@ export function HomeScreen() {
           </h2>
         </div>
         <div className="no-scrollbar" style={{ display: 'flex', gap: 12, overflowX: 'auto', padding: '0 20px' }}>
-          {metricConfig.map((m) => {
-            const value = m.get(s)
+          {[...metricConfig]
+            .sort((a, b) => {
+              const av = a.get(s)
+              const bv = b.get(s)
+              return (bv > 0 ? 1 : 0) - (av > 0 ? 1 : 0)
+            })
+            .map((m) => {
+              const value = m.get(s)
             let label = m.label
             let icon = m.icon
             if (m.key === 'activity' && s.activities?.length) {
@@ -592,59 +598,61 @@ export function HomeScreen() {
           </button>
         </div>
         <div className="no-scrollbar" style={{ display: 'flex', gap: 12, overflowX: 'auto', padding: '0 20px' }}>
-          {basicPrograms.map((p) => {
-            const Icon = p.icon
-            return (
-              <Card
-                key={p.id}
-                onClick={() => setSelectedProgram(p)}
+          {basicPrograms.map((p) => (
+            <Card
+              key={p.id}
+              onClick={() => setSelectedProgram(p)}
+              style={{
+                flexShrink: 0,
+                width: 150,
+                overflow: 'hidden',
+                padding: 0,
+                borderRadius: 18,
+                cursor: 'pointer',
+              }}
+            >
+              <div
                 style={{
-                  flexShrink: 0,
-                  width: 150,
-                  overflow: 'hidden',
-                  padding: 0,
-                  borderRadius: 18,
-                  cursor: 'pointer',
+                  height: 100,
+                  backgroundImage: `url(${p.imageUrl})`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  position: 'relative',
                 }}
               >
                 <div
                   style={{
-                    height: 100,
-                    background: p.gradient,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    position: 'relative',
+                    position: 'absolute',
+                    inset: 0,
+                    background: 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.2) 60%, rgba(0,0,0,0.1) 100%)',
+                  }}
+                />
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 8,
+                    right: 8,
+                    padding: '3px 8px',
+                    background: 'rgba(0,0,0,0.45)',
+                    borderRadius: 8,
+                    fontSize: 11,
+                    color: '#fff',
+                    fontWeight: 600,
                   }}
                 >
-                  <Icon size={32} style={{ color: '#fff' }} />
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: 8,
-                      right: 8,
-                      padding: '3px 8px',
-                      background: 'rgba(0,0,0,0.45)',
-                      borderRadius: 8,
-                      fontSize: 11,
-                      color: '#fff',
-                      fontWeight: 600,
-                    }}
-                  >
-                    {IS_RUSSIAN ? 'Базовая' : 'Basic'}
-                  </div>
+                  {IS_RUSSIAN ? 'Базовая' : 'Basic'}
                 </div>
-                <div style={{ padding: '10px 12px' }}>
-                  <p className="font-display" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-                    {p.title}
-                  </p>
-                  <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '3px 0 0' }}>
-                    {p.durationWeeks} {IS_RUSSIAN ? 'недель' : 'weeks'}
-                  </p>
-                </div>
-              </Card>
-            )
-          })}
+              </div>
+              <div style={{ padding: '10px 12px' }}>
+                <p className="font-display" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+                  {p.title}
+                </p>
+                <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '3px 0 0' }}>
+                  {p.durationWeeks} {IS_RUSSIAN ? 'недель' : 'weeks'}
+                </p>
+              </div>
+            </Card>
+          ))}
           {featuredPrograms.length === 0 && (
             <Card style={{ flexShrink: 0, width: 180, padding: 20, textAlign: 'center' }}>
               <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0 }}>No expert programs available</p>
@@ -735,16 +743,22 @@ export function HomeScreen() {
           >
             <div
               style={{
-                height: 140,
-                background: selectedProgram.gradient,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
+                height: 160,
+                backgroundImage: `url(${selectedProgram.imageUrl})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
                 position: 'relative',
                 borderRadius: '24px 24px 0 0',
               }}
             >
-              <selectedProgram.icon size={48} style={{ color: '#fff' }} />
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.25) 60%, rgba(0,0,0,0.1) 100%)',
+                  borderRadius: '24px 24px 0 0',
+                }}
+              />
               <button
                 onClick={() => setSelectedProgram(null)}
                 style={{
