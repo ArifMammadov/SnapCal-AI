@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { api } from './api.js'
 import { compressImageFile } from './imageCompression.js'
 
+const IS_RUSSIAN = /^ru/.test(typeof navigator !== 'undefined' ? navigator.language : 'en')
+
 export interface TrackingSummary {
   date: string
   caloriesConsumed: number
@@ -72,6 +74,8 @@ export interface ChatMessage {
   type: 'TEXT' | 'FOOD_ANALYSIS' | 'MACRO_CARD' | 'STRUCTURED'
   content: string
   createdAt: string
+  pendingConfirmation?: boolean
+  pendingAction?: 'LOG_FOOD' | 'LOG_WATER' | 'LOG_WEIGHT' | 'LOG_STEPS' | 'LOG_SLEEP'
   metadata?: {
     pendingMetric?: { metricType: 'WATER_ML' | 'SLEEP_H' | 'WEIGHT_KG' | 'STEPS'; value: number }
     [key: string]: any
@@ -85,6 +89,7 @@ export interface ChatMessage {
       fatG: number
       serving: string
       suggestedMealType: string
+      mealType?: string
     }
     imageUrl?: string
     structured?: {
@@ -97,6 +102,8 @@ export interface ChatMessage {
       fatG: number
       serving: string
     }
+    pendingConfirmation?: boolean
+    pendingAction?: 'LOG_FOOD' | 'LOG_WATER' | 'LOG_WEIGHT' | 'LOG_STEPS' | 'LOG_SLEEP'
   }
 }
 
@@ -244,6 +251,12 @@ export function useTrackingSummary(date?: string) {
     fetch()
   }, [fetch])
 
+  useEffect(() => {
+    const onRefresh = () => fetch()
+    window.addEventListener('snapcal:refreshSummary', onRefresh)
+    return () => window.removeEventListener('snapcal:refreshSummary', onRefresh)
+  }, [fetch])
+
   return { data, loading, error, refetch: fetch }
 }
 
@@ -268,6 +281,12 @@ export function useActivity(date?: string) {
 
   useEffect(() => {
     fetch()
+  }, [fetch])
+
+  useEffect(() => {
+    const onRefresh = () => fetch()
+    window.addEventListener('snapcal:refreshSummary', onRefresh)
+    return () => window.removeEventListener('snapcal:refreshSummary', onRefresh)
   }, [fetch])
 
   return { data, loading, error, refetch: fetch }
@@ -332,21 +351,25 @@ export function useChat() {
   const normalizeMessage = (msg: ChatMessage): ChatMessage => {
     const structured = msg.attachments?.structured
     if (structured && !msg.attachments?.foodData) {
-      return {
-        ...msg,
-        attachments: {
-          ...msg.attachments,
-          foodData: {
-            name: structured.foodName,
-            calories: structured.calories,
-            proteinG: structured.proteinG,
-            carbsG: structured.carbsG,
-            fatG: structured.fatG,
-            serving: structured.serving,
-            suggestedMealType: structured.mealLabel,
-          },
+    return {
+      ...msg,
+      attachments: {
+        ...msg.attachments,
+        foodData: {
+          name: structured.foodName,
+          calories: structured.calories,
+          proteinG: structured.proteinG,
+          carbsG: structured.carbsG,
+          fatG: structured.fatG,
+          serving: structured.serving,
+          suggestedMealType: structured.mealLabel,
         },
-      }
+      },
+    }
+    }
+    // Carry root-level pending flags into message object if not already present
+    if ((msg as any).pendingConfirmation != null && msg.pendingConfirmation == null) {
+    return { ...msg, pendingConfirmation: (msg as any).pendingConfirmation, pendingAction: (msg as any).pendingAction }
     }
     return msg
   }
@@ -382,7 +405,7 @@ export function useChat() {
 
     try {
       const res = await api.post<{ message: ChatMessage }>('/ai/chat', { message: content.trim() })
-      const ai = res.data.message
+      const ai = normalizeMessage(res.data.message)
       setMessages((prev) => [...prev, {
         id: ai.id || `${Date.now()}-ai`,
         role: ai.role || 'AI',
@@ -390,6 +413,8 @@ export function useChat() {
         content: ai.content || 'Sorry, no response.',
         createdAt: ai.createdAt || new Date().toISOString(),
         attachments: ai.attachments,
+        pendingConfirmation: ai.pendingConfirmation,
+        pendingAction: ai.pendingAction,
       }])
     } catch (err: any) {
       const aiMsg: ChatMessage = {
@@ -472,6 +497,8 @@ export function useChat() {
           content: ai.content || 'Here is what I found in your photo.',
           createdAt: ai.createdAt || new Date().toISOString(),
           attachments: aiWithFoodData.attachments,
+          pendingConfirmation: ai.pendingConfirmation,
+          pendingAction: ai.pendingAction,
         }])
         return
       }
@@ -551,6 +578,8 @@ export function useChat() {
                 content: ai.content,
                 createdAt: ai.createdAt || new Date().toISOString(),
                 attachments: aiWithFoodData.attachments,
+                pendingConfirmation: ai.pendingConfirmation,
+                pendingAction: ai.pendingAction,
               })
             }
             return updated
@@ -562,6 +591,8 @@ export function useChat() {
             content: ai.content || 'Here is what I found in your photo.',
             createdAt: ai.createdAt || new Date().toISOString(),
             attachments: aiWithFoodData.attachments,
+            pendingConfirmation: ai.pendingConfirmation,
+            pendingAction: ai.pendingAction,
           }]
         })
       }
@@ -569,6 +600,52 @@ export function useChat() {
       addErrorMessage(err.message || 'Sorry, I could not analyze this photo. Please try again.')
     } finally {
       setSending(false)
+    }
+  }, [])
+
+  const logFood = useCallback(async (foodData: {
+    name: string
+    calories: number
+    proteinG: number
+    carbsG: number
+    fatG: number
+    serving: string
+    suggestedMealType?: string
+    mealType?: string
+    imageUrl?: string
+  }) => {
+    const mealType = (foodData.suggestedMealType || foodData.mealType || 'SNACK') as 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK'
+    try {
+      await api.post('/tracking/food', {
+        mealType,
+        name: foodData.name,
+        calories: foodData.calories,
+        proteinG: Math.round(foodData.proteinG),
+        carbsG: Math.round(foodData.carbsG),
+        fatG: Math.round(foodData.fatG),
+        imageUrl: foodData.imageUrl,
+        aiAnalyzed: true,
+      })
+      setMessages((prev) => [...prev, {
+        id: (Date.now()).toString(),
+        role: 'AI',
+        type: 'TEXT',
+        content: IS_RUSSIAN
+          ? `✅ Записал: ${foodData.name} — ${foodData.calories} ккал.`
+          : `✅ Logged: ${foodData.name} — ${foodData.calories} kcal.`,
+        createdAt: new Date().toISOString(),
+      }])
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('snapcal:refreshSummary'))
+      }
+    } catch (err: any) {
+      setMessages((prev) => [...prev, {
+        id: (Date.now()).toString(),
+        role: 'AI',
+        type: 'TEXT',
+        content: err.message || (IS_RUSSIAN ? 'Не удалось записать приём пищи.' : 'Could not log the meal.'),
+        createdAt: new Date().toISOString(),
+      }])
     }
   }, [])
 
@@ -600,6 +677,9 @@ export function useChat() {
         content: `✅ Записал: ${labels[metricType]} ${value}${unit}.`,
         createdAt: new Date().toISOString(),
       }])
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('snapcal:refreshSummary'))
+      }
     } catch (err: any) {
       setMessages((prev) => [...prev, {
         id: (Date.now()).toString(),
@@ -611,7 +691,7 @@ export function useChat() {
     }
   }, [])
 
-  return { messages, sending, loadingHistory, sendMessage, sendPhoto, logMetric, setMessages, clearHistory }
+  return { messages, sending, loadingHistory, sendMessage, sendPhoto, logMetric, logFood, setMessages, clearHistory }
 }
 
 function formatMetricConfirmation(metricType: string, value: number): string {

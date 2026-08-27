@@ -6,6 +6,13 @@ import { useAppStore } from '../store/index.js'
 const LOCALE = typeof navigator !== 'undefined' ? navigator.language : 'en'
 const IS_RUSSIAN = /^ru/.test(LOCALE)
 
+function buildPendingFoodData(pending: { foodData: any; imageUrl?: string }): any {
+  return {
+    ...pending.foodData,
+    imageUrl: pending.imageUrl,
+  }
+}
+
 const suggestedPrompts = IS_RUSSIAN
   ? [
       '📸 Проанализируй фото еды',
@@ -35,7 +42,7 @@ function detectConfirmation(text: string): boolean {
 
 export function AICoachScreen() {
   const user = useAppStore((s) => s.user)
-  const { messages, sending, sendMessage, sendPhoto, logMetric, setMessages, clearHistory } = useChat()
+  const { messages, sending, sendMessage, sendPhoto, logMetric, logFood, setMessages, clearHistory } = useChat()
   const [input, setInput] = useState('')
   const [listening, setListening] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -63,8 +70,33 @@ export function AICoachScreen() {
       return
     }
 
+    // Check for pending food log confirmation (after AI photo analysis)
+    const pendingFood = findPendingFood(messages)
+    if (pendingFood) {
+      if (detectConfirmation(text)) {
+        // Mark the AI confirmation message as resolved and log the food
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === pendingFood.confirmationMessageId && m.role === 'AI'
+              ? { ...m, pendingConfirmation: false, pendingAction: undefined }
+              : m,
+          ),
+        )
+        logFood(buildPendingFoodData(pendingFood))
+        return
+      }
+      // Any other answer counts as "no" — just send a normal message and clear the pending flag
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === pendingFood.confirmationMessageId && m.role === 'AI'
+            ? { ...m, pendingConfirmation: false, pendingAction: undefined }
+            : m,
+        ),
+      )
+    }
+
     sendMessage(text)
-  }, [input, sending, messages, setMessages, logMetric, sendMessage])
+  }, [input, sending, messages, setMessages, logMetric, logFood, sendMessage])
 
   const handleNewChat = useCallback(async () => {
     if (window.confirm(IS_RUSSIAN ? 'Очистить историю чата?' : 'Clear chat history?')) {
@@ -615,6 +647,22 @@ function findPendingMetric(messages: ChatMessage[]): { metricType: 'WATER_ML' | 
       }
     }
     if (msg.role === 'USER') break
+  }
+  return null
+}
+
+function findPendingFood(messages: ChatMessage[]): { foodData: any; imageUrl?: string; confirmationMessageId: string } | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i]
+    if (msg.role === 'AI' && msg.pendingConfirmation && msg.pendingAction === 'LOG_FOOD' && msg.attachments?.foodData) {
+      return {
+        foodData: msg.attachments.foodData,
+        imageUrl: msg.attachments.imageUrl,
+        confirmationMessageId: msg.id,
+      }
+    }
+    // Stop scanning once we hit the user's photo message or a newer AI response
+    if (msg.role === 'USER' && msg.attachments?.imageUrl) break
   }
   return null
 }

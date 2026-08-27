@@ -354,10 +354,17 @@ If the user asks what to eat today, use their food preferences and recent meals 
           }
         } else {
           const stats = await getTodayStats(userId, user?.profile)
-          // User-facing photo result should only show macros and portion
-          content = formatCompactFoodResult(foodData, lang)
+          // User-facing photo result should only show macros and portion, then ask for confirmation
+          content = formatCompactFoodResult(foodData, lang) + (lang === 'ru'
+            ? '\n\nВы это сейчас употребляете? Ответьте «да», и я запишу приём пищи в ваш дневник.'
+            : '\n\nAre you eating this now? Reply "yes" and I will log it to your diary.')
           // Keep structured data for API/mobile rendering, but not for chat text
-          structured = formatFoodAnalysisCard(foodData, { ...stats, lang })
+          structured = {
+            ...formatFoodAnalysisCard(foodData, { ...stats, lang }),
+            pendingConfirmation: true,
+            pendingAction: 'LOG_FOOD',
+          }
+          // Only remember the dish for future knowledge/preference, actual foodLog requires user confirmation
           await saveDishToKnowledge(foodData, userId, imageUrl)
           await recordFoodPreference(userId, foodData.name, foodData.ingredients ?? [], foodData.confidence)
         }
@@ -455,18 +462,20 @@ If the user asks what to eat today, use their food preferences and recent meals 
   void updateMemory(userId, content)
 
   return {
-    message: {
-      id: crypto.randomUUID(),
-      role: 'ai',
-      content,
-      type: structured ? 'STRUCTURED' : 'text',
-      structured,
-      foodData,
-      modelUsed,
-      usedFallback: !!errorMessage,
-      skillName: route.skillName,
-      confidence: route.confidence,
-    },
+  message: {
+    id: crypto.randomUUID(),
+    role: 'ai',
+    content,
+    type: structured ? 'STRUCTURED' : 'text',
+    structured,
+    foodData,
+    pendingConfirmation: structured?.pendingConfirmation,
+    pendingAction: structured?.pendingAction,
+    modelUsed,
+    usedFallback: !!errorMessage,
+    skillName: route.skillName,
+    confidence: route.confidence,
+  },
   }
 }
 

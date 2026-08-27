@@ -2,7 +2,7 @@ import axios from 'axios'
 import { env } from '../lib/env.js'
 import { prisma } from '@snapcal/database'
 import { getRedis, logger } from '@snapcal/shared'
-import { parseFoodJson, saveFoodLogFromAnalysis } from '../lib/foodAnalysis.js'
+import { parseFoodJson } from '../lib/foodAnalysis.js'
 
 const redis = getRedis()
 
@@ -49,6 +49,8 @@ export interface AnalyzePhotoResult {
     }
     imageUrl: string
     timestamp: string
+    pendingConfirmation?: boolean
+    pendingAction?: 'LOG_FOOD'
   }
 }
 
@@ -110,6 +112,8 @@ export async function finalizePhotoAnalysis(
           content: existing.content,
           foodData: (existing.attachments as any)?.foodData,
           structured: (existing.attachments as any)?.structured,
+          pendingConfirmation: (existing.attachments as any)?.pendingConfirmation,
+          pendingAction: (existing.attachments as any)?.pendingAction,
           imageUrl,
           timestamp: existing.createdAt.toISOString(),
         },
@@ -125,9 +129,7 @@ export async function finalizePhotoAnalysis(
 
     const content = status.result.message?.content ?? ''
     const foodData = typeof content === 'string' ? parseFoodJson(content) : null
-    if (foodData) {
-      await saveFoodLogFromAnalysis(userId, imageUrl, foodData)
-    }
+    // NOTE: we intentionally do NOT create a foodLog here. The user must confirm 'yes' first via the chat. The parsed data is stored in the AI message attachments for the mobile app to use.
 
     // Avoid duplicate AI messages when the client polls more than once
     const existingAiMessage = await prisma.chatMessage.findFirst({
@@ -143,6 +145,8 @@ export async function finalizePhotoAnalysis(
           content: existingAiMessage.content,
           foodData: (existingAiMessage.attachments as any)?.foodData,
           structured: (existingAiMessage.attachments as any)?.structured,
+          pendingConfirmation: (existingAiMessage.attachments as any)?.pendingConfirmation,
+          pendingAction: (existingAiMessage.attachments as any)?.pendingAction,
           imageUrl,
           timestamp: existingAiMessage.createdAt.toISOString(),
         },
@@ -156,7 +160,13 @@ export async function finalizePhotoAnalysis(
         type: (status.result.message?.type === 'STRUCTURED' ? 'STRUCTURED' : 'FOOD_ANALYSIS') as any, // TODO: remove cast after migration applied
         content,
         modelUsed: status.result.message?.modelUsed,
-        attachments: { foodData, imageUrl, structured: status.result.message?.structured },
+        attachments: {
+          foodData,
+          imageUrl,
+          structured: status.result.message?.structured,
+          pendingConfirmation: status.result.message?.pendingConfirmation ?? false,
+          pendingAction: status.result.message?.pendingAction,
+        },
       },
     })
 
@@ -168,6 +178,8 @@ export async function finalizePhotoAnalysis(
         content,
         foodData,
         structured: status.result.message?.structured,
+        pendingConfirmation: status.result.message?.pendingConfirmation,
+        pendingAction: status.result.message?.pendingAction,
         imageUrl,
         timestamp: aiMessage.createdAt.toISOString(),
       },

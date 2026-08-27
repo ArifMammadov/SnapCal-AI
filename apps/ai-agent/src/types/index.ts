@@ -32,6 +32,8 @@ export interface StructuredAiResponse {
     target: number
     unit: string
   }
+  pendingConfirmation?: boolean
+  pendingAction?: 'LOG_FOOD'
 }
 
 export interface ChatInput {
@@ -50,6 +52,8 @@ export interface ChatMessage {
   content: string
   structured?: StructuredAiResponse
   foodData?: FoodAnalysisData
+  pendingConfirmation?: boolean
+  pendingAction?: 'LOG_FOOD' | 'LOG_WATER' | 'LOG_WEIGHT' | 'LOG_STEPS' | 'LOG_SLEEP'
   usedFallback?: boolean
   modelUsed?: string
   skillName?: string
