@@ -23,11 +23,58 @@ const foodLogSchema = z.object({
 
 const activityLogSchema = z.object({
   type: z.string().min(1),
-  durationMin: z.number().int().min(1),
+  durationMin: z.number().int().min(0).optional(),
+  distanceM: z.number().int().min(0).optional(),
+  stepsCount: z.number().int().min(0).optional(),
   caloriesBurned: z.number().int().min(0).optional(),
   startedAt: z.string().datetime(),
   notes: z.string().max(500).optional(),
 })
+
+function calculateActivityCalories(
+  type: string,
+  durationMin: number | undefined,
+  distanceM: number | undefined,
+  stepsCount: number | undefined,
+  profile: any,
+): number {
+  const weightKg = Number(profile?.currentWeightKg ?? 70)
+  const heightCm = Number(profile?.heightCm ?? 175)
+  const birthDate = profile?.birthDate
+  const age = birthDate ? Math.max(0, new Date().getFullYear() - new Date(birthDate).getFullYear()) : 30
+  const gender = profile?.gender
+
+  // Harris-Benedict BMR
+  let bmr = 10 * weightKg + 6.25 * heightCm - 5 * age
+  bmr += gender === 'FEMALE' ? -161 : 5
+
+  const metValues: Record<string, number> = {
+    Running: 9.8,
+    Walking: 3.5,
+    Cycling: 7.5,
+    Swimming: 6.0,
+    Gym: 5.0,
+    Yoga: 2.5,
+    Football: 7.0,
+    Tennis: 6.5,
+    Volleyball: 5.0,
+  }
+  const met = metValues[type] ?? 4
+
+  // Distance-based sports: estimate duration from distance if not provided
+  let minutes = durationMin ?? 0
+  if (distanceM && distanceM > 0) {
+    if (type === 'Running') minutes = Math.max(minutes, Math.round(distanceM / (weightKg > 80 ? 2.4 : weightKg < 60 ? 3.0 : 2.7) * 60))
+    if (type === 'Cycling') minutes = Math.max(minutes, Math.round(distanceM / 4.0 / 60 * 60))
+    if (type === 'Swimming') minutes = Math.max(minutes, Math.round(distanceM / 1.5 / 60 * 60))
+  }
+  if (stepsCount && stepsCount > 0 && type === 'Walking') {
+    minutes = Math.max(minutes, Math.round(stepsCount * 0.008))
+  }
+
+  const hours = minutes / 60
+  return Math.round(bmr * met / 24 * hours)
+}
 
 const metricLogSchema = z.object({
   metricType: z.enum(['WATER_ML', 'SLEEP_H', 'WEIGHT_KG', 'STEPS']),
@@ -94,8 +141,25 @@ const trackingRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) =>
   app.post('/activity', async (request: FastifyRequest) => {
     const data = activityLogSchema.parse(request.body)
     const userId = request.user!.userId
+    const profile = await prisma.profile.findUnique({ where: { userId } })
+    const calories = data.caloriesBurned ?? calculateActivityCalories(
+      data.type,
+      data.durationMin,
+      data.distanceM,
+      data.stepsCount,
+      profile,
+    )
     return prisma.activityLog.create({
-      data: { ...data, userId, startedAt: new Date(data.startedAt) },
+      data: {
+        type: data.type,
+        durationMin: data.durationMin,
+        distanceM: data.distanceM,
+        stepsCount: data.stepsCount,
+        caloriesBurned: calories,
+        startedAt: new Date(data.startedAt),
+        notes: data.notes,
+        userId,
+      },
     })
   })
 

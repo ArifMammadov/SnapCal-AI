@@ -15,6 +15,8 @@ interface ActivityDisplay {
   detail: string
 }
 
+const LOCALE = typeof navigator !== 'undefined' ? navigator.language : 'en'
+
 const activityTypes = [
   { type: 'Running', icon: '🏃', color: 'var(--rose)' },
   { type: 'Walking', icon: '🚶', color: 'var(--green)' },
@@ -30,68 +32,108 @@ const activityTypes = [
   { type: 'Weight', icon: '⚖️', color: 'var(--rose)' },
 ]
 
-const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-const todayIndex = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1
+function formatDateISO(d: Date) {
+  return d.toISOString().split('T')[0]
+}
 
-function estimateCalories(type: string, minutes: number) {
-  const multipliers: Record<string, number> = {
-    Running: 9,
-    Gym: 5,
-    Cycling: 6,
-    Swimming: 8,
-    Walking: 4,
-    Yoga: 2.5,
-    Football: 7,
-    Tennis: 6.5,
-    Volleyball: 5,
-    Water: 0,
-    Sleep: 0,
-    Weight: 0,
-  }
-  return Math.round(minutes * (multipliers[type] ?? 4))
+function startOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+}
+
+function formatDayLabel(d: Date, locale: string) {
+  return d.toLocaleDateString(locale, { weekday: 'short' })
+}
+
+function formatDayNumber(d: Date) {
+  return d.getDate()
 }
 
 function toActivityDisplay(log: ActivityLog): ActivityDisplay {
   const meta = activityTypes.find((a) => a.type === log.type) || { icon: '🔥', color: 'var(--orange)', type: log.type }
   const date = new Date(log.startedAt)
   const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const duration = log.durationMin ?? 0
+  const distanceKm = log.distanceM ? (log.distanceM / 1000).toFixed(1) : null
+  const steps = log.stepsCount
+  const detailParts = []
+  if (distanceKm) detailParts.push(`${distanceKm} km`)
+  if (steps) detailParts.push(`${steps} steps`)
+  if (duration) detailParts.push(`${duration} min`)
+  const detail = log.notes || (detailParts.length ? detailParts.join(' · ') : 'Activity session')
   return {
     id: log.id,
     type: log.type,
     icon: meta.icon,
     color: meta.color,
     time,
-    duration: log.durationMin,
-    calories: log.caloriesBurned ?? estimateCalories(log.type, log.durationMin),
-    detail: log.notes || `${log.durationMin} min session`,
+    duration,
+    calories: log.caloriesBurned ?? 0,
+    detail,
   }
 }
 
-function formatDateISO(d: Date) {
-  return d.toISOString().split('T')[0]
-}
-
-function AddActivityModal({ onClose, onAdd }: { onClose: () => void; onAdd: (a: ActivityDisplay) => void }) {
+function AddActivityModal({
+  selectedDate,
+  onClose,
+  onAdd,
+}: {
+  selectedDate: Date
+  onClose: () => void
+  onAdd: (a: ActivityDisplay) => void
+}) {
+  const profile = useAppStore((s) => s.user?.profile)
   const [selectedType, setSelectedType] = useState(activityTypes[2])
   const [duration, setDuration] = useState('30')
+  const [distance, setDistance] = useState('5') // km for Running/Cycling/Swimming
+  const [steps, setSteps] = useState('3000')    // for Walking
   const [time, setTime] = useState('08:00')
   const [submitting, setSubmitting] = useState(false)
 
+  const isDistanceType = ['Running', 'Cycling', 'Swimming'].includes(selectedType.type)
+  const isStepType = selectedType.type === 'Walking'
+  const isDurationType = !isDistanceType && !isStepType
+
+  // Server calculates calories from profile + distance/steps/duration; we show an optimistic estimate
+  const estimatedCalories = () => {
+    const weightKg = profile?.currentWeightKg ?? 70
+    const met: Record<string, number> = { Running: 9.8, Cycling: 7.5, Swimming: 6, Walking: 3.5, Gym: 5, Yoga: 2.5 }
+    const m = met[selectedType.type] ?? 5
+    if (isDistanceType) {
+      const km = Number(distance) || 0
+      const paceMinPerKm = selectedType.type === 'Running' ? 5.5 : selectedType.type === 'Swimming' ? 2.0 : 3.0
+      const minutes = km * paceMinPerKm
+      return Math.round((weightKg * m * minutes) / 60)
+    }
+    if (isStepType) {
+      const st = Number(steps) || 0
+      const minutes = st * 0.008
+      return Math.round((weightKg * m * minutes) / 60)
+    }
+    return Math.round((weightKg * m * (Number(duration) || 0)) / 60)
+  }
+
   const handleAdd = async () => {
-    const d = Number(duration)
     setSubmitting(true)
     try {
       const [hours, minutes] = time.split(':').map(Number)
-      const startedAt = new Date()
+      const startedAt = new Date(selectedDate)
       startedAt.setHours(hours, minutes, 0, 0)
-      const calories = estimateCalories(selectedType.type, d)
 
-      const res = await api.post<ActivityLog>('/tracking/activity', {
+      const body: any = {
         type: selectedType.type,
-        durationMin: d,
-        caloriesBurned: calories,
         startedAt: startedAt.toISOString(),
-      })
+      }
+      if (isDistanceType) {
+        body.distanceM = Math.round((Number(distance) || 0) * 1000)
+      } else if (isStepType) {
+        body.stepsCount = Number(steps) || 0
+      } else {
+        body.durationMin = Number(duration) || 0
+      }
+      // Let server calculate calories; pass optimistic estimate as fallback only if server fails later
+      body.caloriesBurned = estimatedCalories()
+
+      const res = await api.post<ActivityLog>('/tracking/activity', body)
 
       onAdd(toActivityDisplay(res.data))
       onClose()
@@ -174,11 +216,17 @@ function AddActivityModal({ onClose, onAdd }: { onClose: () => void; onAdd: (a: 
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
           <div>
-            <p style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.04em', margin: '0 0 8px' }}>DURATION (MIN)</p>
+            <p style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600, letterSpacing: '0.04em', margin: '0 0 8px' }}>
+              {isDistanceType ? 'DISTANCE (KM)' : isStepType ? 'STEPS' : 'DURATION (MIN)'}
+            </p>
             <input
               type="number"
-              value={duration}
-              onChange={(e) => setDuration(e.target.value)}
+              value={isDistanceType ? distance : isStepType ? steps : duration}
+              onChange={(e) => {
+                if (isDistanceType) setDistance(e.target.value)
+                else if (isStepType) setSteps(e.target.value)
+                else setDuration(e.target.value)
+              }}
               style={{
                 width: '100%',
                 padding: '12px 14px',
@@ -229,7 +277,7 @@ function AddActivityModal({ onClose, onAdd }: { onClose: () => void; onAdd: (a: 
         >
           <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>Estimated calories burned</span>
           <span className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--green)' }}>
-            ~{estimateCalories(selectedType.type, Number(duration))} kcal
+            ~{estimatedCalories()} kcal
           </span>
         </div>
 
@@ -241,10 +289,8 @@ function AddActivityModal({ onClose, onAdd }: { onClose: () => void; onAdd: (a: 
   )
 }
 
-const weekSteps = [6200, 8432, 4100, 9800, 7300, 5600, 0]
-
 export function ActivityScreen() {
-  const [selectedDay, setSelectedDay] = useState(todayIndex)
+  const [selectedDate, setSelectedDate] = useState<Date>(startOfDay(new Date()))
   const [activities, setActivities] = useState<ActivityDisplay[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -253,9 +299,7 @@ export function ActivityScreen() {
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    const date = new Date()
-    date.setDate(date.getDate() - (todayIndex - selectedDay))
-    api.get<ActivityLog[]>(`/tracking/activity?date=${formatDateISO(date)}`)
+    api.get<ActivityLog[]>(`/tracking/activity?date=${formatDateISO(selectedDate)}`)
       .then((res) => {
         if (!cancelled) setActivities(res.data.map(toActivityDisplay))
       })
@@ -268,92 +312,85 @@ export function ActivityScreen() {
         if (!cancelled) setLoading(false)
       })
     return () => { cancelled = true }
-  }, [selectedDay])
+  }, [selectedDate])
 
   const totalCalories = activities.reduce((s, a) => s + a.calories, 0)
   const totalDuration = activities.reduce((s, a) => s + a.duration, 0)
   const stepsToday = profile?.dailySteps ?? 10000
 
-  const weekData = weekDays.map((label, i) => ({
-    label,
-    index: i,
-    active: i <= todayIndex,
-    steps: weekSteps[i],
-  }))
+  const today = startOfDay(new Date())
+  const days = Array.from({ length: 21 }, (_, i) => {
+    const d = new Date(today)
+    d.setDate(d.getDate() - 14 + i)
+    return startOfDay(d)
+  })
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', position: 'relative' }}>
       <ScreenHeader title="Activity" />
 
       <div style={{ padding: '12px 20px 16px', background: 'var(--bg-card)', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ display: 'flex', gap: 4 }}>
-          {weekData.map((d) => (
-            <button
-              key={d.label}
-              onClick={() => setSelectedDay(d.index)}
-              style={{
-                flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 6,
-                padding: '8px 4px',
-                background: selectedDay === d.index ? 'var(--green)' : 'transparent',
-                borderRadius: 12,
-                border: 'none',
-                cursor: 'pointer',
-                transition: 'background 0.2s ease',
-              }}
-            >
-              <span
+        <div className="no-scrollbar" style={{ display: 'flex', gap: 10, overflowX: 'auto' }}>
+          {days.map((d) => {
+            const isSelected = selectedDate.getTime() === d.getTime()
+            const isToday = d.getTime() === today.getTime()
+            return (
+              <button
+                key={d.toISOString()}
+                onClick={() => setSelectedDate(d)}
                 style={{
-                  fontSize: 11,
-                  color: selectedDay === d.index ? '#fff' : 'var(--text-secondary)',
-                  fontWeight: selectedDay === d.index ? 700 : 400,
-                }}
-              >
-                {d.label}
-              </span>
-              <div
-                style={{
-                  width: 30,
-                  height: 30,
-                  borderRadius: 8,
-                  background:
-                    selectedDay === d.index
-                      ? 'rgba(255,255,255,0.2)'
-                      : d.active && d.index !== todayIndex
-                        ? 'var(--green-dim)'
-                        : 'var(--bg-elevated)',
+                  flexShrink: 0,
                   display: 'flex',
+                  flexDirection: 'column',
                   alignItems: 'center',
-                  justifyContent: 'center',
+                  gap: 6,
+                  padding: '8px 12px',
+                  background: isSelected ? 'var(--green)' : 'transparent',
+                  borderRadius: 12,
+                  border: 'none',
+                  cursor: 'pointer',
+                  transition: 'background 0.2s ease',
+                  minWidth: 48,
                 }}
               >
                 <span
-                  className="font-display"
                   style={{
-                    fontSize: 13,
-                    fontWeight: 700,
-                    color: selectedDay === d.index ? '#fff' : d.active ? 'var(--text-primary)' : 'var(--text-muted)',
+                    fontSize: 11,
+                    color: isSelected ? '#fff' : 'var(--text-secondary)',
+                    fontWeight: isSelected ? 700 : 400,
+                    textTransform: 'uppercase',
                   }}
                 >
-                  {d.index + 3}
+                  {formatDayLabel(d, LOCALE)}
                 </span>
-              </div>
-              <div style={{ width: '100%', height: 3, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
                 <div
                   style={{
-                    height: '100%',
-                    width: `${(d.steps / 10000) * 100}%`,
-                    background: selectedDay === d.index ? '#fff' : 'var(--green)',
-                    borderRadius: 2,
-                    opacity: d.active ? 1 : 0.2,
+                    width: 34,
+                    height: 34,
+                    borderRadius: '50%',
+                    background: isSelected ? 'rgba(255,255,255,0.2)' : isToday ? 'var(--green-dim)' : 'var(--bg-elevated)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                   }}
-                />
-              </div>
-            </button>
-          ))}
+                >
+                  <span
+                    className="font-display"
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 700,
+                      color: isSelected ? '#fff' : isToday ? 'var(--green)' : 'var(--text-primary)',
+                    }}
+                  >
+                    {formatDayNumber(d)}
+                  </span>
+                </div>
+                {isToday && (
+                  <span style={{ fontSize: 9, color: isSelected ? '#fff' : 'var(--green)', fontWeight: 600 }}>Today</span>
+                )}
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -379,7 +416,7 @@ export function ActivityScreen() {
       <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '0 20px 100px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
           <h2 className="font-display" style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-            {selectedDay === todayIndex ? "Today's Timeline" : `${weekDays[selectedDay]}'s Timeline`}
+            {selectedDate.getTime() === today.getTime() ? "Today's Timeline" : formatDateISO(selectedDate)}
           </h2>
           <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
             {activities.length} {activities.length === 1 ? 'activity' : 'activities'}
@@ -483,7 +520,7 @@ export function ActivityScreen() {
         <PlusIcon size={24} />
       </button>
 
-      {showModal && <AddActivityModal onClose={() => setShowModal(false)} onAdd={(a) => setActivities((p) => [...p, a])} />}
+      {showModal && <AddActivityModal selectedDate={selectedDate} onClose={() => setShowModal(false)} onAdd={(a) => setActivities((p) => [...p, a])} />}
     </div>
   )
 }

@@ -3,6 +3,42 @@ import { Button } from '../components/ui.js'
 import { useChat, type ChatMessage } from '../lib/data.js'
 import { useAppStore } from '../store/index.js'
 
+function parseActivityFromText(text: string): { type: string; distanceM?: number; stepsCount?: number; durationMin?: number } | null {
+  const t = text.toLowerCase()
+  const activityTypes: { type: string; patterns: string[] }[] = [
+    { type: 'Running', patterns: ['ran', 'run', 'бег', 'бежал', 'пробеж'] },
+    { type: 'Cycling', patterns: ['cycling', 'cycled', 'bike', 'велосипед', 'катал', 'ездил'] },
+    { type: 'Swimming', patterns: ['swimming', 'swam', 'swim', 'плавал', 'плаван'] },
+    { type: 'Walking', patterns: ['walking', 'walked', 'walk', 'ходил', 'гулял', 'шаг'] },
+    { type: 'Gym', patterns: ['gym', 'workout', 'trained', 'тренажер', 'качал'] },
+  ]
+  let matchedType: string | null = null
+  for (const { type, patterns } of activityTypes) {
+    if (patterns.some((p) => t.includes(p))) {
+      matchedType = type
+      break
+      }
+    }
+  if (!matchedType) return null
+
+  // Extract numbers
+  const numbers = [...t.matchAll(/\b(\d+(?:\.\d+)?)\s*(km|kilometers|m|meters|steps|min|minutes)?\b/g)]
+  let distanceM: number | undefined
+  let stepsCount: number | undefined
+  let durationMin: number | undefined
+  for (const m of numbers) {
+    const value = Number(m[1])
+    const unit = (m[2] || '').toLowerCase()
+    if (unit === 'km' || unit === 'kilometers') distanceM = Math.round(value * 1000)
+    else if (unit === 'm' || unit === 'meters') distanceM = Math.round(value)
+    else if (unit === 'steps') stepsCount = Math.round(value)
+    else if (unit === 'min' || unit === 'minutes') durationMin = Math.round(value)
+    else if (matchedType === 'Walking' && value > 1000) stepsCount = Math.round(value)
+    else if (!durationMin) durationMin = Math.round(value)
+  }
+  return { type: matchedType, distanceM, stepsCount, durationMin }
+}
+
 const LOCALE = typeof navigator !== 'undefined' ? navigator.language : 'en'
 const IS_RUSSIAN = /^ru/.test(LOCALE)
 
@@ -42,7 +78,7 @@ function detectConfirmation(text: string): boolean {
 
 export function AICoachScreen() {
   const user = useAppStore((s) => s.user)
-  const { messages, sending, sendMessage, sendPhoto, logMetric, logFood, setMessages, clearHistory } = useChat()
+  const { messages, sending, sendMessage, sendPhoto, logMetric, logFood, logActivity, setMessages, clearHistory } = useChat()
   const [input, setInput] = useState('')
   const [listening, setListening] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)

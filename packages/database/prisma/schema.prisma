@@ -139,7 +139,9 @@ model ActivityLog {
   id              String   @id @default(uuid()) @db.Uuid
   userId          String   @db.Uuid
   type            String
-  durationMin     Int
+  durationMin     Int?
+  distanceM       Int?
+  stepsCount      Int?
   caloriesBurned  Int?
   startedAt       DateTime
   notes           String?

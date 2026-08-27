@@ -41,7 +41,9 @@ export interface FoodLog {
 export interface ActivityLog {
   id: string
   type: string
-  durationMin: number
+  durationMin: number | null
+  distanceM: number | null
+  stepsCount: number | null
   caloriesBurned: number | null
   startedAt: string
   notes: string | null
@@ -68,42 +70,40 @@ export interface MarketplaceProgram {
   tag: string | null
 }
 
+
+export interface MessageAttachments {
+  foodData?: {
+    name: string
+    calories: number
+    proteinG: number
+    carbsG: number
+    fatG: number
+    serving: string
+    suggestedMealType: string
+    mealType?: string
+  }
+  imageUrl?: string
+  structured?: any
+  pendingConfirmation?: boolean
+  pendingAction?: 'LOG_FOOD' | 'LOG_WATER' | 'LOG_WEIGHT' | 'LOG_STEPS' | 'LOG_SLEEP'
+  pendingMetric?: {
+    metricType: 'WATER_ML' | 'SLEEP_H' | 'WEIGHT_KG' | 'STEPS'
+    value: number
+  }
+}
+
 export interface ChatMessage {
   id: string
   role: 'USER' | 'AI'
   type: 'TEXT' | 'FOOD_ANALYSIS' | 'MACRO_CARD' | 'STRUCTURED'
   content: string
   createdAt: string
+  attachments?: MessageAttachments
   pendingConfirmation?: boolean
   pendingAction?: 'LOG_FOOD' | 'LOG_WATER' | 'LOG_WEIGHT' | 'LOG_STEPS' | 'LOG_SLEEP'
   metadata?: {
     pendingMetric?: { metricType: 'WATER_ML' | 'SLEEP_H' | 'WEIGHT_KG' | 'STEPS'; value: number }
     [key: string]: any
-  }
-  attachments?: {
-    foodData?: {
-      name: string
-      calories: number
-      proteinG: number
-      carbsG: number
-      fatG: number
-      serving: string
-      suggestedMealType: string
-      mealType?: string
-    }
-    imageUrl?: string
-    structured?: {
-      emoji: string
-      mealLabel: string
-      foodName: string
-      calories: number
-      proteinG: number
-      carbsG: number
-      fatG: number
-      serving: string
-    }
-    pendingConfirmation?: boolean
-    pendingAction?: 'LOG_FOOD' | 'LOG_WATER' | 'LOG_WEIGHT' | 'LOG_STEPS' | 'LOG_SLEEP'
   }
 }
 
@@ -391,6 +391,47 @@ export function useChat() {
     }
   }, [])
 
+  const logMetric = useCallback(async (metricType: 'WATER_ML' | 'SLEEP_H' | 'WEIGHT_KG' | 'STEPS', value: number, confirmed: boolean) => {
+    if (!confirmed) {
+      return setMessages((prev) => [...prev, {
+        id: (Date.now()).toString(),
+        role: 'AI',
+        type: 'TEXT',
+        content: formatMetricConfirmation(metricType, value),
+        createdAt: new Date().toISOString(),
+        attachments: { pendingMetric: { metricType, value } }
+      }])
+    }
+    try {
+      await api.post('/tracking/metric', { metricType, value })
+      const labels: Record<string, string> = {
+        WATER_ML: 'Вода',
+        SLEEP_H: 'Сон',
+        WEIGHT_KG: 'Вес',
+        STEPS: 'Шаги',
+      }
+      const unit = metricType === 'WATER_ML' ? ' мл' : metricType === 'STEPS' ? '' : metricType === 'WEIGHT_KG' ? ' кг' : ' ч'
+      setMessages((prev) => [...prev, {
+        id: (Date.now()).toString(),
+        role: 'AI',
+        type: 'TEXT',
+        content: `✅ Записал: ${labels[metricType]} ${value}${unit}.`,
+        createdAt: new Date().toISOString(),
+      }])
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('snapcal:refreshSummary'))
+      }
+    } catch (err: any) {
+      setMessages((prev) => [...prev, {
+        id: (Date.now()).toString(),
+        role: 'AI',
+        type: 'TEXT',
+        content: err.message || 'Не удалось записать метрику.',
+        createdAt: new Date().toISOString(),
+      }])
+    }
+  }, [])
+
   const sendMessage = useCallback(async (content: string) => {
     if (!content.trim()) return
     const userMsg: ChatMessage = {
@@ -606,25 +647,25 @@ export function useChat() {
   const logFood = useCallback(async (foodData: {
     name: string
     calories: number
-    proteinG: number
-    carbsG: number
-    fatG: number
-    serving: string
-    suggestedMealType?: string
-    mealType?: string
+    proteinG?: number
+    carbsG?: number
+    fatG?: number
+    mealType?: 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK'
     imageUrl?: string
+    serving?: string
   }) => {
-    const mealType = (foodData.suggestedMealType || foodData.mealType || 'SNACK') as 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK'
+    setSending(true)
     try {
+      const mealType = foodData.mealType ?? 'SNACK'
       await api.post('/tracking/food', {
         mealType,
         name: foodData.name,
         calories: foodData.calories,
-        proteinG: Math.round(foodData.proteinG),
-        carbsG: Math.round(foodData.carbsG),
-        fatG: Math.round(foodData.fatG),
-        imageUrl: foodData.imageUrl,
+        proteinG: foodData.proteinG,
+        carbsG: foodData.carbsG,
+        fatG: foodData.fatG,
         aiAnalyzed: true,
+        imageUrl: foodData.imageUrl,
       })
       setMessages((prev) => [...prev, {
         id: (Date.now()).toString(),
@@ -643,38 +684,41 @@ export function useChat() {
         id: (Date.now()).toString(),
         role: 'AI',
         type: 'TEXT',
-        content: err.message || (IS_RUSSIAN ? 'Не удалось записать приём пищи.' : 'Could not log the meal.'),
+        content: IS_RUSSIAN ? 'Не удалось записать приём пищи.' : 'Failed to log food.',
         createdAt: new Date().toISOString(),
       }])
+    } finally {
+      setSending(false)
     }
   }, [])
 
-  const logMetric = useCallback(async (metricType: 'WATER_ML' | 'SLEEP_H' | 'WEIGHT_KG' | 'STEPS', value: number, confirmed = true) => {
-    if (!confirmed) {
-      return setMessages((prev) => [...prev, {
-        id: (Date.now()).toString(),
-        role: 'AI',
-        type: 'TEXT',
-        content: formatMetricConfirmation(metricType, value),
-        createdAt: new Date().toISOString(),
-        metadata: { pendingMetric: { metricType, value } },
-      }])
-    }
-
+  const logActivity = useCallback(async (activityData: {
+    type: string
+    durationMin?: number
+    distanceM?: number
+    stepsCount?: number
+  }) => {
+    setSending(true)
     try {
-      await api.post('/tracking/metric', { metricType, value })
-      const labels: Record<string, string> = {
-        WATER_ML: 'Вода',
-        SLEEP_H: 'Сон',
-        WEIGHT_KG: 'Вес',
-        STEPS: 'Шаги',
-      }
-      const unit = metricType === 'WATER_ML' ? ' мл' : metricType === 'STEPS' ? '' : metricType === 'WEIGHT_KG' ? ' кг' : ' ч'
+      const res = await api.post<ActivityLog>('/tracking/activity', {
+        type: activityData.type,
+        durationMin: activityData.durationMin,
+        distanceM: activityData.distanceM,
+        stepsCount: activityData.stepsCount,
+        startedAt: new Date().toISOString(),
+      })
+      const logged = res.data
+      const detailParts = []
+      if (logged.distanceM) detailParts.push(`${(logged.distanceM / 1000).toFixed(1)} km`)
+      if (logged.stepsCount) detailParts.push(`${logged.stepsCount} steps`)
+      if (logged.durationMin) detailParts.push(`${logged.durationMin} min`)
       setMessages((prev) => [...prev, {
         id: (Date.now()).toString(),
         role: 'AI',
         type: 'TEXT',
-        content: `✅ Записал: ${labels[metricType]} ${value}${unit}.`,
+        content: IS_RUSSIAN
+          ? `✅ Записал активность: ${logged.type} — ${logged.caloriesBurned ?? 0} ккал.`
+          : `✅ Logged activity: ${logged.type} — ${logged.caloriesBurned ?? 0} kcal.`,
         createdAt: new Date().toISOString(),
       }])
       if (typeof window !== 'undefined') {
@@ -685,13 +729,15 @@ export function useChat() {
         id: (Date.now()).toString(),
         role: 'AI',
         type: 'TEXT',
-        content: err.message || 'Не удалось записать метрику.',
+        content: IS_RUSSIAN ? 'Не удалось записать активность.' : 'Failed to log activity.',
         createdAt: new Date().toISOString(),
       }])
+    } finally {
+      setSending(false)
     }
   }, [])
 
-  return { messages, sending, loadingHistory, sendMessage, sendPhoto, logMetric, logFood, setMessages, clearHistory }
+  return { messages, sending, loadingHistory, sendMessage, sendPhoto, logMetric, logFood, logActivity, setMessages, clearHistory }
 }
 
 function formatMetricConfirmation(metricType: string, value: number): string {
