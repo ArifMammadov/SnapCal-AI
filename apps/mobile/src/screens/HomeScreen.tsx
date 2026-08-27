@@ -83,11 +83,15 @@ const emptySummary = {
   caloriesConsumed: 0,
   calorieGoal: 2200,
   proteinG: 0,
+  proteinGoal: 150,
   carbsG: 0,
   fatG: 0,
   waterMl: 0,
+  waterGoalMl: 3000,
   sleepH: 0,
+  sleepGoalH: 8,
   steps: 0,
+  stepsGoal: 10000,
   healthScore: 0,
   foodLogs: [] as FoodLog[],
   activities: [] as ActivityLog[],
@@ -265,21 +269,31 @@ export function HomeScreen() {
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
-            <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: 0 }}>Excellent today</p>
-            <div style={{ display: 'flex', gap: 3, marginTop: 4, justifyContent: 'flex-end' }}>
-              {Array.from({ length: 7 }).map((_, i) => (
+          <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: 0 }}>{IS_RUSSIAN ? 'Сегодня' : 'Today'}</p>
+          <div style={{ display: 'flex', gap: 3, marginTop: 4, justifyContent: 'flex-end', alignItems: 'flex-end', height: 28 }}>
+            {[
+              { value: totalCalories, goal: calorieGoal, color: '#4ade80' },
+              { value: proteinG, goal: s.proteinGoal || 150, color: '#818cf8' },
+              { value: waterL, goal: (s.waterGoalMl || 3000) / 1000, color: '#60a5fa' },
+              { value: s.sleepH || 0, goal: s.sleepGoalH || 8, color: '#facc15' },
+              { value: steps, goal: s.stepsGoal || 10000, color: '#fb7185' },
+              { value: s.caloriesBurned || 0, goal: calorieGoal * 0.5, color: '#f97316' },
+            ].map((m, i) => {
+              const pct = Math.min(1, m.goal > 0 ? m.value / m.goal : 0)
+              return (
                 <div
                   key={i}
                   style={{
                     width: 6,
-                    height: i < 6 ? 16 + i * 3 : 14,
-                    background: i < 5 ? 'var(--green)' : 'var(--border)',
+                    height: Math.max(4, Math.round(pct * 24)),
+                    background: pct > 0 ? m.color : 'var(--border)',
                     borderRadius: 2,
-                    opacity: i < 5 ? 0.4 + i * 0.15 : 0.2,
+                    opacity: pct > 0 ? 0.5 + pct * 0.5 : 0.2,
                   }}
                 />
-              ))}
-            </div>
+              )
+            })}
+          </div>
           </div>
         </div>
       </Card>
