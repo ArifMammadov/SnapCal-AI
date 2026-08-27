@@ -1,7 +1,9 @@
 import type { FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
+import axios from 'axios'
 import { prisma } from '@snapcal/database'
 import { calculateDefaultGoals } from '@snapcal/shared'
+import { env } from '../lib/env.js'
 import type { JwtPayload } from '../types/auth.js'
 
 export const requireAuth = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -13,6 +15,12 @@ export const requireAuth = async (request: FastifyRequest, reply: FastifyReply) 
     reply.status(401).send({ error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } })
   }
 }
+
+const aiAgent = axios.create({
+  baseURL: env.AI_AGENT_URL,
+  timeout: 60000,
+  headers: env.AI_AGENT_SECRET ? { 'x-snapcal-secret': env.AI_AGENT_SECRET } : undefined,
+})
 
 const updateProfileSchema = z.object({
   firstName: z.string().min(1).max(100).optional(),
@@ -216,6 +224,28 @@ export const userRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
       create: { userId, goalPlan: plan, gender: 'OTHER', heightCm: 0, currentWeightKg: 0, birthDate: new Date('1995-01-01'), activityLevel: 'MODERATE', primaryGoal: 'MAINTENANCE' },
     })
     return updated.goalPlan
+  })
+
+  app.post('/me/goal-plan/generate', async (request: FastifyRequest, reply: FastifyReply) => {
+    const userId = request.user!.userId
+    const user = await prisma.user.findUnique({ where: { id: userId }, include: { profile: true } })
+    if (!user?.profile) {
+      return reply.status(400).send({ error: { code: 'NO_PROFILE', message: 'Complete your profile first' } })
+    }
+    try {
+      const userMessage = await prisma.chatMessage.create({
+        data: { userId, role: 'USER', type: 'TEXT', content: 'Generate my detailed 6-month transformation plan based on my profile.' },
+      })
+      await aiAgent.post('/chat', {
+        userId,
+        message: 'Generate my detailed 6-month transformation plan based on my profile.',
+        messageId: userMessage.id,
+      })
+      const updated = await prisma.user.findUnique({ where: { id: userId }, include: { profile: true } })
+      return updated?.profile?.goalPlan ?? { generated: true }
+    } catch (err: any) {
+      return reply.status(502).send({ error: { code: 'AI_AGENT_ERROR', message: err.message || 'Failed to generate plan' } })
+    }
   })
 
   app.get('/me/subscription', async (request: FastifyRequest) => {

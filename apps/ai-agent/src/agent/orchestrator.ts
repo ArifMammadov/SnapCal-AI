@@ -100,7 +100,8 @@ async function routeSkillRegex(input: ChatInput): Promise<RouteResult> {
 
   if (hasImage) return { skillName: 'food_vision', toolNames: ['analyzePhoto'], confidence: 0.9 }
   if (hasVoice) return { skillName: 'nutrition', toolNames: [], confidence: 0.6 }
-  if (/\b(weight|goal|plan|program|workout|exercise|training)\b/i.test(lower)) return { skillName: 'fitness', toolNames: ['recommendProgram'], confidence: 0.75 }
+  if (/\b(goal plan|transformation plan|мой план|план трансформации|план питания|план тренировок)\b/i.test(lower)) return { skillName: 'fitness', toolNames: ['generateGoalPlan'], confidence: 0.85 }
+  if (/\b(weight|goal|program|workout|exercise|training)\b/i.test(lower)) return { skillName: 'fitness', toolNames: ['recommendProgram'], confidence: 0.75 }
   if (/\b(calorie|kcal|meal|food|eat|ate|breakfast|lunch|dinner|snack)\b/i.test(lower)) return { skillName: 'nutrition', toolNames: ['logFood', 'searchKnowledge'], confidence: 0.8 }
 
   return { skillName: 'coach', toolNames: [], confidence: 0.55 }
@@ -143,7 +144,11 @@ async function runTools(toolNames: string[], context: ToolContext): Promise<Reco
         case 'webSearch':
           results[name] = await webSearch(context)
           break
+        case 'generateGoalPlan':
+          results[name] = await (await import('../tools/index.js')).generateGoalPlan(context)
+          break
         default:
+
           results[name] = { success: false, error: 'Unknown tool' }
       }
     } catch (toolErr) {

@@ -108,11 +108,23 @@ export interface ChatMessage {
 }
 
 export interface GoalPlan {
+  primaryGoal?: string
   startWeightKg: number
   targetWeightKg: number
   totalLossKg: number | null
   currentMonth: number
   percentComplete: number
+  timelineMonths?: number
+  dailyTargets?: {
+    calories?: number
+    proteinG?: number
+    carbsG?: number
+    fatG?: number
+    waterL?: number
+    sleepH?: number
+    steps?: number
+    workoutsPerWeek?: number
+  }
   milestones: {
     month: number
     label: string
@@ -121,6 +133,14 @@ export interface GoalPlan {
     workoutsPerWeek: number
     focus: string
     color: string
+    weeks?: {
+      week: number
+      focus: string
+      calorieTarget: number
+      workoutDays: number
+      stepsTarget: number
+      checkboxes: string[]
+    }[]
   }[]
 }
 

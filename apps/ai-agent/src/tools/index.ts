@@ -1,6 +1,6 @@
 import { prisma } from '@snapcal/database'
 import type { ToolContext, ToolResult } from '../types/index.js'
-import { createActivityLog, createFoodLog } from '../lib/apiClient.js'
+import { createFoodLog, createActivityLog, updateGoalPlan } from '../lib/apiClient.js'
 import { parseFoodJson } from '../lib/foodParser.js'
 
 export async function getUserSummary(context: ToolContext): Promise<ToolResult> {
@@ -155,5 +155,76 @@ export async function logActivity(context: ToolContext): Promise<ToolResult> {
     }
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Failed to log activity' }
+  }
+}
+
+export async function generateGoalPlan(context: ToolContext): Promise<ToolResult> {
+  const { userId, metadata } = context
+  try {
+    const user = await prisma.user.findUnique({ where: { id: userId }, include: { profile: true } })
+    const profile = user?.profile
+    if (!profile) {
+      return { success: false, error: 'Profile not found' }
+    }
+
+    const { callLlm } = await import('../llm/client.js')
+    const lang = metadata?.language ?? user?.languageCode ?? 'ru'
+    const prompt = [
+      {
+        role: 'system' as const,
+        content:
+          'You are a professional nutritionist and fitness coach. Create a detailed 6-month transformation plan in JSON format. The plan must be realistic, personalized, and progressive.',
+      },
+      {
+        role: 'user' as const,
+        content: `User profile:
+${JSON.stringify({
+          primaryGoal: profile.primaryGoal,
+          gender: profile.gender,
+          age: profile.birthDate ? new Date().getFullYear() - new Date(profile.birthDate).getFullYear() : null,
+          heightCm: profile.heightCm,
+          currentWeightKg: profile.currentWeightKg,
+          targetWeightKg: profile.targetWeightKg,
+          activityLevel: profile.activityLevel,
+          dailyCalories: profile.dailyCalories,
+          dailyProteinG: profile.dailyProteinG,
+          dailyCarbsG: profile.dailyCarbsG,
+          dailyFatG: profile.dailyFatG,
+          dailyWaterMl: profile.dailyWaterMl,
+          dailySleepH: profile.dailySleepH,
+          dailySteps: profile.dailySteps,
+        }, null, 2)}
+
+Return ONLY valid JSON matching this shape:
+{
+  primaryGoal: string,
+  startWeightKg: number,
+  targetWeightKg: number,
+  totalLossKg: number | null,
+  currentMonth: number,
+  percentComplete: number,
+  timelineMonths: number,
+  dailyTargets: { calories, proteinG, carbsG, fatG, waterL, sleepH, steps, workoutsPerWeek },
+  milestones: [
+    { month: number, label: string, targetWeightKg: number | null, targetCalories: number, workoutsPerWeek: number, focus: string, color: string, weeks: [ { week: number, focus: string, calorieTarget: number, workoutDays: number, stepsTarget: number, checkboxes: string[] } ] }
+  ]
+}
+Use short labels in ${lang === 'ru' ? 'Russian' : 'English'} and color values like '#22c55e', '#3b82f6', etc.`,
+      },
+    ]
+
+    const result = await callLlm('openai/gpt-4o-mini', prompt, 2048, 0.2)
+    const cleaned = result.content.replace(/^```json\s*|\s*```$/g, '').trim()
+    const plan = JSON.parse(cleaned)
+
+    // Validate required shape
+    if (!plan.milestones || !Array.isArray(plan.milestones) || plan.milestones.length !== 6) {
+      return { success: false, error: 'Generated plan is missing 6 milestones' }
+    }
+
+    await updateGoalPlan(userId, plan)
+    return { success: true, data: { plan } }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to generate plan' }
   }
 }

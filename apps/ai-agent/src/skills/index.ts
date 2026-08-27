@@ -46,7 +46,7 @@ Internal reasoning structure you MUST follow (do not reveal the exact labels):
 3. RECOMMENDATION: give 1-3 actionable, prioritized recommendations.
 4. RESPONSE: short summary, numbers, explanation, next action.
 5. TONE: friendly, motivational, non-judgmental, concise.`,
-    tools: ['get_user_summary', 'search_knowledge', 'log_activity', 'recommend_program'],
+    tools: ['get_user_summary', 'search_knowledge', 'log_activity', 'recommend_program', 'generate_goal_plan'],
     allowedModels: ['openai/gpt-4o-mini', 'openai/gpt-4o'],
     fallbackModel: 'mistralai/mistral-7b-instruct',
     isActive: true,

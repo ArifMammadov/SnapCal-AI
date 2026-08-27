@@ -50,3 +50,8 @@ export async function createActivityLog(payload: ActivityLogPayload) {
   const { data } = await apiClient.post('/api/tracking/activity', payload)
   return data
 }
+
+export async function updateGoalPlan(userId: string, plan: any) {
+  const { data } = await apiClient.put('/api/users/me/goal-plan', plan)
+  return data
+}
