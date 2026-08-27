@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useAppStore } from '../store/index.js'
 import { StarIcon, Button } from '../components/ui.js'
 import { usePrograms, type MarketplaceProgram } from '../lib/data.js'
 import { basicPrograms } from '../lib/basicPrograms.js'
 import { api } from '../lib/api.js'
+
+const LOCALE = typeof navigator !== 'undefined' ? navigator.language : 'en'
+const IS_RUSSIAN = /^ru/.test(LOCALE)
 
 type Category = 'All' | 'Yoga' | 'Home Fitness' | 'Gym' | 'Diet'
 
@@ -24,6 +27,7 @@ interface UiProgram {
   reviews: number
   enrolled: number
   emoji: string
+  imageUrl?: string
   gradient: string
   includes: string[]
   isActive: boolean
@@ -50,6 +54,7 @@ function basicToUiProgram(p: typeof basicPrograms[number]): UiProgram {
     reviews: p.reviews,
     enrolled: p.enrolled,
     emoji: p.emoji,
+    imageUrl: p.imageUrl,
     gradient: p.gradient,
     includes: p.includes,
     isActive: true,
@@ -77,6 +82,7 @@ function toUiProgram(p: MarketplaceProgram): UiProgram {
     weeks: p.durationWeeks,
     rating: ratingStr,
     emoji: p.emoji || '🎯',
+    imageUrl: (p as any).imageUrl,
     gradient: p.gradient || fallbackGradients[category] || fallbackGradients.All,
     includes: p.includes || [],
     tag: p.price === 0 ? 'Free' : (p.tag || null),
@@ -133,43 +139,35 @@ function PurchaseModal({ program, alreadyEnrolled, onClose, onPurchase }: { prog
           style={{
             height: 160,
             borderRadius: 18,
-            background: program.gradient,
+            backgroundImage: program.imageUrl ? `url(${program.imageUrl})` : program.gradient,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            position: 'relative',
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 60,
+            alignItems: 'flex-end',
+            padding: 16,
             marginBottom: 20,
+            overflow: 'hidden',
           }}
         >
-          {program.emoji}
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 8 }}>
-          <div>
-            <h2 className="font-display" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: 'linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.75) 100%)',
+              zIndex: 0,
+            }}
+          />
+          <div style={{ position: 'relative', zIndex: 1 }}>
+            <div style={{ fontSize: 44, marginBottom: 4 }}>{program.emoji}</div>
+            <h2 className="font-display" style={{ fontSize: 22, fontWeight: 700, color: '#fff', margin: 0 }}>
               {program.name}
             </h2>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '4px 0 0' }}>by {program.instructor}</p>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <p className="font-display" style={{ fontSize: 28, fontWeight: 700, color: 'var(--green)', margin: 0 }}>
-              ${program.price}
-            </p>
-            <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: 0 }}>one-time</p>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', margin: '4px 0 0' }}>{program.instructor} · {program.weeks} {IS_RUSSIAN ? 'недель' : 'weeks'} · {program.level}</p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <StarIcon size={14} />
-            <span className="font-display" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{program.rating}</span>
-            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>({program.reviews.toLocaleString()})</span>
-          </div>
-          <span style={{ color: 'var(--border)', fontSize: 14 }}>·</span>
-          <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{program.weeks} weeks</span>
-          <span style={{ color: 'var(--border)', fontSize: 14 }}>·</span>
-          <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{program.level}</span>
-        </div>
+
 
         <p style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6, margin: '0 0 16px' }}>
           {program.description}
@@ -208,12 +206,12 @@ function PurchaseModal({ program, alreadyEnrolled, onClose, onPurchase }: { prog
 
         <Button variant="primary" size="lg" fullWidth onClick={handlePurchase} disabled={purchasing || alreadyEnrolled}>
           {alreadyEnrolled
-            ? 'Вы уже записаны'
+            ? (IS_RUSSIAN ? 'Вы уже записаны' : 'Already enrolled')
             : purchasing
             ? 'Processing...'
-            : program.id.startsWith('basic-')
-            ? 'Start for free'
-            : `Enroll for $${program.price}`}
+            : IS_RUSSIAN
+            ? 'Начать программу'
+            : 'Start program'}
         </Button>
       </div>
     </div>
@@ -241,13 +239,13 @@ function EnrollSuccess({ program, onClose }: { program: UiProgram; onClose: () =
       >
         <div style={{ fontSize: 56, marginBottom: 12 }}>🎉</div>
         <h2 className="font-display" style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 8px' }}>
-          You’re enrolled!
+          {IS_RUSSIAN ? 'Вы записаны!' : "You're enrolled!"}
         </h2>
         <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: '0 0 20px' }}>
-          {program.name} is now in your library. Start anytime.
+          {program.name} {IS_RUSSIAN ? 'добавлена в вашу библиотеку. Начните в любое время.' : 'is now in your library. Start anytime.'}
         </p>
         <Button variant="primary" size="lg" fullWidth onClick={onClose}>
-          Start Program
+          {IS_RUSSIAN ? 'Начать программу' : 'Start Program'}
         </Button>
       </div>
     </div>
@@ -402,13 +400,13 @@ export function MarketplaceScreen() {
       <div className="no-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '16px 20px 100px' }}>
         {loading && (
           <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
-            <p>Loading programs...</p>
+            <p>{IS_RUSSIAN ? 'Загрузка программ...' : 'Loading programs...'}</p>
           </div>
         )}
 
         {!loading && combinedPrograms.length === 0 && (
           <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
-            <p>No programs found in this category.</p>
+            <p>{IS_RUSSIAN ? 'В этой категории пока нет программ.' : 'No programs found in this category.'}</p>
           </div>
         )}
 
@@ -420,7 +418,6 @@ export function MarketplaceScreen() {
               style={{
                 height: 220,
                 borderRadius: 24,
-                background: featured.gradient || 'linear-gradient(135deg, #7b6ef6 0%, #3dbbf7 100%)',
                 padding: 20,
                 display: 'flex',
                 flexDirection: 'column',
@@ -429,9 +426,20 @@ export function MarketplaceScreen() {
                 marginBottom: 16,
                 position: 'relative',
                 overflow: 'hidden',
+                backgroundImage: featured.imageUrl ? `url(${featured.imageUrl})` : featured.gradient,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background: 'linear-gradient(180deg, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.75) 100%)',
+                  zIndex: 0,
+                }}
+              />
+              <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div
                   style={{
                     padding: '5px 10px',
@@ -445,7 +453,7 @@ export function MarketplaceScreen() {
                     letterSpacing: '0.04em',
                   }}
                 >
-                  Featured
+                  {IS_RUSSIAN ? 'Рекомендуем' : 'Featured'}
                 </div>
                 {featured.tag && (
                   <div
@@ -463,8 +471,8 @@ export function MarketplaceScreen() {
                 )}
               </div>
 
-              <div>
-                <div style={{ fontSize: 44, marginBottom: 4 }}>{featured.emoji || '🎯'}</div>
+              <div style={{ position: 'relative', zIndex: 1 }}>
+                <div style={{ fontSize: 36, marginBottom: 4 }}>{featured.emoji || '🎯'}</div>
                 <h2 className="font-display" style={{ fontSize: 20, fontWeight: 700, color: '#fff', margin: '0 0 6px' }}>
                   {featured.name}
                 </h2>
@@ -479,11 +487,7 @@ export function MarketplaceScreen() {
                     </span>
                   </div>
                   <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14 }}>·</span>
-                  <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)' }}>{featured.durationWeeks} weeks</span>
-                  <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14 }}>·</span>
-                  <span className="font-display" style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>
-                    ${featured.price}
-                  </span>
+                  <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)' }}>{featured.durationWeeks} {IS_RUSSIAN ? 'недель' : 'weeks'}</span>
                 </div>
               </div>
             </div>
@@ -491,102 +495,77 @@ export function MarketplaceScreen() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {rest.map((program) => (
                 <button
-                  key={program.id}
-                  onClick={() => setDetail({ type: 'program', program })}
-                  className="card-press"
+                key={program.id}
+                onClick={() => setDetail({ type: 'program', program })}
+                className="card-press"
+                style={{
+                  width: '100%',
+                  padding: 0,
+                  background: 'var(--bg-card)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 20,
+                  cursor: 'pointer',
+                  overflow: 'hidden',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  textAlign: 'left',
+                  fontFamily: 'inherit',
+                  color: 'inherit',
+                }}
+                >
+                <div
                   style={{
-                    width: '100%',
-                    padding: 14,
-                    background: 'var(--bg-card)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 20,
-                    cursor: 'pointer',
+                    height: 120,
+                    backgroundImage: program.imageUrl ? `url(${program.imageUrl})` : program.gradient,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                    position: 'relative',
                     display: 'flex',
-                    gap: 14,
-                    textAlign: 'left',
-                    fontFamily: 'inherit',
-                    color: 'inherit',
+                    alignItems: 'flex-end',
+                    padding: 12,
                   }}
                 >
-                    <div
-                      style={{
-                        width: 64,
-                        height: 64,
-                        borderRadius: 16,
-                        background: program.gradient,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 30,
-                        flexShrink: 0,
-                      }}
-                    >
-                      {program.emoji}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                        <p className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-                          {program.name}
-                        </p>
-                        {program.tag && (
-                          <div
-                            style={{
-                              padding: '3px 8px',
-                              background: 'var(--green-dim)',
-                              borderRadius: 8,
-                              fontSize: 10,
-                              color: 'var(--green)',
-                              fontWeight: 800,
-                            }}
-                          >
-                            {program.tag}
-                          </div>
-                        )}
-                      </div>
-                      <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 4px' }}>
-                        {program.instructor} · {program.weeks}w · {program.level}
-                      </p>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <StarIcon size={12} />
-                        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                          {program.rating} ({program.reviews.toLocaleString()})
-                        </span>
-                      </div>
-                      <div
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      background: 'linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.7) 100%)',
+                      zIndex: 0,
+                    }}
+                  />
+                  <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                    <span className="font-display" style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>{program.emoji} {program.name}</span>
+                    {program.tag && (
+                      <span
                         style={{
-                          marginTop: 10,
-                          display: 'flex',
-                          flexWrap: 'wrap',
-                          gap: 6,
+                          padding: '3px 8px',
+                          background: '#ffd700',
+                          borderRadius: 8,
+                          fontSize: 10,
+                          fontWeight: 800,
+                          color: '#000',
                         }}
                       >
-                        {program.includes.slice(0, 2).map((inc) => (
-                          <span
-                            key={inc}
-                            style={{
-                              padding: '3px 8px',
-                              background: 'var(--bg-elevated)',
-                              borderRadius: 8,
-                              fontSize: 10,
-                              color: 'var(--text-secondary)',
-                            }}
-                          >
-                            ✓ {inc}
-                          </span>
-                        ))}
-                        {program.includes.length > 2 && (
-                          <span style={{ fontSize: 10, color: 'var(--text-muted)', alignSelf: 'center' }}>+{program.includes.length - 2} more</span>
-                        )}
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
-                      <p className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--green)', margin: 0 }}>
-                        ${program.price}
-                      </p>
-                      <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{program.enrolled.toLocaleString()} enrolled</span>
-                    </div>
-                  </button>
-                ))}
+                        {program.tag}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div style={{ padding: 14 }}>
+                  <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '0 0 10px', lineHeight: 1.35 }}>
+                    {program.description?.slice(0, 90)}...
+                  </p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text-muted)' }}>
+                    <StarIcon size={12} />
+                    <span>{program.rating} ({program.reviews.toLocaleString()})</span>
+                    <span style={{ margin: '0 4px' }}>·</span>
+                    <span>{program.weeks} {IS_RUSSIAN ? 'недель' : 'weeks'}</span>
+                    <span style={{ margin: '0 4px' }}>·</span>
+                    <span>{program.level}</span>
+                  </div>
+                </div>
+                </button>
+              ))}
             </div>
           </>
         )}
