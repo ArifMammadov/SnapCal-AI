@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react'
 import { useAppStore } from '../store/index.js'
 import { StarIcon, Button } from '../components/ui.js'
 import { usePrograms, type MarketplaceProgram } from '../lib/data.js'
+import { basicPrograms } from '../lib/basicPrograms.js'
 import { api } from '../lib/api.js'
 
-type Category = 'All' | 'Yoga' | 'Home Fitness' | 'Gym' | 'Weight Loss' | 'Muscle Gain' | 'Running'
+type Category = 'All' | 'Yoga' | 'Home Fitness' | 'Gym' | 'Diet'
 
-const categories: Category[] = ['All', 'Yoga', 'Home Fitness', 'Gym', 'Weight Loss', 'Muscle Gain', 'Running']
+const categories: Category[] = ['All', 'Yoga', 'Home Fitness', 'Gym', 'Diet']
 
 interface UiProgram {
   id: string
@@ -31,6 +32,33 @@ interface UiProgram {
   tag: string | null
 }
 
+function basicToUiProgram(p: typeof basicPrograms[number]): UiProgram {
+  const ratingStr = p.rating.toFixed(1)
+  const category = p.category as Category
+  return {
+    id: p.id,
+    name: p.title,
+    slug: p.id,
+    description: p.subtitle,
+    category,
+    level: p.level,
+    durationWeeks: p.durationWeeks,
+    duration: p.durationWeeks,
+    weeks: p.durationWeeks,
+    price: p.price,
+    rating: ratingStr,
+    reviews: p.reviews,
+    enrolled: p.enrolled,
+    emoji: p.emoji,
+    gradient: p.gradient,
+    includes: p.includes,
+    isActive: true,
+    createdAt: new Date().toISOString(),
+    instructor: 'SnapCal Coach',
+    tag: 'Free',
+  }
+}
+
 function toUiProgram(p: MarketplaceProgram): UiProgram {
   const category = (categories.includes(p.category as Category) ? p.category : 'All') as Category
   const fallbackGradients: Record<Category, string> = {
@@ -38,9 +66,7 @@ function toUiProgram(p: MarketplaceProgram): UiProgram {
     Yoga: 'linear-gradient(135deg, #7b6ef6 0%, #3dbbf7 100%)',
     'Home Fitness': 'linear-gradient(135deg, #ffbe0b 0%, #ff7a45 100%)',
     Gym: 'linear-gradient(135deg, #ff4d6d 0%, #7b6ef6 100%)',
-    'Weight Loss': 'linear-gradient(135deg, #ff4d6d 0%, #ff7a45 100%)',
-    'Muscle Gain': 'linear-gradient(135deg, #00d48a 0%, #0da8ed 100%)',
-    Running: 'linear-gradient(135deg, #3dbbf7 0%, #7b6ef6 100%)',
+    Diet: 'linear-gradient(135deg, #00d48a 0%, #0da8ed 100%)',
   }
   const ratingStr = typeof p.rating === 'number' ? p.rating.toFixed(1) : (p.rating || '4.5')
 
@@ -64,13 +90,17 @@ interface Enrollment {
   status: string
   paymentStatus: string | null
   enrolledAt: string
-  program: MarketplaceProgram
+  program: UiProgram
 }
 
 function PurchaseModal({ program, alreadyEnrolled, onClose, onPurchase }: { program: UiProgram; alreadyEnrolled: boolean; onClose: () => void; onPurchase: () => void }) {
   const [purchasing, setPurchasing] = useState(false)
   const handlePurchase = async () => {
     setPurchasing(true)
+    if (program.id.startsWith('basic-')) {
+      onPurchase()
+      return
+    }
     try {
       await api.post(`/marketplace/programs/${program.id}/enroll`)
       onPurchase()
@@ -177,7 +207,13 @@ function PurchaseModal({ program, alreadyEnrolled, onClose, onPurchase }: { prog
         </div>
 
         <Button variant="primary" size="lg" fullWidth onClick={handlePurchase} disabled={purchasing || alreadyEnrolled}>
-          {alreadyEnrolled ? 'Вы уже записаны' : purchasing ? 'Processing...' : `Enroll for $${program.price}`}
+          {alreadyEnrolled
+            ? 'Вы уже записаны'
+            : purchasing
+            ? 'Processing...'
+            : program.id.startsWith('basic-')
+            ? 'Start for free'
+            : `Enroll for $${program.price}`}
         </Button>
       </div>
     </div>
@@ -228,7 +264,7 @@ export function MarketplaceScreen() {
 
   useEffect(() => {
     api.get<Enrollment[]>('/marketplace/my-enrollments')
-      .then((res) => setEnrollments(res.data))
+      .then((res) => setEnrollments((res.data as any[]).map((e) => ({ ...e, program: toUiProgram(e.program as MarketplaceProgram) }))))
       .catch(() => setEnrollments([]))
   }, [])
 
@@ -237,8 +273,12 @@ export function MarketplaceScreen() {
   }, [error])
 
   const enrolledIds = new Set(enrollments.map((e) => e.program.id))
-  const featured = programs[0]
-  const rest = programs.slice(1)
+  const basicUiPrograms = basicPrograms
+    .filter((p) => category === 'All' || p.category === category)
+    .map((p) => basicToUiProgram(p))
+  const combinedPrograms = [...basicUiPrograms, ...programs.map(toUiProgram)]
+  const featured = combinedPrograms[0]
+  const rest = combinedPrograms.slice(1)
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg)', position: 'relative' }}>
@@ -264,7 +304,7 @@ export function MarketplaceScreen() {
               fontWeight: 600,
             }}
           >
-            {programs.length} programs
+            {combinedPrograms.length} programs
           </div>
         </div>
 
@@ -308,7 +348,7 @@ export function MarketplaceScreen() {
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {enrollments.slice(0, 3).map((e) => {
-                const program = toUiProgram(e.program)
+                const program = e.program
                 return (
                   <button
                     key={e.enrollmentId}
@@ -366,7 +406,7 @@ export function MarketplaceScreen() {
           </div>
         )}
 
-        {!loading && programs.length === 0 && (
+        {!loading && combinedPrograms.length === 0 && (
           <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
             <p>No programs found in this category.</p>
           </div>
@@ -376,7 +416,7 @@ export function MarketplaceScreen() {
           <>
             <div
               className="card-press"
-              onClick={() => setDetail({ type: 'program', program: toUiProgram(featured) })}
+              onClick={() => setDetail({ type: 'program', program: featured })}
               style={{
                 height: 220,
                 borderRadius: 24,
@@ -435,7 +475,7 @@ export function MarketplaceScreen() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     <StarIcon size={14} />
                     <span className="font-display" style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>
-                      {typeof featured.rating === 'number' ? featured.rating.toFixed(1) : featured.rating}
+                      {featured.rating}
                     </span>
                   </div>
                   <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 14 }}>·</span>
@@ -449,27 +489,25 @@ export function MarketplaceScreen() {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {rest.map((p) => {
-                const program = toUiProgram(p)
-                return (
-                  <button
-                    key={program.id}
-                    onClick={() => setDetail({ type: 'program', program })}
-                    className="card-press"
-                    style={{
-                      width: '100%',
-                      padding: 14,
-                      background: 'var(--bg-card)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 20,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      gap: 14,
-                      textAlign: 'left',
-                      fontFamily: 'inherit',
-                      color: 'inherit',
-                    }}
-                  >
+              {rest.map((program) => (
+                <button
+                  key={program.id}
+                  onClick={() => setDetail({ type: 'program', program })}
+                  className="card-press"
+                  style={{
+                    width: '100%',
+                    padding: 14,
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 20,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    gap: 14,
+                    textAlign: 'left',
+                    fontFamily: 'inherit',
+                    color: 'inherit',
+                  }}
+                >
                     <div
                       style={{
                         width: 64,
@@ -548,8 +586,7 @@ export function MarketplaceScreen() {
                       <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{program.enrolled.toLocaleString()} enrolled</span>
                     </div>
                   </button>
-                )
-              })}
+                ))}
             </div>
           </>
         )}
@@ -568,7 +605,7 @@ export function MarketplaceScreen() {
                 status: 'active',
                 paymentStatus: detail.program.price === 0 ? 'free' : 'pending',
                 enrolledAt: new Date().toISOString(),
-                program: detail.program as unknown as MarketplaceProgram,
+                program: detail.program as UiProgram,
               },
             ])
             setDetail({ type: 'enroll', program: detail.program })
