@@ -91,58 +91,89 @@ export async function finalizePhotoAnalysis(
   imageUrl: string,
   jobId: string,
 ): Promise<AnalyzePhotoResult> {
-  const status = await pollPhotoAnalysisStatus(jobId)
-  if (status.status !== 'completed' || !status.result) {
-    throw new Error(status.failedReason || 'Vision analysis did not complete')
-  }
-
-  const content = status.result.message?.content ?? ''
-  const foodData = typeof content === 'string' ? parseFoodJson(content) : null
-  if (foodData) {
-    await saveFoodLogFromAnalysis(userId, imageUrl, foodData)
-  }
-
-  // Avoid duplicate AI messages when the client polls more than once
-  const existingAiMessage = await prisma.chatMessage.findFirst({
-    where: { userId, role: 'AI', attachments: { path: ['imageUrl'], equals: imageUrl } },
-    orderBy: { createdAt: 'desc' },
-  })
-  if (existingAiMessage) {
-    return {
-      message: {
-        id: existingAiMessage.id,
-        role: 'ai',
-        type: (existingAiMessage.type as any) ?? 'FOOD_ANALYSIS',
-        content: existingAiMessage.content,
-        foodData: (existingAiMessage.attachments as any)?.foodData,
-        structured: (existingAiMessage.attachments as any)?.structured,
-        imageUrl,
-        timestamp: existingAiMessage.createdAt.toISOString(),
-      },
+  // Prevent concurrent finalization from multiple polling clients
+  const lockKey = `finalize:${jobId}`
+  const acquired = await redis.set(lockKey, '1', 'EX', 60, 'NX')
+  if (!acquired) {
+    // Another request is finalizing; wait briefly and then return the existing message
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    const existing = await prisma.chatMessage.findFirst({
+      where: { userId, role: 'AI', attachments: { path: ['imageUrl'], equals: imageUrl } },
+      orderBy: { createdAt: 'desc' },
+    })
+    if (existing) {
+      return {
+        message: {
+          id: existing.id,
+          role: 'ai',
+          type: (existing.type as any) ?? 'FOOD_ANALYSIS',
+          content: existing.content,
+          foodData: (existing.attachments as any)?.foodData,
+          structured: (existing.attachments as any)?.structured,
+          imageUrl,
+          timestamp: existing.createdAt.toISOString(),
+        },
+      }
     }
   }
 
-  const aiMessage = await prisma.chatMessage.create({
-    data: {
-      userId,
-      role: 'AI',
-      type: (status.result.message?.type === 'STRUCTURED' ? 'STRUCTURED' : 'FOOD_ANALYSIS') as any, // TODO: remove cast after migration applied
-      content,
-      modelUsed: status.result.message?.modelUsed,
-      attachments: { foodData, imageUrl, structured: status.result.message?.structured },
-    },
-  })
+  try {
+    const status = await pollPhotoAnalysisStatus(jobId)
+    if (status.status !== 'completed' || !status.result) {
+      throw new Error(status.failedReason || 'Vision analysis did not complete')
+    }
 
-  return {
-    message: {
-      id: aiMessage.id,
-      role: 'ai',
-      type: (status.result.message?.type === 'STRUCTURED' ? 'STRUCTURED' : 'FOOD_ANALYSIS') as any, // TODO: remove cast after migration applied
-      content,
-      foodData,
-      structured: status.result.message?.structured,
-      imageUrl,
-      timestamp: aiMessage.createdAt.toISOString(),
-    },
+    const content = status.result.message?.content ?? ''
+    const foodData = typeof content === 'string' ? parseFoodJson(content) : null
+    if (foodData) {
+      await saveFoodLogFromAnalysis(userId, imageUrl, foodData)
+    }
+
+    // Avoid duplicate AI messages when the client polls more than once
+    const existingAiMessage = await prisma.chatMessage.findFirst({
+      where: { userId, role: 'AI', attachments: { path: ['imageUrl'], equals: imageUrl } },
+      orderBy: { createdAt: 'desc' },
+    })
+    if (existingAiMessage) {
+      return {
+        message: {
+          id: existingAiMessage.id,
+          role: 'ai',
+          type: (existingAiMessage.type as any) ?? 'FOOD_ANALYSIS',
+          content: existingAiMessage.content,
+          foodData: (existingAiMessage.attachments as any)?.foodData,
+          structured: (existingAiMessage.attachments as any)?.structured,
+          imageUrl,
+          timestamp: existingAiMessage.createdAt.toISOString(),
+        },
+      }
+    }
+
+    const aiMessage = await prisma.chatMessage.create({
+      data: {
+        userId,
+        role: 'AI',
+        type: (status.result.message?.type === 'STRUCTURED' ? 'STRUCTURED' : 'FOOD_ANALYSIS') as any, // TODO: remove cast after migration applied
+        content,
+        modelUsed: status.result.message?.modelUsed,
+        attachments: { foodData, imageUrl, structured: status.result.message?.structured },
+      },
+    })
+
+    return {
+      message: {
+        id: aiMessage.id,
+        role: 'ai',
+        type: (status.result.message?.type === 'STRUCTURED' ? 'STRUCTURED' : 'FOOD_ANALYSIS') as any, // TODO: remove cast after migration applied
+        content,
+        foodData,
+        structured: status.result.message?.structured,
+        imageUrl,
+        timestamp: aiMessage.createdAt.toISOString(),
+      },
+    }
+  } catch (err) {
+    // Re-throw so the route can return an error; lock will expire automatically
+    throw err
   }
 }
