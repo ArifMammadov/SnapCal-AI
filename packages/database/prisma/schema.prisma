@@ -71,6 +71,7 @@ model Profile {
   dailySteps        Int?
   timezone          String   @default("UTC")
   units             String   @default("metric")
+  goalPlan          Json?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 

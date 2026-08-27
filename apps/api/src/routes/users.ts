@@ -16,6 +16,10 @@ export const requireAuth = async (request: FastifyRequest, reply: FastifyReply) 
 
 const updateProfileSchema = z.object({
   firstName: z.string().min(1).max(100).optional(),
+  lastName: z.string().min(1).max(100).optional(),
+  email: z.string().email().optional().or(z.literal('')),
+  phone: z.string().max(50).optional().or(z.literal('')),
+  languageCode: z.enum(['en','ru','az','uz']).optional(),
   birthDate: z.string().datetime().optional(),
   gender: z.enum(['MALE', 'FEMALE', 'OTHER']).optional(),
   heightCm: z.number().int().min(50).max(300).optional(),
@@ -33,6 +37,7 @@ const updateProfileSchema = z.object({
   dailySleepH: z.number().positive().optional(),
   dailySteps: z.number().int().optional(),
   units: z.enum(['metric', 'imperial']).optional(),
+  goalPlan: z.record(z.any()).optional(),
 })
 
 export const userRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
@@ -46,6 +51,7 @@ export const userRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
     if (!user) return null
     return {
       ...user,
+      languageCode: user.languageCode,
       telegramId: user.telegramId?.toString() ?? null,
       subscriptions: user.subscriptions.map((s: { stripeSubscriptionId: string | null }) => ({
         ...s,
@@ -83,8 +89,14 @@ export const userRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
     const data = updateProfileSchema.parse(request.body)
     const userId = request.user!.userId
 
-    if (data.firstName) {
-      await prisma.user.update({ where: { id: userId }, data: { firstName: data.firstName } })
+    const userUpdate: any = {}
+    if (data.firstName) userUpdate.firstName = data.firstName
+    if (data.lastName) userUpdate.lastName = data.lastName
+    if (data.email !== undefined) userUpdate.email = data.email || null
+    if (data.phone !== undefined) userUpdate.phone = data.phone || null
+    if (data.languageCode) userUpdate.languageCode = data.languageCode
+    if (Object.keys(userUpdate).length) {
+      await prisma.user.update({ where: { id: userId }, data: userUpdate })
     }
 
     const existing = await prisma.profile.findUnique({ where: { userId } })
@@ -117,6 +129,7 @@ export const userRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
 
     const updatePayload = {
       ...data,
+      ...(data.goalPlan ? { goalPlan: data.goalPlan } : {}),
       ...(goals && {
         dailyCalories: goals.dailyCalories,
         dailyProteinG: data.dailyProteinG ?? goals.dailyProteinG,
@@ -139,6 +152,70 @@ export const userRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
       currentWeightKg: updated.currentWeightKg ? Number(updated.currentWeightKg) : null,
       targetWeightKg: updated.targetWeightKg ? Number(updated.targetWeightKg) : null,
     }
+  })
+
+  app.get('/me/goal-plan', async (request: FastifyRequest) => {
+    const user = await prisma.user.findUnique({
+      where: { id: request.user!.userId },
+      include: { profile: true },
+    })
+    const stored = user?.profile?.goalPlan as any
+    if (stored && Array.isArray(stored.milestones)) return stored
+    const profile = user?.profile
+    if (!profile?.primaryGoal) {
+      return { primaryGoal: 'MAINTENANCE', timelineMonths: 6, milestones: [], dailyTargets: {} }
+    }
+    const months = 6
+    const startWeight = Number(profile.currentWeightKg) || 70
+    const targetWeight = Number(profile.targetWeightKg) || startWeight
+    const lossKg = Math.max(0, startWeight - targetWeight)
+    const now = new Date()
+    const milestones = Array.from({ length: months }, (_, i) => {
+      const month = i + 1
+      const pct = month / months
+      const weight = targetWeight + lossKg * (1 - pct)
+      const calorieGoal = profile.dailyCalories || 2200
+      return {
+        month,
+        label: `Month ${month}`,
+        targetWeightKg: lossKg > 0 ? +weight.toFixed(1) : null,
+        targetCalories: calorieGoal,
+        workoutsPerWeek: profile.activityLevel === 'VERY_ACTIVE' ? 5 : profile.activityLevel === 'ACTIVE' ? 4 : 3,
+        focus: month <= 2 ? 'Habits & consistency' : month <= 4 ? 'Strength & nutrition quality' : 'Sustain & maintain',
+        color: month <= 2 ? 'var(--green)' : month <= 4 ? 'var(--blue)' : 'var(--purple)',
+      }
+    })
+    return {
+      primaryGoal: profile.primaryGoal,
+      startWeightKg: startWeight,
+      targetWeightKg: targetWeight,
+      totalLossKg: lossKg > 0 ? +lossKg.toFixed(1) : null,
+      currentMonth: 1,
+      percentComplete: 0,
+      timelineMonths: months,
+      dailyTargets: {
+        calories: profile.dailyCalories || 2200,
+        proteinG: profile.dailyProteinG || 120,
+        carbsG: profile.dailyCarbsG || 200,
+        fatG: profile.dailyFatG || 70,
+        waterL: ((profile.dailyWaterMl || 3000) / 1000).toFixed(1),
+        sleepH: Number(profile.dailySleepH) || 8,
+        steps: profile.dailySteps || 10000,
+        workoutsPerWeek: profile.activityLevel === 'VERY_ACTIVE' ? 5 : profile.activityLevel === 'ACTIVE' ? 4 : 3,
+      },
+      milestones,
+    }
+  })
+
+  app.put('/me/goal-plan', async (request: FastifyRequest) => {
+    const userId = request.user!.userId
+    const plan = (request.body as any) ?? {}
+    const updated = await prisma.profile.upsert({
+      where: { userId },
+      update: { goalPlan: plan },
+      create: { userId, goalPlan: plan, gender: 'OTHER', heightCm: 0, currentWeightKg: 0, birthDate: new Date('1995-01-01'), activityLevel: 'MODERATE', primaryGoal: 'MAINTENANCE' },
+    })
+    return updated.goalPlan
   })
 
   app.get('/me/subscription', async (request: FastifyRequest) => {

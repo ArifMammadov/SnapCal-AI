@@ -29,6 +29,8 @@ export interface User {
     activityLevel?: string | null
     dailyCalories?: number | null
     dailyProteinG?: number | null
+    dailyCarbsG?: number | null
+    dailyFatG?: number | null
     dailyWaterMl?: number | null
     dailySleepH?: number | null
     sleepGoalH?: number | null
@@ -38,6 +40,7 @@ export interface User {
     allergies?: string[]
     timezone?: string
     units?: string
+    goalPlan?: any
   } | null
 }
 

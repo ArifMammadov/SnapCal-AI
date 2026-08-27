@@ -5,9 +5,8 @@ import { useAppStore } from '../store/index.js'
 import { api } from '../lib/api.js'
 import type { TrackingSummary } from '../lib/data.js'
 import { NotificationScreen } from './NotificationScreen.js'
-import { TelegramLinkSection } from './ProfileScreen.telegram.js'
 
-type ProfileSection = 'main' | 'personal' | 'goals' | 'subscription' | 'notifications' | 'settings' | 'faq' | 'support' | 'privacy' | 'terms' | 'telegram'
+type ProfileSection = 'main' | 'personal' | 'goals' | 'subscription' | 'notifications' | 'settings' | 'faq' | 'support' | 'privacy' | 'terms'
 
 function BackButton({ onBack }: { onBack: () => void }) {
   return (
@@ -36,85 +35,233 @@ function BackButton({ onBack }: { onBack: () => void }) {
 function PersonalInfoSection({ onBack }: { onBack: () => void }) {
   const user = useAppStore((s) => s.user)
   const profile = user?.profile
+  const [isEditing, setIsEditing] = useState(false)
+  const [form, setForm] = useState({
+    firstName: user?.firstName || '',
+    lastName: user?.lastName || '',
+    email: user?.email || '',
+    phone: user?.phone || '',
+    birthDate: profile?.birthDate ? new Date(profile.birthDate).toISOString().split('T')[0] : '',
+    gender: profile?.gender || 'OTHER',
+    heightCm: profile?.heightCm ?? '',
+    currentWeightKg: profile?.currentWeightKg ? Number(profile.currentWeightKg) : '',
+    targetWeightKg: profile?.targetWeightKg ? Number(profile.targetWeightKg) : '',
+  })
+  const [saving, setSaving] = useState(false)
 
-  const fields = [
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const payload: any = {
+        firstName: form.firstName,
+        lastName: form.lastName,
+        email: form.email,
+        phone: form.phone,
+        birthDate: form.birthDate ? new Date(form.birthDate).toISOString() : undefined,
+        gender: form.gender,
+        heightCm: form.heightCm ? Number(form.heightCm) : undefined,
+        currentWeightKg: form.currentWeightKg ? Number(form.currentWeightKg) : undefined,
+        targetWeightKg: form.targetWeightKg ? Number(form.targetWeightKg) : undefined,
+      }
+      const res = await api.patch('/users/me/profile', payload)
+      useAppStore.setState((state) => ({ user: state.user ? { ...state.user, profile: res.data, firstName: res.data.firstName ?? state.user?.firstName } : null }))
+      setIsEditing(false)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const readFields = [
     { label: 'Full Name', value: `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || '—' },
-    { label: 'Date of Birth', value: profile?.dateOfBirth ? new Date(profile.dateOfBirth).toLocaleDateString() : '—' },
+    { label: 'Date of Birth', value: profile?.birthDate ? new Date(profile.birthDate).toLocaleDateString() : '—' },
     { label: 'Gender', value: profile?.gender || '—' },
     { label: 'Height', value: profile?.heightCm ? `${profile.heightCm} cm` : '—' },
-    { label: 'Current Weight', value: profile?.weightKg ? `${profile.weightKg} kg` : '—' },
-    { label: 'Target Weight', value: profile?.targetWeightKg ? `${profile.targetWeightKg} kg` : '—' },
+    { label: 'Current Weight', value: profile?.currentWeightKg ? `${Number(profile.currentWeightKg).toFixed(1)} kg` : '—' },
+    { label: 'Target Weight', value: profile?.targetWeightKg ? `${Number(profile.targetWeightKg).toFixed(1)} kg` : '—' },
     { label: 'Email', value: user?.email || '—' },
     { label: 'Phone', value: user?.phone || '—' },
   ]
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '10px 12px',
+    background: 'var(--bg-elevated)',
+    border: '1px solid var(--border)',
+    borderRadius: 10,
+    color: 'var(--text-primary)',
+    fontSize: 14,
+    fontFamily: 'inherit',
+    marginBottom: 10,
+  }
+
   return (
     <div className="no-scrollbar" style={{ height: '100%', overflowY: 'auto', background: 'var(--bg)', padding: '56px 20px 24px' }}>
       <BackButton onBack={onBack} />
-      <h1 className="font-display" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 20px' }}>
-        Personal Information
-      </h1>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+        <h1 className="font-display" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+          Personal Information
+        </h1>
+        <Button variant="secondary" size="sm" onClick={() => isEditing ? handleSave() : setIsEditing(true)} disabled={saving}>
+          {isEditing ? (saving ? 'Saving...' : 'Save') : 'Edit'}
+        </Button>
+      </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {fields.map((f) => (
-          <Card key={f.label} style={{ padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{f.label}</span>
-            <span className="font-display" style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{f.value}</span>
-          </Card>
-        ))}
+        {isEditing ? (
+          <>
+            <input style={inputStyle} placeholder="First name" value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} />
+            <input style={inputStyle} placeholder="Last name" value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} />
+            <input style={inputStyle} type="date" placeholder="Date of birth" value={form.birthDate} onChange={(e) => setForm({ ...form, birthDate: e.target.value })} />
+            <select style={inputStyle} value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value as any })}>
+              <option value="MALE">Male</option>
+              <option value="FEMALE">Female</option>
+              <option value="OTHER">Other</option>
+            </select>
+            <input style={inputStyle} type="number" placeholder="Height (cm)" value={form.heightCm} onChange={(e) => setForm({ ...form, heightCm: e.target.value })} />
+            <input style={inputStyle} type="number" step="0.1" placeholder="Current weight (kg)" value={form.currentWeightKg} onChange={(e) => setForm({ ...form, currentWeightKg: e.target.value })} />
+            <input style={inputStyle} type="number" step="0.1" placeholder="Target weight (kg)" value={form.targetWeightKg} onChange={(e) => setForm({ ...form, targetWeightKg: e.target.value })} />
+            <input style={inputStyle} type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            <input style={inputStyle} placeholder="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+          </>
+        ) : (
+          readFields.map((f) => (
+            <Card key={f.label} style={{ padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{f.label}</span>
+              <span className="font-display" style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>{f.value}</span>
+            </Card>
+          ))
+        )}
       </div>
     </div>
   )
 }
 
-function GoalsSection({ onBack }: { onBack: () => void }) {
-  const profile = useAppStore((s) => s.user?.profile)
+type GoalPlan = {
+  primaryGoal?: string
+  startWeightKg?: number
+  targetWeightKg?: number
+  totalLossKg?: number | null
+  currentMonth?: number
+  percentComplete?: number
+  timelineMonths?: number
+  dailyTargets?: {
+    calories?: number
+    proteinG?: number
+    carbsG?: number
+    fatG?: number
+    waterL?: string
+    sleepH?: number
+    steps?: number
+    workoutsPerWeek?: number
+  }
+  milestones?: {
+    month: number
+    label: string
+    targetWeightKg: number | null
+    targetCalories: number
+    workoutsPerWeek: number
+    focus: string
+    color: string
+  }[]
+}
 
-  const goals = [
-    { label: 'Primary Goal', value: profile?.primaryGoal || '—', icon: '🎯', color: 'var(--rose)' },
-    { label: 'Daily Calories', value: `${profile?.dailyCalories || '—'} kcal`, icon: '🔥', color: 'var(--orange)' },
-    { label: 'Protein Target', value: `${profile?.dailyProteinG || '—'}g / day`, icon: '🥩', color: 'var(--green)' },
-    { label: 'Water Goal', value: `${((profile?.dailyWaterMl || 0) / 1000).toFixed(1)} L / day`, icon: '💧', color: 'var(--blue)' },
-    { label: 'Sleep Target', value: `${profile?.sleepGoalH || '—'} hours`, icon: '🌙', color: 'var(--purple)' },
-    { label: 'Steps Goal', value: `${profile?.dailySteps || '—'} / day`, icon: '👟', color: 'var(--amber)' },
-    { label: 'Workout Frequency', value: `${profile?.workoutsPerWeek || '—'}× / week`, icon: '💪', color: 'var(--rose)' },
-    { label: 'Timeline', value: '6 months', icon: '📅', color: 'var(--green)' },
-  ]
+function GoalsSection({ onBack }: { onBack: () => void }) {
+  const [plan, setPlan] = useState<GoalPlan | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.get('/users/me/goal-plan').then((res) => setPlan(res.data)).catch(() => null).finally(() => setLoading(false))
+  }, [])
+
+  const targets = plan?.dailyTargets
+
   return (
     <div className="no-scrollbar" style={{ height: '100%', overflowY: 'auto', background: 'var(--bg)', padding: '56px 20px 24px' }}>
       <BackButton onBack={onBack} />
       <h1 className="font-display" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 20px' }}>
         My Goals
       </h1>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {goals.map((g) => (
-          <Card
-            key={g.label}
-            style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 10,
-                  background: `${g.color}22`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 18,
-                }}
-              >
-                {g.icon}
+
+      {loading ? (
+        <p style={{ color: 'var(--text-secondary)' }}>Loading plan…</p>
+      ) : !plan?.primaryGoal ? (
+        <Card style={{ padding: 16 }}>
+          <p style={{ margin: 0, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+            No AI plan yet. Tell the AI coach about your goal (for example: “I want to lose 5 kg in 2 months”) and it will build a personalized plan here.
+          </p>
+        </Card>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <Card style={{ padding: 16 }}>
+            <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 6px' }}>PRIMARY GOAL</p>
+            <p className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--green)', margin: 0 }}>{plan.primaryGoal?.replace(/_/g, ' ')}</p>
+            <div style={{ display: 'flex', gap: 16, marginTop: 12 }}>
+              <div>
+                <p style={{ fontSize: 10, color: 'var(--text-muted)', margin: 0 }}>START</p>
+                <p style={{ fontSize: 15, fontWeight: 600, margin: '2px 0 0', color: 'var(--text-primary)' }}>{plan.startWeightKg} kg</p>
               </div>
-              <span style={{ fontSize: 14, color: 'var(--text-secondary)' }}>{g.label}</span>
+              <div>
+                <p style={{ fontSize: 10, color: 'var(--text-muted)', margin: 0 }}>TARGET</p>
+                <p style={{ fontSize: 15, fontWeight: 600, margin: '2px 0 0', color: 'var(--text-primary)' }}>{plan.targetWeightKg} kg</p>
+              </div>
+              {plan.totalLossKg ? (
+                <div>
+                  <p style={{ fontSize: 10, color: 'var(--text-muted)', margin: 0 }}>TO LOSE</p>
+                  <p style={{ fontSize: 15, fontWeight: 600, margin: '2px 0 0', color: 'var(--rose)' }}>-{plan.totalLossKg} kg</p>
+                </div>
+              ) : null}
             </div>
-            <span className="font-display" style={{ fontSize: 14, fontWeight: 700, color: g.color }}>{g.value}</span>
           </Card>
-        ))}
-      </div>
+
+          <Card style={{ padding: 16 }}>
+            <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 12px' }}>DAILY TARGETS</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              {[
+                { label: 'Calories', value: `${targets?.calories ?? '—'} kcal`, color: 'var(--orange)' },
+                { label: 'Protein', value: `${targets?.proteinG ?? '—'} g`, color: 'var(--green)' },
+                { label: 'Carbs', value: `${targets?.carbsG ?? '—'} g`, color: 'var(--blue)' },
+                { label: 'Fat', value: `${targets?.fatG ?? '—'} g`, color: 'var(--purple)' },
+                { label: 'Water', value: `${targets?.waterL ?? '—'} L`, color: 'var(--blue)' },
+                { label: 'Sleep', value: `${targets?.sleepH ?? '—'} h`, color: 'var(--purple)' },
+                { label: 'Steps', value: `${targets?.steps ?? '—'}`, color: 'var(--amber)' },
+                { label: 'Workouts', value: `${targets?.workoutsPerWeek ?? '—'} / week`, color: 'var(--rose)' },
+              ].map((t) => (
+                <div key={t.label}>
+                  <p style={{ fontSize: 10, color: 'var(--text-muted)', margin: 0 }}>{t.label.toUpperCase()}</p>
+                  <p style={{ fontSize: 15, fontWeight: 600, margin: '2px 0 0', color: t.color }}>{t.value}</p>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          <Card style={{ padding: 16 }}>
+            <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 12px' }}>TIMELINE ({plan.timelineMonths} MONTHS)</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {(plan.milestones ?? []).map((m) => (
+                <div
+                  key={m.month}
+                  style={{
+                    padding: 12,
+                    borderRadius: 12,
+                    background: 'var(--bg-elevated)',
+                    borderLeft: `4px solid ${m.color ?? 'var(--green)'}`,
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <span className="font-display" style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{m.label}</span>
+                    <span style={{ fontSize: 12, color: m.color ?? 'var(--green)', fontWeight: 600 }}>{m.targetWeightKg ? `${m.targetWeightKg} kg` : `${m.targetCalories} kcal`}</span>
+                  </div>
+                  <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>{m.focus} · {m.workoutsPerWeek} workouts/week</p>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }
-
 function SubscriptionSection({ onBack }: { onBack: () => void }) {
   const plan = useAppStore((s) => s.user?.plan) || 'FREE'
   const isPro = plan !== 'FREE'
@@ -244,14 +391,38 @@ function Toggle({ value, onChange }: { value: boolean; onChange: () => void }) {
 
 function SettingsSection({ onBack }: { onBack: () => void }) {
   const { darkMode, setDarkMode } = useApp()
+  const user = useAppStore((s) => s.user)
   const [notifs, setNotifs] = useState(true)
   const [mealReminders, setMealReminders] = useState(true)
-  const [units, setUnits] = useState<'metric' | 'imperial'>('metric')
+  const [units, setUnits] = useState<'metric' | 'imperial'>((user?.profile?.units as any) || 'metric')
+  const [languageCode, setLanguageCode] = useState(user?.languageCode || 'en')
+  const [savingLang, setSavingLang] = useState(false)
 
   const toggles = [
     { label: 'Dark Mode', value: darkMode, onChange: () => setDarkMode(!darkMode) },
     { label: 'Push Notifications', value: notifs, onChange: () => setNotifs(!notifs) },
     { label: 'Meal Reminders', value: mealReminders, onChange: () => setMealReminders(!mealReminders) },
+  ]
+
+  const changeLanguage = async (code: string) => {
+    if (code === languageCode) return
+    setSavingLang(true)
+    try {
+      await api.patch('/users/me/profile', { languageCode: code })
+      setLanguageCode(code)
+      useAppStore.setState((state) => ({ user: state.user ? { ...state.user, languageCode: code } : null }))
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setSavingLang(false)
+    }
+  }
+
+  const languages = [
+    { code: 'az', label: 'Azərbaycan', flag: '🇦🇿' },
+    { code: 'ru', label: 'Русский', flag: '🇷🇺' },
+    { code: 'en', label: 'English', flag: '🇬🇧' },
+    { code: 'uz', label: "O'zbek", flag: '🇺🇿' },
   ]
 
   return (
@@ -268,36 +439,73 @@ function SettingsSection({ onBack }: { onBack: () => void }) {
           </Card>
         ))}
 
-        <Card style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 14, color: 'var(--text-primary)' }}>Units</span>
-          <div style={{ display: 'flex', background: 'var(--bg-elevated)', borderRadius: 10, padding: 3, gap: 3 }}>
-            {(['metric', 'imperial'] as const).map((u) => (
+        <Card style={{ padding: '14px 16px' }}>
+          <p style={{ fontSize: 14, color: 'var(--text-primary)', margin: '0 0 10px' }}>Language / Язык / Dil</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {languages.map((lang) => (
               <button
-                key={u}
-                onClick={() => setUnits(u)}
+                key={lang.code}
+                disabled={savingLang}
+                onClick={() => changeLanguage(lang.code)}
                 style={{
-                  padding: '5px 12px',
-                  background: units === u ? 'var(--bg-card)' : 'transparent',
-                  borderRadius: 8,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '8px 12px',
+                  borderRadius: 10,
                   border: 'none',
-                  color: units === u ? 'var(--text-primary)' : 'var(--text-muted)',
-                  fontSize: 12,
-                  fontWeight: units === u ? 600 : 400,
+                  background: languageCode === lang.code ? 'var(--green)' : 'var(--bg-elevated)',
+                  color: languageCode === lang.code ? '#000' : 'var(--text-primary)',
+                  fontWeight: languageCode === lang.code ? 700 : 400,
+                  fontSize: 13,
                   cursor: 'pointer',
                   fontFamily: 'inherit',
-                  textTransform: 'capitalize',
                 }}
               >
-                {u}
+                <span>{lang.flag}</span>
+                <span>{lang.label}</span>
               </button>
             ))}
           </div>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '10px 0 0', lineHeight: 1.5 }}>
+            This changes the language used by the AI coach and app labels.
+          </p>
+        </Card>
+
+        <Card style={{ padding: '14px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 14, color: 'var(--text-primary)' }}>Units</span>
+            <div style={{ display: 'flex', background: 'var(--bg-elevated)', borderRadius: 10, padding: 3, gap: 3 }}>
+              {(['metric', 'imperial'] as const).map((u) => (
+                <button
+                  key={u}
+                  onClick={() => setUnits(u)}
+                  style={{
+                    padding: '5px 12px',
+                    background: units === u ? 'var(--bg-card)' : 'transparent',
+                    borderRadius: 8,
+                    border: 'none',
+                    color: units === u ? 'var(--text-primary)' : 'var(--text-muted)',
+                    fontSize: 12,
+                    fontWeight: units === u ? 600 : 400,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    textTransform: 'capitalize',
+                  }}
+                >
+                  {u}
+                </button>
+              ))}
+            </div>
+          </div>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: '10px 0 0', lineHeight: 1.5 }}>
+            Units decide how weight, height and distance are shown. Metric uses kg, cm and km. Imperial uses lb, ft/in and miles. It does not affect calories, which are always in kilocalories.
+          </p>
         </Card>
       </div>
     </div>
   )
 }
-
 function SimpleTextSection({ title, onBack, content }: { title: string; onBack: () => void; content: string[] }) {
   return (
     <div className="no-scrollbar" style={{ height: '100%', overflowY: 'auto', background: 'var(--bg)', padding: '56px 20px 24px' }}>
@@ -316,32 +524,216 @@ function SimpleTextSection({ title, onBack, content }: { title: string; onBack: 
   )
 }
 
-const staticContent: Record<string, string[]> = {
-  faq: [
-    'Q: How does SnapCal AI analyze food?\nA: Using advanced computer vision and a database of 2M+ foods, our AI identifies ingredients and calculates precise macros from photos.',
-    'Q: Can I sync with Apple Health or Google Fit?\nA: Yes! SnapCal AI syncs with Apple Health, Google Fit, Garmin, Fitbit, and Whoop devices automatically.',
-    'Q: How accurate is the calorie tracking?\nA: Our AI has 94% accuracy on photo analysis. You can always edit results before saving.',
-    'Q: Can I use SnapCal offline?\nA: Core tracking works offline. AI features require an internet connection.',
-  ],
-  support: [
-    'For support, contact us at support@snapcal.ai or use the in-app chat.',
-    'Response time: Pro users receive priority support with responses within 2 hours. Free users within 24 hours.',
-    'Community: Join 50,000+ members in our SnapCal community forum at community.snapcal.ai',
-  ],
-  privacy: [
-    'Last updated: August 1, 2026. SnapCal AI takes your privacy seriously.',
-    'Data collected: We collect fitness data, food logs, and usage analytics to improve your experience. Your data is never sold to third parties.',
-    'Data storage: All data is encrypted in transit and at rest using AES-256 encryption.',
-    'Your rights: You may request deletion of your account and all associated data at any time through Settings > Account > Delete Account.',
-  ],
-  terms: [
-    'By using SnapCal AI, you agree to these Terms of Service effective August 1, 2026.',
-    'SnapCal AI is intended for informational and educational purposes. It is not a substitute for professional medical advice, diagnosis, or treatment.',
-    'Subscriptions auto-renew unless cancelled 24 hours before the renewal date. Refunds are available within 30 days of purchase.',
-    'Legal Disclaimer: The calorie and nutritional data provided are estimates. Individual results vary. Consult a healthcare provider before starting any fitness program.',
-  ],
+function FAQSection({ onBack }: { onBack: () => void }) {
+  const [open, setOpen] = useState<number | null>(null)
+
+  const items = [
+    {
+      q: 'What is SnapCal AI and how does it help?',
+      a: 'SnapCal AI is your personal nutrition and fitness coach powered by AI. It tracks meals from photos, counts calories and macros, logs activity, water and sleep, and gives you a personalized daily plan.',
+    },
+    {
+      q: 'How accurate is the calorie counting?',
+      a: 'Calorie estimates are based on standard USDA and food-reference data plus AI analysis of photos. For best accuracy, review the suggested portion size and edit meals when needed.',
+    },
+    {
+      q: 'Can the AI coach really build a diet for me?',
+      a: 'Yes. Tell the coach your goal, dietary preferences, allergies and activity level. It will create daily calorie, protein, carb, fat, water and step targets and a step-by-step timeline.',
+    },
+    {
+      q: 'Does SnapCal work without a subscription?',
+      a: 'Yes. New users get a 7-day unlimited trial. After that you can use 1 free food scan per day and unlimited text chat with the AI coach. Upgrade for unlimited scans and advanced analytics.',
+    },
+    {
+      q: 'Is my data safe?',
+      a: 'Yes. Your data is encrypted in transit and at rest, stored in secure EU-based data centers, and never sold to third parties. You can request full account deletion at any time.',
+    },
+    {
+      q: 'How do I change my language or units?',
+      a: 'Go to Profile > Settings. You can switch between Azerbaijani, Russian, English and Uzbek, and choose Metric or Imperial for weight, height and distance display.',
+    },
+  ]
+
+  return (
+    <div className="no-scrollbar" style={{ height: '100%', overflowY: 'auto', background: 'var(--bg)', padding: '56px 20px 24px' }}>
+      <BackButton onBack={onBack} />
+      <h1 className="font-display" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 20px' }}>
+        FAQ
+      </h1>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {items.map((item, i) => {
+          const isOpen = open === i
+          return (
+            <Card key={i} style={{ padding: 0, overflow: 'hidden' }}>
+              <button
+                onClick={() => setOpen(isOpen ? null : i)}
+                style={{
+                  width: '100%',
+                  padding: '14px 16px',
+                  background: 'transparent',
+                  border: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  color: 'var(--text-primary)',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  fontFamily: 'inherit',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                }}
+              >
+                <span>{item.q}</span>
+                <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth={2} style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }}>
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </button>
+              {isOpen ? (
+                <div style={{ padding: '0 16px 14px' }}>
+                  <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6 }}>{item.a}</p>
+                </div>
+              ) : null}
+            </Card>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
+function SupportSection({ onBack }: { onBack: () => void }) {
+  const [showReport, setShowReport] = useState(false)
+
+  return (
+    <div className="no-scrollbar" style={{ height: '100%', overflowY: 'auto', background: 'var(--bg)', padding: '56px 20px 24px' }}>
+      <BackButton onBack={onBack} />
+      <h1 className="font-display" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 20px' }}>
+        Support
+      </h1>
+
+      <Card style={{ padding: 16, marginBottom: 16 }}>
+        <p style={{ margin: '0 0 12px', fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+          Need help? Our team usually replies within 24 hours for free users and 2 hours for Pro members.
+        </p>
+        <Button variant="primary" size="lg" fullWidth onClick={() => setShowReport(true)}>
+          Report a problem
+        </Button>
+      </Card>
+
+      {showReport ? (
+        <ReportProblemModal onClose={() => setShowReport(false)} />
+      ) : null}
+    </div>
+  )
+}
+
+function ReportProblemModal({ onClose }: { onClose: () => void }) {
+  const [text, setText] = useState('')
+  const [sending, setSending] = useState(false)
+  const [sent, setSent] = useState(false)
+
+  const submit = async () => {
+    if (!text.trim()) return
+    setSending(true)
+    try {
+      await api.post('/users/me/support-tickets', { subject: 'In-app report', message: text.trim() })
+      setSent(true)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.7)',
+        zIndex: 100,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 20,
+      }}
+      onClick={onClose}
+    >
+      <div
+        style={{ width: '100%', maxWidth: 360 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Card style={{ padding: 20 }}>
+        <h2 className="font-display" style={{ fontSize: 18, fontWeight: 700, margin: '0 0 12px', color: 'var(--text-primary)' }}>
+          Report a problem
+        </h2>
+
+        {sent ? (
+          <>
+            <p style={{ color: 'var(--green)', fontWeight: 600, margin: '0 0 16px' }}>Thank you. We received your report.</p>
+            <Button variant="secondary" size="lg" fullWidth onClick={onClose}>Close</Button>
+          </>
+        ) : (
+          <>
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="Describe what happened…"
+              style={{
+                width: '100%',
+                minHeight: 120,
+                padding: 12,
+                borderRadius: 12,
+                border: '1px solid var(--border)',
+                background: 'var(--bg-elevated)',
+                color: 'var(--text-primary)',
+                fontFamily: 'inherit',
+                fontSize: 14,
+                resize: 'none',
+                marginBottom: 16,
+              }}
+            />
+            <Button variant="primary" size="lg" fullWidth onClick={submit} disabled={sending || !text.trim()}>
+              {sending ? 'Sending…' : 'Send report'}
+            </Button>
+            <Button variant="secondary" size="lg" fullWidth onClick={onClose} style={{ marginTop: 8 }}>
+              Cancel
+            </Button>
+          </>
+        )}
+      </Card>
+      </div>
+    </div>
+  )
+}
+
+const staticContent: Record<string, string[]> = {
+  privacy: [
+    'Last updated: August 27, 2026. SnapCal AI (“we”, “us”, “our”) respects your privacy.',
+    '1. Data we collect\nWe collect profile information (name, email, phone, height, weight, age, gender, activity level, goals), food logs, activity logs, metric logs, chat messages with the AI coach, device language, and Telegram identifiers if you use Telegram login.',
+    '2. How we use data\nWe use your data to provide personalized nutrition and fitness guidance, calculate calorie and macro targets, improve AI responses, process subscriptions, and send reminders you enable.',
+    '3. Legal basis\nFor users in the EU/EEA and UK, processing is based on performance of the service contract and your consent (where required). For all users, we process data only as necessary to run the service.',
+    '4. Data sharing\nWe do not sell your personal data. We share data only with hosting and payment providers bound by confidentiality (e.g., DigitalOcean for hosting, Stripe for payments).',
+    '5. Security\nData is encrypted in transit using TLS 1.2+ and at rest using AES-256. Access is restricted by role and authenticated with short-lived JWT tokens.',
+    '6. Retention\nWe keep your data while your account is active. You may request deletion at any time; we will delete personal data within 30 days except where legally required to keep it.',
+    '7. Your rights\nYou have the right to access, correct, export, and delete your data. Contact support@snapcal.ai for data requests.',
+    '8. Children\nSnapCal AI is not intended for users under 16. If we learn we collected data from a child under 16, we will delete it promptly.',
+    '9. Updates\nWe may update this policy and will notify you through the app or by email for material changes.',
+  ],
+  terms: [
+    'Last updated: August 27, 2026. These Terms of Service (“Terms”) govern your use of SnapCal AI.',
+    '1. Service description\nSnapCal AI provides AI-powered nutrition tracking, meal analysis, activity logging, and fitness coaching. The service is for informational and educational purposes only and is not medical advice.',
+    '2. Eligibility\nYou must be at least 16 years old and capable of entering a binding contract. By using the service, you represent that you meet these requirements.',
+    '3. Accounts\nYou may log in via Telegram or as a guest. You are responsible for keeping your account credentials secure. Notify support@snapcal.ai immediately of unauthorized use.',
+    '4. Subscriptions and payments\nSubscriptions are billed through Stripe. Plans auto-renew unless cancelled before the renewal date. Refunds are handled on a case-by-case basis within 30 days of purchase for unused subscription periods.',
+    '5. Free trial and limits\nNew accounts receive a 7-day unlimited trial. After the trial, free accounts may use 1 AI food scan per day. Text chat with the AI coach remains available without a subscription.',
+    '6. Acceptable use\nYou may not abuse the AI coach, attempt to access other users’ data, reverse engineer the app, or use the service for unlawful purposes. Violation may result in suspension.',
+    '7. Content and data\nYou retain ownership of content you submit. You grant us a license to use it solely to operate and improve the service. We will not use your data to train third-party AI models.',
+    '8. Disclaimer\nNutrition and fitness information is estimated and may be inaccurate. Consult a qualified healthcare professional before making major diet, exercise, or medical decisions based on SnapCal AI.',
+    '9. Limitation of liability\nTo the fullest extent permitted by law, SnapCal AI is not liable for indirect, incidental, or consequential damages arising from your use of the service.',
+    '10. Changes\nWe may update these Terms. Continued use after changes means you accept the updated Terms.',
+  ],
+}
 export function ProfileScreen() {
   const [section, setSection] = useState<ProfileSection>('main')
   const { darkMode, setDarkMode } = useApp()
@@ -357,20 +749,17 @@ export function ProfileScreen() {
   if (section === 'subscription') return <SubscriptionSection onBack={() => setSection('main')} />
   if (section === 'notifications') return <NotificationScreen onBack={() => setSection('main')} />
   if (section === 'settings') return <SettingsSection onBack={() => setSection('main')} />
-  if (section === 'faq') return <SimpleTextSection title="FAQ" onBack={() => setSection('main')} content={staticContent.faq} />
-  if (section === 'support') return <SimpleTextSection title="Support" onBack={() => setSection('main')} content={staticContent.support} />
+  if (section === 'faq') return <FAQSection onBack={() => setSection('main')} />
+  if (section === 'support') return <SupportSection onBack={() => setSection('main')} />
   if (section === 'privacy') return <SimpleTextSection title="Privacy Policy" onBack={() => setSection('main')} content={staticContent.privacy} />
   if (section === 'terms') return <SimpleTextSection title="Terms & Conditions" onBack={() => setSection('main')} content={staticContent.terms} />
-
-  if (section === 'telegram') return <TelegramLinkSection onBack={() => setSection('main')} />
 
   const menuItems = [
     { id: 'personal' as ProfileSection, icon: '👤', label: 'Personal Information', desc: 'Name, height, weight, contact', highlight: false },
     { id: 'goals' as ProfileSection, icon: '🎯', label: 'Goals', desc: 'Targets, timeline, preferences', highlight: false },
     { id: 'subscription' as ProfileSection, icon: '⭐', label: 'Subscription', desc: `${user?.plan || 'Free'} · ${user?.plan === 'FREE' ? 'Active' : 'Active ✓'}`, highlight: true },
     { id: 'notifications' as ProfileSection, icon: '🔔', label: 'Notifications', desc: 'Reminders, history', highlight: false },
-    { id: 'settings' as ProfileSection, icon: '⚙️', label: 'Settings', desc: 'Notifications, display, units', highlight: false },
-    { id: 'telegram' as ProfileSection, icon: '✈️', label: user?.telegramId ? 'Telegram connected' : 'Connect Telegram', desc: user?.telegramId ? 'Your Telegram account is linked' : 'Link Telegram for reminders and login', highlight: false },
+    { id: 'settings' as ProfileSection, icon: '⚙️', label: 'Settings', desc: 'Language, display, units', highlight: false },
     { id: 'faq' as ProfileSection, icon: '❓', label: 'FAQ', desc: 'Common questions answered', highlight: false },
     { id: 'support' as ProfileSection, icon: '💬', label: 'Support', desc: 'Get help from our team', highlight: false },
     { id: 'privacy' as ProfileSection, icon: '🔒', label: 'Privacy Policy', desc: 'How we handle your data', highlight: false },
