@@ -292,10 +292,15 @@ const trackingRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) =>
     for (const m of metrics) byDay.get(dateKey(m.loggedAt))?.metrics.push(m)
 
     const results: any[] = []
+    let latestWeightKg = profile?.currentWeightKg ? Number(profile.currentWeightKg) : 0
     for (let d = new Date(startDate); d < endDate; d.setDate(d.getDate() + 1)) {
       const key = dateKey(d)
       const day = byDay.get(key)!
-      results.push(buildSummaryFromData(userId, key, day.foodLogs, day.activities, day.metrics, profile))
+      const summary = buildSummaryFromData(userId, key, day.foodLogs, day.activities, day.metrics, profile)
+      const dayWeight = summary.weightKg || latestWeightKg
+      summary.weightKg = dayWeight
+      latestWeightKg = dayWeight
+      results.push(summary)
     }
 
     return results

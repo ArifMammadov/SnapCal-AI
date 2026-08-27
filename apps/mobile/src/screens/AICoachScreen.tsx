@@ -3,6 +3,34 @@ import { Button } from '../components/ui.js'
 import { useChat, type ChatMessage } from '../lib/data.js'
 import { useAppStore } from '../store/index.js'
 
+function parseMetricFromText(text: string): { metricType: 'WATER_ML' | 'SLEEP_H' | 'WEIGHT_KG' | 'STEPS'; value: number } | null {
+  const t = text.toLowerCase().replace(/,/g, '.')
+  const numMatch = t.match(/(\d+(?:\.\d+)?)/)
+  if (!numMatch) return null
+  const value = Number(numMatch[1])
+  if (Number.isNaN(value) || value <= 0) return null
+
+  // Water
+  if (/\b(water|вода|пил|пила|выпил|выпила|ml|мл|литр|liter|litre)s?\b/.test(t)) {
+    let ml = value
+    if (/\b(л|литр|liter|litre)s?\b/.test(t)) ml = value * 1000
+    return { metricType: 'WATER_ML', value: Math.round(ml) }
+  }
+  // Sleep
+  if (/\b(sleep|сон|спал|спала|сплю|hours?|часов?|часа?)\b/.test(t)) {
+    return { metricType: 'SLEEP_H', value: +value.toFixed(1) }
+  }
+  // Weight
+  if (/\b(weight|вес|веся|кг|kg|kilos?)\b/.test(t)) {
+    return { metricType: 'WEIGHT_KG', value: +value.toFixed(1) }
+  }
+  // Steps
+  if (/\b(steps|шагов|шаги|шаг)\b/.test(t)) {
+    return { metricType: 'STEPS', value: Math.round(value) }
+  }
+  return null
+}
+
 function parseActivityFromText(text: string): { type: string; distanceM?: number; stepsCount?: number; durationMin?: number } | null {
   const t = text.toLowerCase()
   const activityTypes: { type: string; patterns: string[] }[] = [
@@ -96,6 +124,13 @@ export function AICoachScreen() {
     const text = input.trim()
     if (!text || sending) return
     setInput('')
+
+    // Try to extract metric from free-form text (e.g. "я выпил 300 мл воды", " slept 7 hours")
+    const parsedMetric = parseMetricFromText(text)
+    if (parsedMetric) {
+      logMetric(parsedMetric.metricType, parsedMetric.value, false)
+      return
+    }
 
     // Check for pending metric confirmation before sending to AI
     const pending = findPendingMetric(messages)
@@ -675,10 +710,10 @@ function buildGreeting(user: { firstName?: string | null; languageCode?: string 
 function findPendingMetric(messages: ChatMessage[]): { metricType: 'WATER_ML' | 'SLEEP_H' | 'WEIGHT_KG' | 'STEPS'; value: number; confirmationMessageId: string } | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i]
-    if (msg.role === 'AI' && msg.metadata?.pendingMetric) {
+    if (msg.role === 'AI' && msg.attachments?.pendingMetric) {
       return {
-        metricType: msg.metadata.pendingMetric.metricType,
-        value: msg.metadata.pendingMetric.value,
+        metricType: msg.attachments.pendingMetric.metricType,
+        value: msg.attachments.pendingMetric.value,
         confirmationMessageId: msg.id,
       }
     }

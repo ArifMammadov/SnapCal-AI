@@ -30,6 +30,8 @@ interface StatsData {
   water: SeriesPoint[]
   sleep: SeriesPoint[]
   protein: SeriesPoint[]
+  caloriesBurned: SeriesPoint[]
+  activitiesCount: SeriesPoint[]
 }
 
 function weekDayLabel(d: Date) {
@@ -58,6 +60,8 @@ function buildPeriodData(period: Period, summaries: TrackingSummary[]): StatsDat
   const water: SeriesPoint[] = []
   const sleep: SeriesPoint[] = []
   const protein: SeriesPoint[] = []
+  const caloriesBurned: SeriesPoint[] = []
+  const activitiesCount: SeriesPoint[] = []
 
   if (period === '7D') {
     const today = new Date()
@@ -73,6 +77,8 @@ function buildPeriodData(period: Period, summaries: TrackingSummary[]): StatsDat
       water.push({ label: weekDayLabel(d), value: (s?.waterMl ?? 0) / 1000 })
       sleep.push({ label: weekDayLabel(d), value: s?.sleepH ?? 0 })
       protein.push({ label: weekDayLabel(d), value: s?.proteinG ?? 0 })
+      caloriesBurned.push({ label: weekDayLabel(d), value: s?.caloriesBurned ?? 0 })
+      activitiesCount.push({ label: weekDayLabel(d), value: s?.activitiesCount ?? 0 })
     }
   } else if (period === '30D') {
     const today = new Date()
@@ -89,40 +95,56 @@ function buildPeriodData(period: Period, summaries: TrackingSummary[]): StatsDat
       water.push({ label, value: (s?.waterMl ?? 0) / 1000 })
       sleep.push({ label, value: s?.sleepH ?? 0 })
       protein.push({ label, value: s?.proteinG ?? 0 })
+      caloriesBurned.push({ label, value: s?.caloriesBurned ?? 0 })
+      activitiesCount.push({ label, value: s?.activitiesCount ?? 0 })
     }
   } else {
+    function yearMonthLabel(d: Date) {
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    }
+    function shortMonth(d: Date) {
+      return d.toLocaleDateString('en-US', { month: 'short' })
+    }
+    const today = new Date()
     for (let i = 5; i >= 0; i--) {
-      const d = new Date()
-      d.setMonth(d.getMonth() - i)
-      const key = monthLabel(d)
-      labels.push(key)
-      const monthEntries = sorted.filter((x) => monthLabel(new Date(x.date)) === key)
+      const d = new Date(today.getFullYear(), today.getMonth() - i, 1)
+      const key = yearMonthLabel(d)
+      const label = shortMonth(d)
+      labels.push(label)
+      const monthEntries = sorted.filter((x) => x.date?.startsWith(key))
       const caloriesValues = monthEntries.map((x) => x.caloriesConsumed)
       const weightValues = monthEntries.map((x) => x.weightKg)
       const stepsValues = monthEntries.map((x) => x.steps)
       const waterValues = monthEntries.map((x) => x.waterMl / 1000)
       const sleepValues = monthEntries.map((x) => x.sleepH)
       const proteinValues = monthEntries.map((x) => x.proteinG)
-      calories.push({ label: key, value: Math.round(avg(caloriesValues)) })
-      weight.push({ label: key, value: +(avg(weightValues).toFixed(1)) })
-      steps.push({ label: key, value: Math.round(avg(stepsValues)) })
-      water.push({ label: key, value: +(avg(waterValues).toFixed(1)) })
-      sleep.push({ label: key, value: +(avg(sleepValues).toFixed(1)) })
-      protein.push({ label: key, value: Math.round(avg(proteinValues)) })
+      const activitiesValues = monthEntries.map((x) => x.activitiesCount)
+      const caloriesBurnedValues = monthEntries.map((x) => x.caloriesBurned)
+      calories.push({ label, value: Math.round(avg(caloriesValues)) })
+      weight.push({ label, value: +(avg(weightValues).toFixed(1)) })
+      steps.push({ label, value: Math.round(avg(stepsValues)) })
+      water.push({ label, value: +(avg(waterValues).toFixed(1)) })
+      sleep.push({ label, value: +(avg(sleepValues).toFixed(1)) })
+      protein.push({ label, value: Math.round(avg(proteinValues)) })
+      caloriesBurned.push({ label, value: Math.round(avg(caloriesBurnedValues)) })
+      activitiesCount.push({ label, value: Math.round(avg(activitiesValues)) })
     }
   }
 
-  return { calories, weight, steps, water, sleep, protein }
+  return { calories, weight, steps, water, sleep, protein, caloriesBurned, activitiesCount }
 }
 
 function aggregateStats(data: StatsData) {
   const avgPoints = (arr: SeriesPoint[]) => arr.reduce((a, b) => a + b.value, 0) / (arr.length || 1)
+  const sumPoints = (arr: SeriesPoint[]) => arr.reduce((a, b) => a + b.value, 0)
   return {
     avgCalories: Math.round(avgPoints(data.calories)),
     avgProtein: Math.round(avgPoints(data.protein)),
     avgWater: +(avgPoints(data.water).toFixed(1)),
     avgSteps: Math.round(avgPoints(data.steps)),
     avgSleep: +(avgPoints(data.sleep).toFixed(1)),
+    totalCaloriesBurned: Math.round(sumPoints(data.caloriesBurned)),
+    totalActivities: Math.round(sumPoints(data.activitiesCount)),
   }
 }
 
@@ -256,6 +278,8 @@ export function StatisticsScreen() {
     { title: 'Water Intake', value: `${agg.avgWater} L / day`, delta: '↔', positive: true, color: 'var(--blue)', data: d.water, unit: 'L', type: 'bar' },
     { title: 'Sleep', value: `${agg.avgSleep} hrs / night`, delta: '↔', positive: true, color: 'var(--purple)', data: d.sleep, unit: 'hrs', type: 'area' },
     { title: 'Daily Steps', value: `${agg.avgSteps.toLocaleString()} steps`, delta: '↔', positive: true, color: 'var(--amber)', data: d.steps, unit: 'steps', type: 'bar' },
+    { title: 'Calories Burned', value: `${agg.totalCaloriesBurned.toLocaleString()} kcal`, delta: '↔', positive: true, color: 'var(--rose)', data: d.caloriesBurned, unit: 'kcal', type: 'area' },
+    { title: 'Workouts', value: `${agg.totalActivities}`, delta: '↔', positive: true, color: 'var(--purple)', data: d.activitiesCount, unit: 'workouts', type: 'bar' },
   ]
 
   return (
@@ -313,11 +337,12 @@ export function StatisticsScreen() {
 
         {!loading && raw.length > 0 && (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 16 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, marginBottom: 16 }}>
               {[
                 { label: 'Avg Calories', value: agg.avgCalories.toLocaleString(), color: 'var(--orange)' },
                 { label: 'Avg Water', value: `${agg.avgWater} L`, color: 'var(--blue)' },
                 { label: 'Avg Sleep', value: `${agg.avgSleep} h`, color: 'var(--purple)' },
+                { label: 'Burned', value: `${agg.totalCaloriesBurned.toLocaleString()} kcal`, color: 'var(--rose)' },
               ].map((s) => (
                 <Card key={s.label} style={{ padding: '12px 10px', textAlign: 'center' }}>
                   <p className="font-display" style={{ fontSize: 18, fontWeight: 700, color: s.color, margin: 0, lineHeight: 1 }}>
