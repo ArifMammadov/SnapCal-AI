@@ -13,7 +13,7 @@ import { auditLog } from '../audit/index.js'
 import { updateMemory, recordFoodPreference, getFoodPreferences } from '../memory/index.js'
 import { getUserSummary, searchKnowledge, recommendProgram, analyzePhoto, logFood, logActivity, webSearch } from '../tools/index.js'
 import { correctFoodMacrosWithUsda, lookupUsdaNutrition } from '../lib/foodNutrition.js'
-import { formatFoodAnalysisCard, formatLowConfidenceQuestion, structuredResponseToText } from '../lib/responseFormatter.js'
+import { formatFoodAnalysisCard, formatCompactFoodResult, formatLowConfidenceQuestion } from '../lib/responseFormatter.js'
 import { findDishInKnowledge, saveDishToKnowledge } from '../lib/knowledgeBase.js'
 
 const FALLBACK_MODEL = 'gpt-4o-mini'
@@ -348,8 +348,10 @@ If the user asks what to eat today, use their food preferences and recent meals 
           }
         } else {
           const stats = await getTodayStats(userId, user?.profile)
+          // User-facing photo result should only show macros and portion
+          content = formatCompactFoodResult(foodData, lang)
+          // Keep structured data for API/mobile rendering, but not for chat text
           structured = formatFoodAnalysisCard(foodData, { ...stats, lang })
-          content = structuredResponseToText(structured, lang)
           await saveDishToKnowledge(foodData, userId, imageUrl)
           await recordFoodPreference(userId, foodData.name, foodData.ingredients ?? [], foodData.confidence)
         }

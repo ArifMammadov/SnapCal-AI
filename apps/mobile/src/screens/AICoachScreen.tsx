@@ -119,7 +119,7 @@ export function AICoachScreen() {
     const foodData = msg.attachments?.foodData
     const imageUrl = msg.attachments?.imageUrl
 
-    if (foodData || imageUrl) {
+    if (isUser && (foodData || imageUrl)) {
       return (
         <div
           style={{

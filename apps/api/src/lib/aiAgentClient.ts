@@ -102,6 +102,26 @@ export async function finalizePhotoAnalysis(
     await saveFoodLogFromAnalysis(userId, imageUrl, foodData)
   }
 
+  // Avoid duplicate AI messages when the client polls more than once
+  const existingAiMessage = await prisma.chatMessage.findFirst({
+    where: { userId, role: 'AI', attachments: { path: ['imageUrl'], equals: imageUrl } },
+    orderBy: { createdAt: 'desc' },
+  })
+  if (existingAiMessage) {
+    return {
+      message: {
+        id: existingAiMessage.id,
+        role: 'ai',
+        type: (existingAiMessage.type as any) ?? 'FOOD_ANALYSIS',
+        content: existingAiMessage.content,
+        foodData: (existingAiMessage.attachments as any)?.foodData,
+        structured: (existingAiMessage.attachments as any)?.structured,
+        imageUrl,
+        timestamp: existingAiMessage.createdAt.toISOString(),
+      },
+    }
+  }
+
   const aiMessage = await prisma.chatMessage.create({
     data: {
       userId,

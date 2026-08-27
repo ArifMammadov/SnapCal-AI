@@ -158,6 +158,17 @@ export function structuredResponseToText(structured: StructuredAiResponse, lang:
   return lines.join('\n')
 }
 
+export function formatCompactFoodResult(food: FoodAnalysisData, lang: string): string {
+  const label = getMealLabel(food.suggestedMealType, lang)
+  const emoji = MEAL_EMOJIS[food.suggestedMealType] ?? '🍽️'
+  const name = food.name
+
+  if (lang === 'ru') {
+    return `${emoji} ${label}: ${name}\n\nКалории: ${food.calories} kcal\nБелок: ${food.proteinG} г\nЖиры: ${food.fatG} г\nУглеводы: ${food.carbsG} г\nПорция: ${food.serving}`
+  }
+  return `${emoji} ${label}: ${name}\n\nCalories: ${food.calories} kcal\nProtein: ${food.proteinG} g\nFats: ${food.fatG} g\nCarbs: ${food.carbsG} g\nServing: ${food.serving}`
+}
+
 export function formatLowConfidenceQuestion(foodName: string, lang: string): string {
   if (lang === 'ru') {
     return `🔍 Это похоже на **${foodName}**?\n\nЕсли да — я рассчитаю калории и макросы. Если нет — напишите правильное название блюда, и я найду точную информацию.`
