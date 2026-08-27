@@ -3,17 +3,26 @@ import { Button } from '../components/ui.js'
 import { useChat, type ChatMessage } from '../lib/data.js'
 import { useAppStore } from '../store/index.js'
 
-const suggestedPrompts = [
-  '📸 Analyze a food photo',
-  '🍽️ Plan my dinner',
-  '💊 Do I need supplements?',
-  '🏋️ Pre-workout meal ideas',
-  '😴 How does sleep affect weight?',
-  '💧 Am I drinking enough water?',
-]
-
 const LOCALE = typeof navigator !== 'undefined' ? navigator.language : 'en'
 const IS_RUSSIAN = /^ru/.test(LOCALE)
+
+const suggestedPrompts = IS_RUSSIAN
+  ? [
+      '📸 Проанализируй фото еды',
+      '🍽️ Что приготовить на ужин?',
+      '💊 Нужны ли мне добавки?',
+      '🏋️ Что есть перед тренировкой?',
+      '😴 Как сон влияет на вес?',
+      '💧 Пью ли я достаточно воды?',
+    ]
+  : [
+      '📸 Analyze a food photo',
+      '🍽️ Plan my dinner',
+      '💊 Do I need supplements?',
+      '🏋️ Pre-workout meal ideas',
+      '😴 How does sleep affect weight?',
+      '💧 Am I drinking enough water?',
+    ]
 
 function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -28,7 +37,6 @@ export function AICoachScreen() {
   const user = useAppStore((s) => s.user)
   const { messages, sending, sendMessage, sendPhoto, logMetric, setMessages, clearHistory } = useChat()
   const [input, setInput] = useState('')
-  const [previewImage, setPreviewImage] = useState<string | null>(null)
   const [listening, setListening] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -94,7 +102,7 @@ export function AICoachScreen() {
     }
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     const recognition = new SpeechRecognition()
-    recognition.lang = user?.languageCode ?? LOCALE
+    recognition.lang = user?.languageCode ?? (IS_RUSSIAN ? 'ru-RU' : LOCALE)
     recognition.interimResults = false
     recognition.maxAlternatives = 1
     recognition.onstart = () => setListening(true)
@@ -140,11 +148,14 @@ export function AICoachScreen() {
           <div style={{ padding: '12px 14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
               <div>
-                <p className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-                  {foodData ? foodData.name : 'Analyzing photo...'}
+                <p className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {foodData ? foodData.name : (IS_RUSSIAN ? 'Анализирую фото...' : 'Analyzing photo...')}
+                  {!foodData && (
+                    <span className="spinner" style={{ width: 14, height: 14, border: '2px solid var(--text-secondary)', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block' }} />
+                  )}
                 </p>
                 <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '2px 0 0' }}>
-                  {foodData ? foodData.serving : 'Please wait'}
+                  {foodData ? foodData.serving : (IS_RUSSIAN ? 'Секундочку' : 'Please wait')}
                 </p>
               </div>
               {foodData && (
@@ -509,7 +520,6 @@ export function AICoachScreen() {
             onChange={(e) => {
               const file = e.target.files?.[0]
               if (file) {
-                setPreviewImage(URL.createObjectURL(file))
                 sendPhoto(file)
               }
               if (fileRef.current) fileRef.current.value = ''

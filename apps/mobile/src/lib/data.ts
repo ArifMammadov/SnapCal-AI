@@ -69,7 +69,7 @@ export interface MarketplaceProgram {
 export interface ChatMessage {
   id: string
   role: 'USER' | 'AI'
-  type: 'TEXT' | 'FOOD_ANALYSIS' | 'MACRO_CARD'
+  type: 'TEXT' | 'FOOD_ANALYSIS' | 'MACRO_CARD' | 'STRUCTURED'
   content: string
   createdAt: string
   metadata?: {
@@ -456,21 +456,45 @@ export function useChat() {
 
       const ai = await poll()
       if (ai) {
-        setMessages((prev) => [...prev, {
-          id: ai.id || `${Date.now()}-ai`,
-          role: ai.role || 'AI',
-          type: ai.type || 'FOOD_ANALYSIS',
-          content: ai.content || 'Here is what I found in your photo.',
-          createdAt: ai.createdAt || new Date().toISOString(),
-          attachments: ai.attachments,
-        }])
+        const aiImageUrl = ai.attachments?.imageUrl || (ai.attachments?.foodData ? uploadRes.data.url : undefined)
+        setMessages((prev) => {
+          // If the AI result belongs to a pending photo, enrich the user's photo card instead of duplicating it
+          const userPhotoIndex = prev.findIndex((m) => m.role === 'USER' && m.attachments?.imageUrl && (aiImageUrl ? m.attachments.imageUrl === aiImageUrl : false))
+          if (userPhotoIndex !== -1 && ai.attachments?.foodData) {
+            const updated = [...prev]
+            updated[userPhotoIndex] = {
+              ...updated[userPhotoIndex],
+              attachments: {
+                ...updated[userPhotoIndex].attachments,
+                foodData: ai.attachments.foodData,
+              },
+            }
+            // Also append the AI explanation as a separate text message if it has content
+            if (ai.content && ai.content.trim()) {
+              updated.push({
+                id: ai.id || `${Date.now()}-ai`,
+                role: ai.role || 'AI',
+                type: ai.type || 'FOOD_ANALYSIS',
+                content: ai.content,
+                createdAt: ai.createdAt || new Date().toISOString(),
+                attachments: ai.attachments,
+              })
+            }
+            return updated
+          }
+          return [...prev, {
+            id: ai.id || `${Date.now()}-ai`,
+            role: ai.role || 'AI',
+            type: ai.type || 'FOOD_ANALYSIS',
+            content: ai.content || 'Here is what I found in your photo.',
+            createdAt: ai.createdAt || new Date().toISOString(),
+            attachments: ai.attachments,
+          }]
+        })
       }
     } catch (err: any) {
       addErrorMessage(err.message || 'Sorry, I could not analyze this photo. Please try again.')
     } finally {
-      if (localUrl) {
-        URL.revokeObjectURL(localUrl)
-      }
       setSending(false)
     }
   }, [])
