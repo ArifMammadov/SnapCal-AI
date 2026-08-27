@@ -292,7 +292,19 @@ const trackingRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) =>
     for (const m of metrics) byDay.get(dateKey(m.loggedAt))?.metrics.push(m)
 
     const results: any[] = []
+    // Pre-seed weight fallback from profile or any logged weight in range
     let latestWeightKg = profile?.currentWeightKg ? Number(profile.currentWeightKg) : 0
+    if (!latestWeightKg) {
+      for (const m of metrics) {
+        if (m.metricType === 'WEIGHT_KG' && m.value) {
+          const v = typeof m.value === 'object' && 'toNumber' in m.value ? m.value.toNumber() : Number(m.value)
+          if (v > 0) {
+            latestWeightKg = v
+            break
+          }
+        }
+      }
+    }
     for (let d = new Date(startDate); d < endDate; d.setDate(d.getDate() + 1)) {
       const key = dateKey(d)
       const day = byDay.get(key)!
