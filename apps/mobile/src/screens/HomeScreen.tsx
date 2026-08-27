@@ -152,8 +152,8 @@ const metricConfig = [
   { key: 'protein', label: 'Protein', unit: 'g', max: 150, color: 'var(--green)', icon: '🥩', get: (s: any) => s?.proteinG ?? 0 },
   { key: 'carbs', label: 'Carbs', unit: 'g', max: 250, color: 'var(--amber)', icon: '🌾', get: (s: any) => s?.carbsG ?? 0 },
   { key: 'fat', label: 'Fat', unit: 'g', max: 73, color: 'var(--orange)', icon: '🥑', get: (s: any) => s?.fatG ?? 0 },
+  { key: 'activity', label: 'Activity', unit: 'kcal', max: 500, color: 'var(--rose)', icon: '🏃', get: (s: any) => s?.caloriesBurned ?? 0 },
   { key: 'steps', label: 'Steps', unit: '', max: 10000, color: 'var(--rose)', icon: '👟', get: (s: any) => s?.steps ?? 0 },
-  { key: 'burned', label: 'Burned', unit: 'kcal', max: 800, color: 'var(--rose)', icon: '🔥', get: (s: any) => s?.caloriesBurned ?? 0 },
 ]
 
 function groupFoodLogsByMeal(logs: FoodLog[]) {
@@ -426,6 +426,24 @@ export function HomeScreen() {
         <div className="no-scrollbar" style={{ display: 'flex', gap: 12, overflowX: 'auto', padding: '0 20px' }}>
           {metricConfig.map((m) => {
             const value = m.get(s)
+            let label = m.label
+            let icon = m.icon
+            if (m.key === 'activity' && s.activities?.length) {
+              const a = s.activities[0]
+              label = `${a.type} · ${a.durationMin || 0} ${IS_RUSSIAN ? 'мин' : 'min'}`
+              const activityIcons: Record<string, string> = {
+                Running: '🏃',
+                Walking: '🚶',
+                Cycling: '🚴',
+                Swimming: '🏊',
+                Gym: '🏋️',
+                Yoga: '🧘',
+                Football: '⚽',
+                Tennis: '🎾',
+                Volleyball: '🏐',
+              }
+              icon = activityIcons[a.type] || '🏃'
+            }
             return (
               <Card
                 key={m.key}
@@ -437,12 +455,12 @@ export function HomeScreen() {
                   borderRadius: 18,
                 }}
               >
-                <div style={{ fontSize: 20, marginBottom: 8 }}>{m.icon}</div>
+                <div style={{ fontSize: 20, marginBottom: 8 }}>{icon}</div>
                 <p className="font-display" style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', margin: 0, lineHeight: 1 }}>
                   {value.toLocaleString(undefined, { maximumFractionDigits: 1 })}
                   <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-secondary)' }}>{m.unit}</span>
                 </p>
-                <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '4px 0 8px' }}>{m.label}</p>
+                <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '4px 0 8px' }}>{label}</p>
                 <MiniProgressBar value={value} max={m.max} color={m.color} />
                 <p style={{ fontSize: 10, color: 'var(--text-muted)', margin: '4px 0 0', textAlign: 'right' }}>
                   / {m.max}
@@ -453,52 +471,6 @@ export function HomeScreen() {
           })}
         </div>
       </section>
-
-      {s.activities && s.activities.length > 0 && (
-        <section style={{ padding: '24px 20px 0' }}>
-          <div style={{ padding: '0 0 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <h2 className="font-display" style={{ fontSize: 17, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-              {IS_RUSSIAN ? 'Сегодняшняя активность' : "Today's Activity"}
-            </h2>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {s.activities.map((activity) => (
-              <Card key={activity.id} style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 12,
-                      background: 'var(--rose-dim)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 18,
-                    }}
-                  >
-                    🏃
-                  </div>
-                  <div>
-                    <p className="font-display" style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-                      {activity.type}
-                    </p>
-                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 0' }}>
-                      {formatMealTime(activity.startedAt)} · {activity.durationMin} min
-                    </p>
-                  </div>
-                </div>
-                <div style={{ textAlign: 'right' }}>
-                  <p className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-                    {activity.caloriesBurned ?? 0}
-                  </p>
-                  <p style={{ fontSize: 10, color: 'var(--text-secondary)', margin: 0 }}>kcal</p>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </section>
-      )}
 
       <section style={{ padding: '24px 20px 0' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
