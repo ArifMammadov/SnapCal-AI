@@ -87,6 +87,16 @@ export interface ChatMessage {
       suggestedMealType: string
     }
     imageUrl?: string
+    structured?: {
+      emoji: string
+      mealLabel: string
+      foodName: string
+      calories: number
+      proteinG: number
+      carbsG: number
+      fatG: number
+      serving: string
+    }
   }
 }
 
@@ -319,9 +329,31 @@ export function useChat() {
   const [sending, setSending] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(true)
 
+  const normalizeMessage = (msg: ChatMessage): ChatMessage => {
+    const structured = msg.attachments?.structured
+    if (structured && !msg.attachments?.foodData) {
+      return {
+        ...msg,
+        attachments: {
+          ...msg.attachments,
+          foodData: {
+            name: structured.foodName,
+            calories: structured.calories,
+            proteinG: structured.proteinG,
+            carbsG: structured.carbsG,
+            fatG: structured.fatG,
+            serving: structured.serving,
+            suggestedMealType: structured.mealLabel,
+          },
+        },
+      }
+    }
+    return msg
+  }
+
   useEffect(() => {
     api.get<{ messages: ChatMessage[] }>('/ai/history')
-      .then((res) => setMessages(res.data.messages.reverse()))
+      .then((res) => setMessages(res.data.messages.reverse().map(normalizeMessage)))
       .catch(() => setMessages([]))
       .finally(() => setLoadingHistory(false))
   }, [])
@@ -414,13 +446,24 @@ export function useChat() {
       // Fallback: old sync behavior (if server returns message immediately)
       if (analyzeRes.data?.message) {
         const ai = analyzeRes.data.message
+        const structured = ai.attachments?.structured
+        const foodData = ai.attachments?.foodData || (structured ? {
+          name: structured.foodName,
+          calories: structured.calories,
+          proteinG: structured.proteinG,
+          carbsG: structured.carbsG,
+          fatG: structured.fatG,
+          serving: structured.serving,
+          suggestedMealType: structured.mealLabel,
+        } : undefined)
+        const aiWithFoodData = foodData ? { ...ai, attachments: { ...ai.attachments, foodData } } : ai
         setMessages((prev) => [...prev, {
           id: ai.id || `${Date.now()}-ai`,
           role: ai.role || 'AI',
           type: ai.type || 'FOOD_ANALYSIS',
           content: ai.content || 'Here is what I found in your photo.',
           createdAt: ai.createdAt || new Date().toISOString(),
-          attachments: ai.attachments,
+          attachments: aiWithFoodData.attachments,
         }])
         return
       }
@@ -458,15 +501,28 @@ export function useChat() {
       if (ai) {
         const aiImageUrl = ai.attachments?.imageUrl || (ai.attachments?.foodData ? uploadRes.data.url : undefined)
         setMessages((prev) => {
+          // Map API structured result into a legacy foodData shape the UI expects
+          const structured = ai.attachments?.structured
+          const foodData = ai.attachments?.foodData || (structured ? {
+            name: structured.foodName,
+            calories: structured.calories,
+            proteinG: structured.proteinG,
+            carbsG: structured.carbsG,
+            fatG: structured.fatG,
+            serving: structured.serving,
+            suggestedMealType: structured.mealLabel,
+          } : undefined)
+          const aiWithFoodData = foodData ? { ...ai, attachments: { ...ai.attachments, foodData } } : ai
+
           // If the AI result belongs to a pending photo, enrich the user's photo card instead of duplicating it
           const userPhotoIndex = prev.findIndex((m) => m.role === 'USER' && m.attachments?.imageUrl && (aiImageUrl ? m.attachments.imageUrl === aiImageUrl : false))
-          if (userPhotoIndex !== -1 && ai.attachments?.foodData) {
+          if (userPhotoIndex !== -1 && foodData) {
             const updated = [...prev]
             updated[userPhotoIndex] = {
               ...updated[userPhotoIndex],
               attachments: {
                 ...updated[userPhotoIndex].attachments,
-                foodData: ai.attachments.foodData,
+                foodData,
               },
             }
             // Also append the AI explanation as a separate text message if it has content
@@ -477,7 +533,7 @@ export function useChat() {
                 type: ai.type || 'FOOD_ANALYSIS',
                 content: ai.content,
                 createdAt: ai.createdAt || new Date().toISOString(),
-                attachments: ai.attachments,
+                attachments: aiWithFoodData.attachments,
               })
             }
             return updated
@@ -488,7 +544,7 @@ export function useChat() {
             type: ai.type || 'FOOD_ANALYSIS',
             content: ai.content || 'Here is what I found in your photo.',
             createdAt: ai.createdAt || new Date().toISOString(),
-            attachments: ai.attachments,
+            attachments: aiWithFoodData.attachments,
           }]
         })
       }
