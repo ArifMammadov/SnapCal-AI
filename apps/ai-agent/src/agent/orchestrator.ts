@@ -412,15 +412,7 @@ If the user asks what to eat today, use their food preferences and recent meals 
 
   content = applyGuardrails(content, route.skillName)
 
-  const chat = await prisma.chatMessage.create({
-    data: {
-      userId,
-      role: 'AI',
-      content,
-      modelUsed,
-      latencyMs: Date.now() - start,
-    },
-  })
+  const latencyMs = Date.now() - start
 
   void auditLog({
     userId,
@@ -428,7 +420,7 @@ If the user asks what to eat today, use their food preferences and recent meals 
     metadata: {
       skillName: route.skillName,
       modelUsed,
-      latencyMs: Date.now() - start,
+      latencyMs,
       confidence: route.confidence,
       toolsUsed: route.toolNames,
       inputTokens: estimateTokens(systemPrompt + (message ?? '')),
@@ -437,7 +429,7 @@ If the user asks what to eat today, use their food preferences and recent meals 
     },
   })
 
-  const latencySeconds = (Date.now() - start) / 1000
+  const latencySeconds = latencyMs / 1000
   aiLatencyHistogram.observe({ skill: route.skillName, model: modelUsed }, latencySeconds)
   aiRequestsTotal.inc({ skill: route.skillName, model: modelUsed, status: errorMessage ? 'error' : 'success' })
   if (errorMessage) {
@@ -457,7 +449,7 @@ If the user asks what to eat today, use their food preferences and recent meals 
 
   return {
     message: {
-      id: chat.id,
+      id: crypto.randomUUID(),
       role: 'ai',
       content,
       type: structured ? 'STRUCTURED' : 'text',
@@ -478,15 +470,7 @@ async function saveAiResponse(
   modelUsed: string,
   startTime: number,
 ): Promise<ChatOutput> {
-  const chat = await prisma.chatMessage.create({
-    data: {
-      userId,
-      role: 'AI',
-      content,
-      modelUsed,
-      latencyMs: Date.now() - startTime,
-    },
-  })
+  const latencyMs = Date.now() - startTime
 
   void auditLog({
     userId,
@@ -494,19 +478,19 @@ async function saveAiResponse(
     metadata: {
       skillName,
       modelUsed,
-      latencyMs: Date.now() - startTime,
+      latencyMs,
       confidence: 1,
       toolsUsed: [],
     },
   })
 
-  const latencySeconds = (Date.now() - startTime) / 1000
+  const latencySeconds = latencyMs / 1000
   aiLatencyHistogram.observe({ skill: skillName, model: modelUsed }, latencySeconds)
   aiRequestsTotal.inc({ skill: skillName, model: modelUsed, status: 'success' })
 
   return {
     message: {
-      id: chat.id,
+      id: crypto.randomUUID(),
       role: 'ai',
       content,
       type: 'text',
