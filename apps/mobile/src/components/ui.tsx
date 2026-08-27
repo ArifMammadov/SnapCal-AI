@@ -88,6 +88,38 @@ export const SendIcon: React.FC<IconProps> = ({ size = 24, className }) => (
   </svg>
 )
 
+export const DumbbellIcon: React.FC<IconProps> = ({ size = 24, className, style }) => (
+  <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={style}>
+    <path d="M6 5v14M18 5v14M3 8h3M3 16h3M18 8h3M18 16h3M6 12h12" />
+  </svg>
+)
+
+export const HomeWorkoutIcon: React.FC<IconProps> = ({ size = 24, className, style }) => (
+  <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={style}>
+    <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+    <path d="M9 22V12h6v10" />
+    <circle cx="12" cy="10" r="2" fill="currentColor" stroke="none" />
+    <path d="M12 12v4" />
+  </svg>
+)
+
+export const SaladIcon: React.FC<IconProps> = ({ size = 24, className, style }) => (
+  <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={style}>
+    <path d="M12 22c4.97 0 9-4.03 9-9V8a3 3 0 00-3-3c-1.5 0-2.82.5-3.76 1.36C13.4 5.34 12.22 5 11 5c-4.97 0-9 4.03-9 9 0 4.42 3.58 8 8 8z" />
+    <circle cx="12" cy="12" r="2" fill="currentColor" stroke="none" />
+    <circle cx="8" cy="10" r="1.5" fill="currentColor" stroke="none" />
+    <circle cx="15" cy="14" r="1.5" fill="currentColor" stroke="none" />
+  </svg>
+)
+
+export const YogaIcon: React.FC<IconProps> = ({ size = 24, className, style }) => (
+  <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={style}>
+    <circle cx="12" cy="4" r="2" />
+    <path d="M10 8h4M11 8v6M8 14l-3 7M16 14l3 7M12 14v4" />
+    <path d="M7 22h10" />
+  </svg>
+)
+
 export const StarIcon: React.FC<IconProps> = ({ size = 16, className }) => (
   <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="currentColor" stroke="none">
     <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
