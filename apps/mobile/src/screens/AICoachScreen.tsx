@@ -225,80 +225,108 @@ export function AICoachScreen() {
 
   const greeting = buildGreeting(user)
 
+  const mealEmoji = (type?: string) => {
+    const map: Record<string, string> = { BREAKFAST: '🍳', LUNCH: '🍽️', DINNER: '🥗', SNACK: '🍎' }
+    return map[type ?? ''] ?? '🍽️'
+  }
+
+  function FoodAnalysisCard({ foodData, imageUrl, question }: { foodData: any; imageUrl?: string; question?: string }) {
+    if (!foodData) {
+      return (
+        <div style={{ background: 'var(--bg-card)', borderRadius: 18, border: '1px solid var(--border)', overflow: 'hidden', boxShadow: 'var(--shadow-card)' }}>
+          {imageUrl && <img src={imageUrl} alt="food photo" style={{ width: '100%', height: 160, objectFit: 'cover', display: 'block' }} />}
+          <div style={{ padding: '14px 16px' }}>
+            <p className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+              {IS_RUSSIAN ? 'Анализирую фото...' : 'Analyzing photo...'}
+              <span className="spinner" style={{ width: 14, height: 14, border: '2px solid var(--text-secondary)', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block' }} />
+            </p>
+            <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '4px 0 0' }}>{IS_RUSSIAN ? 'Секундочку' : 'Please wait'}</p>
+          </div>
+        </div>
+      )
+    }
+
+    const macroLabels = IS_RUSSIAN
+      ? { calories: 'Калории', protein: 'Белок', carbs: 'Углеводы', fat: 'Жиры', serving: 'Порция' }
+      : { calories: 'Calories', protein: 'Protein', carbs: 'Carbs', fat: 'Fat', serving: 'Serving' }
+
+    return (
+      <div style={{ background: 'var(--bg-card)', borderRadius: 18, border: '1px solid var(--border)', overflow: 'hidden', boxShadow: 'var(--shadow-card)' }}>
+        <div
+          style={{
+            background: 'linear-gradient(135deg, rgba(0,212,138,0.15) 0%, rgba(59,130,246,0.15) 100%)',
+            padding: '14px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+          }}
+        >
+          <div style={{ width: 44, height: 44, borderRadius: 14, background: 'rgba(0,212,138,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
+            {mealEmoji(foodData.suggestedMealType)}
+          </div>
+          <div style={{ flex: 1 }}>
+            <p className="font-display" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+              {foodData.name}
+            </p>
+            <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 0' }}>
+              {macroLabels.serving}: {foodData.serving}
+            </p>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <p className="font-display" style={{ fontSize: 22, fontWeight: 700, color: 'var(--orange)', margin: 0, lineHeight: 1 }}>
+              {foodData.calories}
+            </p>
+            <p style={{ fontSize: 10, color: 'var(--text-secondary)', margin: 0 }}>kcal</p>
+          </div>
+        </div>
+        {imageUrl && (
+          <img src={imageUrl} alt="food photo" style={{ width: '100%', height: 140, objectFit: 'cover', display: 'block' }} />
+        )}
+        <div style={{ padding: '12px 16px 16px' }}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: question ? 12 : 0 }}>
+            {[
+              { label: macroLabels.protein, value: foodData.proteinG, unit: 'g', color: '#22c55e', bg: 'rgba(34,197,94,0.12)' },
+              { label: macroLabels.carbs, value: foodData.carbsG, unit: 'g', color: '#3b82f6', bg: 'rgba(59,130,246,0.12)' },
+              { label: macroLabels.fat, value: foodData.fatG, unit: 'g', color: '#f59e0b', bg: 'rgba(245,158,11,0.12)' },
+            ].map((m) => (
+              <div key={m.label} style={{ flex: 1, padding: '10px 8px', background: m.bg, borderRadius: 12, textAlign: 'center' }}>
+                <p className="font-display" style={{ fontSize: 17, fontWeight: 700, color: m.color, margin: 0 }}>
+                  {m.value}
+                  <span style={{ fontSize: 11, marginLeft: 1 }}>{m.unit}</span>
+                </p>
+                <p style={{ fontSize: 10, color: 'var(--text-muted)', margin: '2px 0 0' }}>{m.label}</p>
+              </div>
+            ))}
+          </div>
+          {question && (
+            <div
+              style={{
+                padding: '10px 12px',
+                background: 'var(--bg-elevated)',
+                borderRadius: 12,
+                border: '1px dashed var(--border)',
+              }}
+            >
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>{question}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   const renderMessage = (msg: ChatMessage) => {
     const isUser = msg.role === 'USER'
     const foodData = msg.attachments?.foodData
     const imageUrl = msg.attachments?.imageUrl
+    const isFoodAnalysis = !!foodData
 
-    if (isUser && (foodData || imageUrl)) {
-      return (
-        <div
-          style={{
-            background: 'var(--bg-card)',
-            borderRadius: 18,
-            border: '1px solid var(--border)',
-            overflow: 'hidden',
-            boxShadow: 'var(--shadow-card)',
-          }}
-        >
-          {imageUrl && !foodData && (
-            <img
-              src={imageUrl}
-              alt="food photo"
-              style={{ width: '100%', height: 160, objectFit: 'cover', display: 'block' }}
-            />
-          )}
-          <div style={{ padding: '12px 14px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <div>
-                <p className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {foodData ? foodData.name : (IS_RUSSIAN ? 'Анализирую фото...' : 'Analyzing photo...')}
-                  {!foodData && (
-                    <span className="spinner" style={{ width: 14, height: 14, border: '2px solid var(--text-secondary)', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block' }} />
-                  )}
-                </p>
-                <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '2px 0 0' }}>
-                  {foodData ? foodData.serving : (IS_RUSSIAN ? 'Секундочку' : 'Please wait')}
-                </p>
-              </div>
-              {foodData && (
-                <div style={{ textAlign: 'right' }}>
-                  <p className="font-display" style={{ fontSize: 22, fontWeight: 700, color: 'var(--orange)', margin: 0, lineHeight: 1 }}>
-                    {foodData.calories}
-                  </p>
-                  <p style={{ fontSize: 10, color: 'var(--text-secondary)', margin: 0 }}>kcal</p>
-                </div>
-              )}
-            </div>
-            {foodData && (
-              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                {[
-                  { label: 'Protein', value: foodData.proteinG, unit: 'g', color: 'var(--green)' },
-                  { label: 'Carbs', value: foodData.carbsG, unit: 'g', color: 'var(--amber)' },
-                  { label: 'Fat', value: foodData.fatG, unit: 'g', color: 'var(--orange)' },
-                ].map((m) => (
-                  <div
-                    key={m.label}
-                    style={{
-                      flex: 1,
-                      padding: '8px',
-                      background: 'var(--bg-elevated)',
-                      borderRadius: 10,
-                      textAlign: 'center',
-                    }}
-                  >
-                    <p className="font-display" style={{ fontSize: 16, fontWeight: 700, color: m.color, margin: 0 }}>
-                      {m.value}
-                      {m.unit}
-                    </p>
-                    <p style={{ fontSize: 10, color: 'var(--text-muted)', margin: '2px 0 0' }}>{m.label}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )
+    if (isFoodAnalysis) {
+      return <FoodAnalysisCard foodData={foodData} imageUrl={!isUser ? imageUrl : undefined} question={!isUser ? msg.content : undefined} />
+    }
+
+    if (isUser && imageUrl) {
+      return <FoodAnalysisCard foodData={foodData} imageUrl={imageUrl} />
     }
 
     return (

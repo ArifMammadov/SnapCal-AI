@@ -159,14 +159,10 @@ export function structuredResponseToText(structured: StructuredAiResponse, lang:
 }
 
 export function formatCompactFoodResult(food: FoodAnalysisData, lang: string): string {
-  const label = getMealLabel(food.suggestedMealType, lang)
-  const emoji = MEAL_EMOJIS[food.suggestedMealType] ?? '🍽️'
-  const name = food.name
-
   if (lang === 'ru') {
-    return `${emoji} ${label}: ${name}\n\nКалории: ${food.calories} kcal\nБелок: ${food.proteinG} г\nЖиры: ${food.fatG} г\nУглеводы: ${food.carbsG} г\nПорция: ${food.serving}`
+    return 'Вы это сейчас употребляете? Ответьте «да», и я запишу приём пищи в ваш дневник.'
   }
-  return `${emoji} ${label}: ${name}\n\nCalories: ${food.calories} kcal\nProtein: ${food.proteinG} g\nFats: ${food.fatG} g\nCarbs: ${food.carbsG} g\nServing: ${food.serving}`
+  return 'Are you eating this now? Reply "yes" and I will log it to your diary.'
 }
 
 export function formatLowConfidenceQuestion(foodName: string, lang: string): string {
