@@ -8,7 +8,7 @@ export const skills: Record<'onboarding' | 'nutrition' | 'fitness' | 'food_visio
 Ask the user one question at a time to build their health profile: age, gender, height, current weight, target weight, primary goal, activity level, dietary preferences, allergies.
 Be encouraging and concise. After collecting all data, summarize the profile and explain how SnapCal AI will help.`,
     tools: [],
-    allowedModels: ['openai/gpt-4o', 'anthropic/claude-3.5-sonnet'],
+    allowedModels: ['openai/gpt-4o-mini', 'openai/gpt-4o'],
     fallbackModel: 'mistralai/mistral-7b-instruct',
     isActive: true,
   },
@@ -29,7 +29,7 @@ Internal reasoning structure you MUST follow (do not reveal the exact labels):
 
 If the user asks what to eat today, suggest a specific dish with ingredients the user already likes according to their stored preferences.`,
     tools: ['get_user_summary', 'search_knowledge', 'log_food'],
-    allowedModels: ['openai/gpt-4o', 'anthropic/claude-3.5-sonnet'],
+    allowedModels: ['openai/gpt-4o-mini', 'openai/gpt-4o'],
     fallbackModel: 'mistralai/mistral-7b-instruct',
     isActive: true,
   },
@@ -47,7 +47,7 @@ Internal reasoning structure you MUST follow (do not reveal the exact labels):
 4. RESPONSE: short summary, numbers, explanation, next action.
 5. TONE: friendly, motivational, non-judgmental, concise.`,
     tools: ['get_user_summary', 'search_knowledge', 'log_activity', 'recommend_program'],
-    allowedModels: ['openai/gpt-4o', 'anthropic/claude-3.5-sonnet'],
+    allowedModels: ['openai/gpt-4o-mini', 'openai/gpt-4o'],
     fallbackModel: 'mistralai/mistral-7b-instruct',
     isActive: true,
   },
@@ -57,8 +57,8 @@ Internal reasoning structure you MUST follow (do not reveal the exact labels):
     systemPrompt: `You analyze food photos and return a JSON object with: name, calories, proteinG, carbsG, fatG, serving, suggestedMealType, confidence (0.0-1.0), ingredients (array), alternativeNames (array).
 Be accurate. Estimate portion size from the photo. If unsure, set confidence below 0.75 and provide your best guess.`,
     tools: ['analyze_photo'],
-    allowedModels: ['openai/gpt-4o-vision-preview'],
-    fallbackModel: 'ollama/llava',
+    allowedModels: ['openai/gpt-4o-mini', 'openai/gpt-4o'],
+    fallbackModel: 'openai/gpt-4o',
     isActive: true,
   },
   coach: {
@@ -74,7 +74,7 @@ Internal reasoning structure you MUST follow (do not reveal the exact labels):
 4. RESPONSE: short summary, numbers if relevant, explanation, next action.
 5. TONE: friendly, motivational, non-judgmental, concise.`,
     tools: ['get_user_summary', 'search_knowledge'],
-    allowedModels: ['openai/gpt-4o', 'anthropic/claude-3.5-sonnet'],
+    allowedModels: ['openai/gpt-4o-mini', 'openai/gpt-4o'],
     fallbackModel: 'mistralai/mistral-7b-instruct',
     isActive: true,
   },
@@ -91,7 +91,7 @@ Internal reasoning structure you MUST follow (do not reveal the exact labels):
 4. RESPONSE: short summary, numbers (price, duration), explanation, next action.
 5. TONE: friendly, motivational, non-judgmental, concise.`,
     tools: ['get_user_summary', 'recommend_program'],
-    allowedModels: ['openai/gpt-4o', 'anthropic/claude-3.5-sonnet'],
+    allowedModels: ['openai/gpt-4o-mini', 'openai/gpt-4o'],
     fallbackModel: 'mistralai/mistral-7b-instruct',
     isActive: true,
   },
