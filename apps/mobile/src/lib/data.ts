@@ -445,7 +445,15 @@ export function useChat() {
 
       // Fallback: old sync behavior (if server returns message immediately)
       if (analyzeRes.data?.message) {
-        const ai = analyzeRes.data.message
+        const rawAi = analyzeRes.data.message
+        const ai: ChatMessage = {
+          ...rawAi,
+          attachments: {
+            ...rawAi.attachments,
+            imageUrl: rawAi.attachments?.imageUrl || (rawAi as any).imageUrl,
+            structured: rawAi.attachments?.structured || (rawAi as any).structured,
+          },
+        }
         const structured = ai.attachments?.structured
         const foodData = ai.attachments?.foodData || (structured ? {
           name: structured.foodName,
@@ -497,8 +505,17 @@ export function useChat() {
         throw new Error('Photo analysis timed out. Please try again.')
       }
 
-      const ai = await poll()
-      if (ai) {
+      const rawAi = await poll()
+      if (rawAi) {
+        // Normalize API response: structured/imageUrl may be at the message root, not inside attachments
+        const ai: ChatMessage = {
+          ...rawAi,
+          attachments: {
+            ...rawAi.attachments,
+            imageUrl: rawAi.attachments?.imageUrl || (rawAi as any).imageUrl,
+            structured: rawAi.attachments?.structured || (rawAi as any).structured,
+          },
+        }
         const aiImageUrl = ai.attachments?.imageUrl || (ai.attachments?.foodData ? uploadRes.data.url : undefined)
         setMessages((prev) => {
           // Map API structured result into a legacy foodData shape the UI expects
