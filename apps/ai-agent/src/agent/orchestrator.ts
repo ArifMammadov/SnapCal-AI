@@ -120,30 +120,36 @@ async function routeSkill(input: ChatInput): Promise<OrchestratorRouteResult> {
 async function runTools(toolNames: string[], context: ToolContext): Promise<Record<string, unknown>> {
   const results: Record<string, unknown> = {}
   for (const name of toolNames) {
-    switch (name) {
-      case 'getUserSummary':
-        results[name] = await getUserSummary(context)
-        break
-      case 'searchKnowledge':
-        results[name] = await searchKnowledge(context)
-        break
-      case 'recommendProgram':
-        results[name] = await recommendProgram(context)
-        break
-      case 'analyzePhoto':
-        results[name] = await analyzePhoto(context)
-        break
-      case 'logFood':
-        results[name] = await logFood(context)
-        break
-      case 'logActivity':
-        results[name] = await logActivity(context)
-        break
-      case 'webSearch':
-        results[name] = await webSearch(context)
-        break
-      default:
-        results[name] = { success: false, error: 'Unknown tool' }
+    try {
+      switch (name) {
+        case 'getUserSummary':
+          results[name] = await getUserSummary(context)
+          break
+        case 'searchKnowledge':
+          results[name] = await searchKnowledge(context)
+          break
+        case 'recommendProgram':
+          results[name] = await recommendProgram(context)
+          break
+        case 'analyzePhoto':
+          results[name] = await analyzePhoto(context)
+          break
+        case 'logFood':
+          results[name] = await logFood(context)
+          break
+        case 'logActivity':
+          results[name] = await logActivity(context)
+          break
+        case 'webSearch':
+          results[name] = await webSearch(context)
+          break
+        default:
+          results[name] = { success: false, error: 'Unknown tool' }
+      }
+    } catch (toolErr) {
+      const toolErrorMessage = toolErr instanceof Error ? toolErr.message : 'Tool error'
+      logger.error({ err: toolErr, toolName: name, userId: context.userId }, `Tool execution failed: ${toolErrorMessage}`)
+      results[name] = { success: false, error: toolErrorMessage }
     }
   }
   return results
@@ -377,6 +383,7 @@ If the user asks what to eat today, use their food preferences and recent meals 
       modelUsed = result.model
     } catch (err) {
       errorMessage = err instanceof Error ? err.message : 'OpenRouter error'
+      logger.error({ err, userId, skillName: route.skillName, model }, `LLM call failed: ${errorMessage}`)
     }
   }
 
