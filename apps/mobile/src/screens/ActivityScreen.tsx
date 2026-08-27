@@ -100,7 +100,10 @@ function AddActivityModal({
     const m = met[selectedType.type] ?? 5
     if (isDistanceType) {
       const km = Number(distance) || 0
-      const paceMinPerKm = selectedType.type === 'Running' ? 5.5 : selectedType.type === 'Swimming' ? 2.0 : 3.0
+      const paceMinPerKm =
+        selectedType.type === 'Running' ? 6.0 :
+        selectedType.type === 'Swimming' ? 18.5 :
+        3.0
       const minutes = km * paceMinPerKm
       return Math.round((weightKg * m * minutes) / 60)
     }

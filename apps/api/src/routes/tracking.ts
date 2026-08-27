@@ -64,9 +64,9 @@ function calculateActivityCalories(
   // Distance-based sports: estimate duration from distance if not provided
   let minutes = durationMin ?? 0
   if (distanceM && distanceM > 0) {
-    if (type === 'Running') minutes = Math.max(minutes, Math.round(distanceM / (weightKg > 80 ? 2.4 : weightKg < 60 ? 3.0 : 2.7) * 60))
-    if (type === 'Cycling') minutes = Math.max(minutes, Math.round(distanceM / 4.0 / 60 * 60))
-    if (type === 'Swimming') minutes = Math.max(minutes, Math.round(distanceM / 1.5 / 60 * 60))
+    // Speeds in m/s: running ~2.7 m/s, cycling ~5.5 m/s, swimming ~0.9 m/s
+    const speedMps = type === 'Running' ? (weightKg > 80 ? 2.4 : weightKg < 60 ? 3.0 : 2.7) : type === 'Cycling' ? 5.5 : 0.9
+    minutes = Math.max(minutes, Math.round(distanceM / speedMps / 60))
   }
   if (stepsCount && stepsCount > 0 && type === 'Walking') {
     minutes = Math.max(minutes, Math.round(stepsCount * 0.008))
