@@ -131,7 +131,7 @@ async function serpapiSearch(query: string): Promise<WebSearchResult[]> {
 }
 
 export async function webSearch(context: ToolContext): Promise<ToolResult> {
-  const query = context.message.trim()
+  const query = ((context as any).message ?? '').trim()
   if (!query) {
     return { success: true, data: { query, results: [] } }
   }
