@@ -223,10 +223,6 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
 
     const { imageUrl } = analyzePhotoSchema.parse(request.body)
 
-    const userMessage = await prisma.chatMessage.create({
-      data: { userId, role: 'USER', type: 'TEXT', content: '[food photo]', attachments: { imageUrl } },
-    })
-
     try {
       const { jobId, statusUrl, messageId } = await enqueuePhotoAnalysis(userId, imageUrl)
 
@@ -240,11 +236,6 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
       const errorMessage = axios.isAxiosError(err) && !err.response
         ? 'AI vision service is temporarily unavailable. Please try again later.'
         : 'Could not start photo analysis. Please try again.'
-
-      await prisma.chatMessage.update({
-        where: { id: userMessage.id },
-        data: { content: '[food photo] [FAILED]' },
-      })
 
       const aiMessage = await prisma.chatMessage.create({
         data: {
