@@ -2,6 +2,9 @@ import { useState, useMemo, useEffect } from 'react'
 import { Button, Card, CircularRing, MiniProgressBar, ArrowRightIcon, ChevronDownIcon, Avatar } from '../components/ui.js'
 import { useApp } from '../App.js'
 import { useAppStore } from '../store/index.js'
+
+const LOCALE = typeof navigator !== 'undefined' ? navigator.language : 'en'
+const IS_RUSSIAN = /^ru/.test(LOCALE)
 import { GoalPlanScreen } from './GoalPlanScreen.js'
 import { MarketplaceScreen } from './MarketplaceScreen.js'
 import { useTrackingSummary, usePrograms } from '../lib/data.js'
@@ -40,6 +43,7 @@ const metricConfig = [
   { key: 'carbs', label: 'Carbs', unit: 'g', max: 250, color: 'var(--amber)', icon: '🌾', get: (s: any) => s?.carbsG ?? 0 },
   { key: 'fat', label: 'Fat', unit: 'g', max: 73, color: 'var(--orange)', icon: '🥑', get: (s: any) => s?.fatG ?? 0 },
   { key: 'steps', label: 'Steps', unit: '', max: 10000, color: 'var(--rose)', icon: '👟', get: (s: any) => s?.steps ?? 0 },
+  { key: 'burned', label: 'Burned', unit: 'kcal', max: 800, color: 'var(--rose)', icon: '🔥', get: (s: any) => s?.caloriesBurned ?? 0 },
 ]
 
 function groupFoodLogsByMeal(logs: FoodLog[]) {
@@ -84,6 +88,7 @@ const emptySummary = {
   healthScore: 0,
   foodLogs: [] as FoodLog[],
   activities: [] as ActivityLog[],
+  caloriesBurned: 0,
 }
 
 export function HomeScreen() {
@@ -338,19 +343,67 @@ export function HomeScreen() {
         </div>
       </section>
 
+      {s.activities && s.activities.length > 0 && (
+        <section style={{ padding: '24px 20px 0' }}>
+          <div style={{ padding: '0 0 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <h2 className="font-display" style={{ fontSize: 17, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+              {IS_RUSSIAN ? 'Сегодняшняя активность' : "Today's Activity"}
+            </h2>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {s.activities.map((activity) => (
+              <Card key={activity.id} style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 12,
+                      background: 'var(--rose-dim)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 18,
+                    }}
+                  >
+                    🏃
+                  </div>
+                  <div>
+                    <p className="font-display" style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
+                      {activity.type}
+                    </p>
+                    <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 0' }}>
+                      {formatMealTime(activity.startedAt)} · {activity.durationMin} min
+                    </p>
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <p className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+                    {activity.caloriesBurned ?? 0}
+                  </p>
+                  <p style={{ fontSize: 10, color: 'var(--text-secondary)', margin: 0 }}>kcal</p>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section style={{ padding: '24px 20px 0' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <h2 className="font-display" style={{ fontSize: 17, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
             Today's Meals
           </h2>
-          <button style={{ fontSize: 13, color: 'var(--green)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 500 }}>
-            + Add
-          </button>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {meals.length === 0 && (
-            <Card style={{ padding: 20, textAlign: 'center' }}>
-              <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0 }}>No meals logged yet today.</p>
+            <Card
+              onClick={() => setActiveTab('coach')}
+              style={{ padding: 20, textAlign: 'center', cursor: 'pointer', border: '1px dashed var(--border)' }}
+            >
+              <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+                {IS_RUSSIAN ? 'Нет еды на сегодня. Скажите ИИ, что вы ели или кушаете.' : 'No meals logged yet today. Tell the AI what you ate or are eating.'}
+              </p>
             </Card>
           )}
           {meals.map(({ type, items, total }) => (
@@ -440,67 +493,6 @@ export function HomeScreen() {
               )}
             </Card>
           ))}
-        </div>
-      </section>
-
-      <section style={{ padding: '20px 20px 0' }}>
-        <div
-          style={{
-            background: 'linear-gradient(135deg, #1a1040 0%, #0d1a2e 100%)',
-            borderRadius: 22,
-            border: '1px solid rgba(123,110,246,0.3)',
-            padding: '20px',
-            position: 'relative',
-            overflow: 'hidden',
-          }}
-        >
-          <div
-            style={{
-              position: 'absolute',
-              width: 120,
-              height: 120,
-              borderRadius: '50%',
-              background: 'radial-gradient(circle, rgba(123,110,246,0.4) 0%, transparent 70%)',
-              top: -20,
-              right: -20,
-            }}
-          />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-            <div
-              style={{
-                width: 28,
-                height: 28,
-                borderRadius: 8,
-                background: 'var(--purple)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round">
-                <circle cx="12" cy="12" r="10" />
-                <path d="M12 8v4l3 3" />
-              </svg>
-            </div>
-            <span style={{ fontSize: 11, color: 'var(--purple)', fontWeight: 600, letterSpacing: '0.06em' }}>AI INSIGHT</span>
-          </div>
-          <p className="font-display" style={{ fontSize: 15, fontWeight: 600, color: '#f0f4ff', margin: '0 0 8px', lineHeight: 1.4 }}>
-            You're {Math.max(0, calorieGoal - totalCalories)} kcal under goal today
-          </p>
-          <p style={{ fontSize: 13, color: 'rgba(240,244,255,0.6)', margin: '0 0 14px', lineHeight: 1.5 }}>
-            Add a protein-rich evening snack — try cottage cheese with walnuts (≈180 kcal, 20g protein) to hit your macros.
-          </p>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <Button variant="primary" size="sm">Log Snack</Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(240,244,255,0.7)' }}
-              onClick={() => setActiveTab('coach')}
-            >
-              Ask AI Coach
-            </Button>
-          </div>
         </div>
       </section>
 
