@@ -4,6 +4,7 @@ import axios from 'axios'
 import { prisma } from '@snapcal/database'
 import { requireAuth } from './users.js'
 import { env } from '../lib/env.js'
+import { normalizeLanguage, t } from '../lib/i18n.js'
 import { DEFAULT_FREE_AI_DAILY_LIMIT } from '@snapcal/shared'
 import { enqueuePhotoAnalysis, finalizePhotoAnalysis, getVisionJobContext, pollPhotoAnalysisStatus } from '../lib/aiAgentClient.js'
 import { checkAiLimit } from '../lib/subscriptionLimits.js'
@@ -116,10 +117,11 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
   }, async (request: FastifyRequest, reply) => {
     const userId = request.user!.userId
     // Text chat should not consume the daily free scan budget; only photo analysis does.
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { trialEndsAt: true, subscriptionStatus: true } })
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { trialEndsAt: true, subscriptionStatus: true, languageCode: true } })
     if (!user) {
-      return reply.status(401).send({ error: { code: 'UNAUTHORIZED', message: 'Пользователь не найден. Войдите снова.' } })
+      return reply.status(401).send({ error: { code: 'UNAUTHORIZED', message: t('user_not_found', normalizeLanguage(null)) } })
     }
+    const lang = normalizeLanguage(user.languageCode)
     const now = new Date()
     const isPremium = (user.trialEndsAt && user.trialEndsAt > now) || ['active', 'trialing'].includes(user.subscriptionStatus.toLowerCase())
     if (!isPremium) {
@@ -130,7 +132,7 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
         where: { userId, role: 'USER', type: 'TEXT', createdAt: { gte: start, lt: end } },
       })
       if (textMessagesToday >= 10) {
-        return reply.status(429).send({ error: { code: 'DAILY_TEXT_LIMIT_REACHED', message: 'Бесплатный лимит текстовых сообщений на сегодня исчерпан. Оформите подписку SnapCal Pro для безлимитного общения.' } })
+        return reply.status(429).send({ error: { code: 'DAILY_TEXT_LIMIT_REACHED', message: t('daily_text_limit', lang) } })
       }
     }
 
@@ -143,7 +145,7 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
     try {
       const { data: aiResponse } = await agent.post<AiAgentResponse>(
         '/chat',
-        { userId, message, messageId: userMessage.id },
+        { userId, message, messageId: userMessage.id, language: lang },
       )
 
       if (!aiResponse.message || !aiResponse.message.content) {
@@ -176,12 +178,12 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
         },
       }
     } catch (err: any) {
-      let fallbackMessage = 'Sorry, I could not process your request right now. Please try again in a moment.'
+      let fallbackMessage = t('fallback_error', lang)
       let usedFallback = false
 
       if (axios.isAxiosError(err) && !err.response) {
         usedFallback = true
-        fallbackMessage = 'AI Coach is temporarily unavailable. Please try again later.'
+        fallbackMessage = t('ai_unavailable', lang)
       }
 
       await prisma.chatMessage.update({
@@ -216,9 +218,11 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
     config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
   }, async (request: FastifyRequest, reply) => {
     const userId = request.user!.userId
+    const userLang = await prisma.user.findUnique({ where: { id: userId }, select: { languageCode: true } })
+    const lang = normalizeLanguage(userLang?.languageCode)
     const limit = await checkAiLimit(userId)
     if (!limit.allowed) {
-      return reply.status(429).send({ error: { code: limit.reason, message: limit.paywallMessage || 'AI daily limit reached. Upgrade to Pro.' } })
+      return reply.status(429).send({ error: { code: limit.reason, message: limit.paywallMessage || t('daily_text_limit', lang) } })
     }
 
     const { imageUrl } = analyzePhotoSchema.parse(request.body)
@@ -234,8 +238,8 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
       }
     } catch (err: any) {
       const errorMessage = axios.isAxiosError(err) && !err.response
-        ? 'AI vision service is temporarily unavailable. Please try again later.'
-        : 'Could not start photo analysis. Please try again.'
+        ? t('photo_analysis_unavailable', lang)
+        : t('photo_analysis_failed', lang)
 
       const aiMessage = await prisma.chatMessage.create({
         data: {

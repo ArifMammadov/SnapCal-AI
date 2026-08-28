@@ -9,7 +9,10 @@ import { LoginScreen } from './screens/LoginScreen.js'
 import { MarketplaceScreen } from './screens/MarketplaceScreen.js'
 import { useTelegram } from './hooks/useTelegram.js'
 import { useAppStore, type Tab } from './store/index.js'
+import { t, initLanguage } from './lib/i18n.js'
 import './index.css'
+
+initLanguage()
 
 interface AppContextType {
   darkMode: boolean
@@ -29,11 +32,11 @@ export function useApp() {
 }
 
 const navItems: { id: Tab; label: string; icon: React.FC<{ size?: number }> }[] = [
-  { id: 'home', label: 'Home', icon: HomeIcon },
-  { id: 'activity', label: 'Activity', icon: ActivityIcon },
-  { id: 'coach', label: 'AI Coach', icon: CoachIcon },
-  { id: 'stats', label: 'Stats', icon: StatsIcon },
-  { id: 'profile', label: 'Profile', icon: ProfileIcon },
+  { id: 'home', label: t('navHome'), icon: HomeIcon },
+  { id: 'activity', label: t('navActivity'), icon: ActivityIcon },
+  { id: 'coach', label: t('navCoach'), icon: CoachIcon },
+  { id: 'stats', label: t('navStats'), icon: StatsIcon },
+  { id: 'profile', label: t('navProfile'), icon: ProfileIcon },
 ]
 
 export function App() {
@@ -47,7 +50,7 @@ export function App() {
   if (!ready) {
     return (
       <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ color: 'var(--text-primary)', fontSize: 18, fontWeight: 500 }}>SnapCal AI</div>
+        <div style={{ color: 'var(--text-primary)', fontSize: 18, fontWeight: 500 }}>{t('appName')}</div>
       </div>
     )
   }

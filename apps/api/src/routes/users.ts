@@ -4,6 +4,7 @@ import axios from 'axios'
 import { prisma } from '@snapcal/database'
 import { calculateDefaultGoals } from '@snapcal/shared'
 import { env } from '../lib/env.js'
+import { normalizeLanguage, getGoalLabel, getWelcomeMessage } from '../lib/i18n.js'
 import type { JwtPayload } from '../types/auth.js'
 
 export const requireAuth = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -27,7 +28,7 @@ const updateProfileSchema = z.object({
   lastName: z.string().min(1).max(100).optional(),
   email: z.string().email().optional().or(z.literal('')),
   phone: z.string().max(50).optional().or(z.literal('')),
-  languageCode: z.enum(['en','ru','az','uz']).optional(),
+  languageCode: z.enum(['en','ru','az','uz','kk','ar','tr']).optional(),
   birthDate: z.string().datetime().optional(),
   gender: z.enum(['MALE', 'FEMALE', 'OTHER']).optional(),
   heightCm: z.number().int().min(50).max(300).optional(),
@@ -276,18 +277,13 @@ export const userRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
 
       const updated = await prisma.user.findUnique({ where: { id: userId }, include: { profile: true } })
       const plan = updated?.profile?.goalPlan
-      const goalLabel: Record<string, string> = {
-        FAT_LOSS: 'похудение',
-        MUSCLE_GAIN: 'набор массы',
-        MAINTENANCE: 'поддержание формы',
-        HEALTH: 'улучшение здоровья',
-      }
 
       // Welcome AI message — first thing the user sees after onboarding
-      const name = user.firstName || 'друг'
-      const goalText = goalLabel[user.profile.primaryGoal ?? 'HEALTH'] ?? 'вашу цель'
+      const lang = normalizeLanguage(user.languageCode)
+      const name = user.firstName || (lang === 'ru' ? 'друг' : 'friend')
+      const goalText = getGoalLabel(user.profile.primaryGoal, lang)
       const targetPart = user.profile.targetWeightKg
-        ? `Цель — ${Number(user.profile.targetWeightKg)} кг.`
+        ? (lang === 'ru' ? `Цель — ${Number(user.profile.targetWeightKg)} кг.` : `Target — ${Number(user.profile.targetWeightKg)} kg.`)
         : ''
 
       await prisma.chatMessage.create({
@@ -295,7 +291,7 @@ export const userRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
           userId,
           role: 'AI',
           type: 'TEXT',
-          content: `Добро пожаловать в SnapCal, ${name}! 👋\n\nЯ ваш персональный AI-коуч. Можно фотографировать еду и узнавать калории и макросы, общаться со мной и узнавать новое в направлении здоровья и питания.\n\nЯ уже рассчитал для вас персональный план (${goalText}). Его можно посмотреть на главной странице в разделе «Обзор плана». ${targetPart}\n\nДля поддержки здоровья и эффективного продвижения к вашей цели в программе Эксперт выберите программу для активности.\n\nЧтобы я делал свою работу корректно, скажите, есть ли у вас аллергия на какие-либо продукты?`,
+          content: getWelcomeMessage(lang, name, goalText, targetPart),
         },
       })
 

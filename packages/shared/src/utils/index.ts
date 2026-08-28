@@ -3,7 +3,7 @@ export function getRegionLanguage(telegramLang?: string, regionCode?: string): s
   if (regionCode === 'KZ') return 'kk'
   if (['AE', 'SA', 'QA', 'KW', 'BH', 'OM', 'EG', 'MA', 'DZ', 'TN'].includes(regionCode ?? '')) return 'ar'
   if (['ru', 'uk', 'be'].includes(telegramLang ?? '')) return 'ru'
-  return telegramLang && ['en', 'ru', 'uz', 'kk', 'ar'].includes(telegramLang) ? telegramLang : 'en'
+  return telegramLang && ['en', 'ru', 'uz', 'kk', 'ar', 'az', 'tr'].includes(telegramLang) ? telegramLang : 'en'
 }
 
 export function calculateCalorieGoal(profile: {

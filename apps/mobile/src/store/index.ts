@@ -1,4 +1,8 @@
 import { create } from 'zustand'
+import { detectLanguage, setCurrentLanguage, type Language } from '../lib/i18n.js'
+
+const initialLanguage = typeof window !== 'undefined' ? (localStorage.getItem('snapcal_language') as Language | null) ?? detectLanguage() : 'en'
+setCurrentLanguage(initialLanguage === 'ru' ? 'ru' : 'en')
 
 export interface User {
   id: string
@@ -58,6 +62,8 @@ interface AppState {
   setToken: (token: string | null) => void
   setRefreshToken: (refreshToken: string | null) => void
   logout: () => void
+  language: string
+  setLanguage: (language: string) => void
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -67,6 +73,12 @@ export const useAppStore = create<AppState>((set) => ({
   setActiveTab: (tab) => set({ activeTab: tab }),
   user: null,
   setUser: (user) => set({ user }),
+  language: initialLanguage,
+  setLanguage: (language) => {
+    setCurrentLanguage(language === 'ru' ? 'ru' : 'en')
+    localStorage.setItem('snapcal_language', language)
+    set({ language })
+  },
   token: localStorage.getItem('snapcal_access_token'),
   refreshToken: localStorage.getItem('snapcal_refresh_token'),
   setToken: (token) => {

@@ -2,9 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { Button, Card, CircularRing, MiniProgressBar, ArrowRightIcon, ChevronDownIcon, Avatar } from '../components/ui.js'
 import { useApp } from '../App.js'
 import { useAppStore } from '../store/index.js'
-
-const LOCALE = typeof navigator !== 'undefined' ? navigator.language : 'en'
-const IS_RUSSIAN = /^ru/.test(LOCALE)
+import { t, getMealType, formatTimeLocalized } from '../lib/i18n.js'
 import { GoalPlanScreen } from './GoalPlanScreen.js'
 import { MarketplaceScreen } from './MarketplaceScreen.js'
 import { useTrackingSummary, usePrograms } from '../lib/data.js'
@@ -40,13 +38,13 @@ const mealIcons: Record<string, string> = {
 type HomeBasicProgram = SharedBasicProgram
 
 const metricConfig = [
-  { key: 'water', label: 'Water', unit: 'L', max: 3, color: 'var(--blue)', icon: '💧', get: (s: any) => (s?.waterMl ?? 0) / 1000 },
-  { key: 'sleep', label: 'Sleep', unit: 'h', max: 8, color: 'var(--purple)', icon: '🌙', get: (s: any) => s?.sleepH ?? 0 },
-  { key: 'protein', label: 'Protein', unit: 'g', max: 150, color: 'var(--green)', icon: '🥩', get: (s: any) => s?.proteinG ?? 0 },
-  { key: 'carbs', label: 'Carbs', unit: 'g', max: 250, color: 'var(--amber)', icon: '🌾', get: (s: any) => s?.carbsG ?? 0 },
-  { key: 'fat', label: 'Fat', unit: 'g', max: 73, color: 'var(--orange)', icon: '🥑', get: (s: any) => s?.fatG ?? 0 },
-  { key: 'activity', label: 'Activity', unit: 'kcal', max: 500, color: 'var(--rose)', icon: '🏃', get: (s: any) => s?.caloriesBurned ?? 0 },
-  { key: 'steps', label: 'Steps', unit: '', max: 10000, color: 'var(--rose)', icon: '👟', get: (s: any) => s?.steps ?? 0 },
+  { key: 'water', label: t('water'), unit: 'L', max: 3, color: 'var(--blue)', icon: '💧', get: (s: any) => (s?.waterMl ?? 0) / 1000 },
+  { key: 'sleep', label: t('sleep'), unit: 'h', max: 8, color: 'var(--purple)', icon: '🌙', get: (s: any) => s?.sleepH ?? 0 },
+  { key: 'protein', label: t('protein'), unit: 'g', max: 150, color: 'var(--green)', icon: '🥩', get: (s: any) => s?.proteinG ?? 0 },
+  { key: 'carbs', label: t('carbs'), unit: 'g', max: 250, color: 'var(--amber)', icon: '🌾', get: (s: any) => s?.carbsG ?? 0 },
+  { key: 'fat', label: t('fat'), unit: 'g', max: 73, color: 'var(--orange)', icon: '🥑', get: (s: any) => s?.fatG ?? 0 },
+  { key: 'activity', label: t('activity'), unit: 'kcal', max: 500, color: 'var(--rose)', icon: '🏃', get: (s: any) => s?.caloriesBurned ?? 0 },
+  { key: 'steps', label: t('steps'), unit: '', max: 10000, color: 'var(--rose)', icon: '👟', get: (s: any) => s?.steps ?? 0 },
 ]
 
 function groupFoodLogsByMeal(logs: FoodLog[]) {
@@ -76,7 +74,7 @@ function groupFoodLogsByMeal(logs: FoodLog[]) {
 }
 
 function formatMealTime(iso: string) {
-  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return formatTimeLocalized(new Date(iso))
 }
 
 const emptySummary = {
@@ -106,6 +104,8 @@ export function HomeScreen() {
   const [expandedMeal, setExpandedMeal] = useState<string | null>(null)
   const [selectedProgram, setSelectedProgram] = useState<HomeBasicProgram | null>(null)
   const [showGoalPlan, setShowGoalPlan] = useState(false)
+  const lang = useAppStore((s) => s.language)
+  const isRu = lang === 'ru'
 
   const s = summary ?? emptySummary
   const calorieGoal = s.calorieGoal || 2200
@@ -123,14 +123,14 @@ export function HomeScreen() {
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours()
-    if (hour < 12) return 'Good morning'
-    if (hour < 18) return 'Good afternoon'
-    return 'Good evening'
+    if (hour < 12) return t('greetingMorning')
+    if (hour < 18) return t('greetingAfternoon')
+    return t('greetingEvening')
   }, [])
 
-  const firstName = user?.firstName || 'Friend'
+  const firstName = user?.firstName || user?.telegramUsername || t('friend')
 
-  if (showGoalPlan) return <GoalPlanScreen onBack={() => setShowGoalPlan(false)} />
+  if (showGoalPlan) return <GoalPlanScreen onClose={() => setShowGoalPlan(false)} />
 
   return (
     <div
@@ -183,7 +183,7 @@ export function HomeScreen() {
       >
         {loading && (
           <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-secondary)', fontSize: 14 }}>
-            Loading your day...
+            {t('loading')}
           </div>
         )}
 
@@ -215,7 +215,7 @@ export function HomeScreen() {
 
             <div style={{ flex: 1 }}>
               <div style={{ marginBottom: 16 }}>
-                <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 2px' }}>Calorie Goal</p>
+                <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 2px' }}>{t('calorieGoal')}</p>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
                   <span className="font-display" style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1 }}>
                     {totalCalories.toLocaleString()}
@@ -262,14 +262,14 @@ export function HomeScreen() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 20 }}>✦</span>
             <div>
-              <p style={{ fontSize: 11, color: 'var(--green)', margin: 0, fontWeight: 500, letterSpacing: '0.04em' }}>HEALTH SCORE</p>
+              <p style={{ fontSize: 11, color: 'var(--green)', margin: 0, fontWeight: 500, letterSpacing: '0.04em' }}>{t('healthScore').toUpperCase()}</p>
               <p className="font-display" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: 0, lineHeight: 1.2 }}>
                 {healthScore}%
               </p>
             </div>
           </div>
           <div style={{ textAlign: 'right' }}>
-          <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: 0 }}>{IS_RUSSIAN ? 'Сегодня' : 'Today'}</p>
+          <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: 0 }}>{t('today')}</p>
           <div style={{ display: 'flex', gap: 3, marginTop: 4, justifyContent: 'flex-end', alignItems: 'flex-end', height: 28 }}>
             {[
               { value: totalCalories, goal: calorieGoal, color: '#4ade80' },
@@ -315,9 +315,9 @@ export function HomeScreen() {
           }}
         >
           <div style={{ textAlign: 'left' }}>
-            <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', margin: 0, letterSpacing: '0.06em' }}>6-MONTH PLAN</p>
+            <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)', margin: 0, letterSpacing: '0.06em' }}>{t('planCtaTitle')}</p>
             <p className="font-display" style={{ fontSize: 16, fontWeight: 700, color: '#fff', margin: '2px 0 0' }}>
-              View Full Transformation Plan
+              {t('planCtaBody')}
             </p>
           </div>
           <ArrowRightIcon size={20} />
@@ -327,7 +327,7 @@ export function HomeScreen() {
       <section style={{ padding: '20px 0 0' }}>
         <div style={{ padding: '0 20px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h2 className="font-display" style={{ fontSize: 17, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-            Today's Overview
+          {t('todaysOverview')}
           </h2>
         </div>
         <div className="no-scrollbar" style={{ display: 'flex', gap: 12, overflowX: 'auto', padding: '0 20px' }}>
@@ -343,7 +343,7 @@ export function HomeScreen() {
             let icon = m.icon
             if (m.key === 'activity' && s.activities?.length) {
               const a = s.activities[0]
-              label = `${a.type} · ${a.durationMin || 0} ${IS_RUSSIAN ? 'мин' : 'min'}`
+              label = `${a.type} · ${a.durationMin || 0} ${t('min')}`
               const activityIcons: Record<string, string> = {
                 Running: '🏃',
                 Walking: '🚶',
@@ -388,7 +388,7 @@ export function HomeScreen() {
       <section style={{ padding: '24px 20px 0' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <h2 className="font-display" style={{ fontSize: 17, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-            Today's Meals
+          {t('todaysMeals')}
           </h2>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -398,7 +398,7 @@ export function HomeScreen() {
               style={{ padding: 20, textAlign: 'center', cursor: 'pointer', border: '1px dashed var(--border)' }}
             >
               <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
-                {IS_RUSSIAN ? 'Нет еды на сегодня. Скажите ИИ, что вы ели или кушаете.' : 'No meals logged yet today. Tell the AI what you ate or are eating.'}
+                {t('noMeals')}
               </p>
             </Card>
           )}
@@ -426,10 +426,10 @@ export function HomeScreen() {
                   </div>
                   <div>
                     <p className="font-display" style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-                      {mealTypeLabel[type] || type}
+                      {getMealType(type)}
                     </p>
                     <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '2px 0 0' }}>
-                      {items.length} item{items.length !== 1 ? 's' : ''}
+                      {items.length} {t('items', items.length)} · {Math.round(total.calories)} {t('kcal')}
                     </p>
                   </div>
                 </div>
@@ -438,7 +438,7 @@ export function HomeScreen() {
                     <p className="font-display" style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
                       {Math.round(total.calories)}
                     </p>
-                    <p style={{ fontSize: 10, color: 'var(--text-secondary)', margin: 0 }}>kcal</p>
+                    <p style={{ fontSize: 10, color: 'var(--text-secondary)', margin: 0 }}>{t('kcal')}</p>
                   </div>
                   <ChevronDownIcon
                     size={16}
@@ -455,9 +455,9 @@ export function HomeScreen() {
                 <div style={{ borderTop: '1px solid var(--border)', padding: '12px 16px' }} className="fade-in">
                   <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
                     {[
-                      { label: 'P', value: `${Math.round(total.proteinG)}g`, color: 'var(--green)' },
-                      { label: 'C', value: `${Math.round(total.carbsG)}g`, color: 'var(--amber)' },
-                      { label: 'F', value: `${Math.round(total.fatG)}g`, color: 'var(--orange)' },
+                      { label: 'P', value: `${Math.round(total.proteinG)} ${t('g')}`, color: 'var(--green)' },
+                      { label: 'C', value: `${Math.round(total.carbsG)} ${t('g')}`, color: 'var(--amber)' },
+                      { label: 'F', value: `${Math.round(total.fatG)} ${t('g')}`, color: 'var(--orange)' },
                     ].map((m) => (
                       <div
                         key={m.label}
@@ -482,7 +482,7 @@ export function HomeScreen() {
                         <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--green)', flexShrink: 0 }} />
                         <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{item.name}</span>
                       </div>
-                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{item.calories} kcal</span>
+                      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{item.calories} {t('kcal')}</span>
                     </div>
                   ))}
                 </div>
@@ -495,13 +495,13 @@ export function HomeScreen() {
       <section style={{ padding: '24px 0 0' }}>
         <div style={{ padding: '0 20px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h2 className="font-display" style={{ fontSize: 17, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-            Expert Programs
+          {t('expertPrograms')}
           </h2>
           <button
-            onClick={() => setShowMarketplace(true)}
-            style={{ fontSize: 13, color: 'var(--green)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 500 }}
+          onClick={() => setShowMarketplace(true)}
+          style={{ fontSize: 13, color: 'var(--green)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 500 }}
           >
-            See All
+          {t('seeAll')}
           </button>
         </div>
         <div className="no-scrollbar" style={{ display: 'flex', gap: 12, overflowX: 'auto', padding: '0 20px' }}>
@@ -547,15 +547,15 @@ export function HomeScreen() {
                     fontWeight: 600,
                   }}
                 >
-                  {IS_RUSSIAN ? 'Базовая' : 'Basic'}
+                  {t('basic')}
                 </div>
               </div>
               <div style={{ padding: '10px 12px' }}>
                 <p className="font-display" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-                  {IS_RUSSIAN ? p.titleRu : p.title}
+                  {isRu ? p.titleRu : p.title}
                 </p>
                 <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '3px 0 0' }}>
-                  {p.durationWeeks} {IS_RUSSIAN ? 'недель' : 'weeks'}
+                  {p.durationWeeks} {t('weeks')}
                 </p>
               </div>
             </Card>
@@ -603,7 +603,7 @@ export function HomeScreen() {
                 <p className="font-display" style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
                   {p.name}
                 </p>
-                <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '3px 0 0' }}>{p.durationWeeks} weeks</p>
+                <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '3px 0 0' }}>{p.durationWeeks} {t('weeks')}</p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginTop: 6 }}>
                   <span style={{ color: 'var(--amber)', fontSize: 12 }}>★</span>
                   <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{p.rating}</span>
@@ -685,13 +685,13 @@ export function HomeScreen() {
             </div>
             <div style={{ padding: '20px 20px 24px' }}>
               <p className="font-display" style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-                {IS_RUSSIAN ? selectedProgram.titleRu : selectedProgram.title}
+                {isRu ? selectedProgram.titleRu : selectedProgram.title}
               </p>
               <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '6px 0 18px' }}>
-                {(IS_RUSSIAN ? selectedProgram.subtitleRu : selectedProgram.subtitle)} · {selectedProgram.durationWeeks} {IS_RUSSIAN ? 'недель' : 'weeks'}
+                {(isRu ? selectedProgram.subtitleRu : selectedProgram.subtitle)} · {selectedProgram.durationWeeks} {t('weeks')}
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {(IS_RUSSIAN ? selectedProgram.tipsRu : selectedProgram.tips).map((tip, i) => (
+                {(isRu ? selectedProgram.tipsRu : selectedProgram.tips).map((tip, i) => (
                   <div
                     key={i}
                     style={{
