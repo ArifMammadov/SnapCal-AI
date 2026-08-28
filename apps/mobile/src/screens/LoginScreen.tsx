@@ -216,9 +216,11 @@ export function LoginScreen() {
       if (savedUser) {
         setUser(savedUser)
         setActiveTab('coach')
+        setLoading(false)
         setStep('complete')
       } else {
         setError('Unable to finalize login')
+        setLoading(false)
       }
     } catch (err: any) {
       console.error('[submitOnboarding error]', err)
@@ -456,7 +458,12 @@ function OnboardingForm({ tgUser, onboarding, setOnboarding, loading, error, onS
         <div style={{ marginTop: 24 }}>
           <Button variant="primary" size="lg" fullWidth onClick={onSubmit} disabled={loading}>
             <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-              {loading ? 'Сохранение...' : (
+              {loading ? (
+                <>
+                  <span className="spinner" style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', display: 'inline-block' }} />
+                  AI рассчитывает план...
+                </>
+              ) : (
                 <>
                   Рассчитать
                   <ArrowRightIcon size={18} />
