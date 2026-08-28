@@ -135,17 +135,19 @@ export const userRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
         })
       : null
 
+    const { firstName, lastName, email, phone, languageCode, ...profileData } = data
+
     const updatePayload = {
-      ...data,
-      ...(data.goalPlan ? { goalPlan: data.goalPlan } : {}),
+      ...profileData,
+      ...(profileData.goalPlan ? { goalPlan: profileData.goalPlan } : {}),
       ...(goals && {
         dailyCalories: goals.dailyCalories,
-        dailyProteinG: data.dailyProteinG ?? goals.dailyProteinG,
-        dailyCarbsG: data.dailyCarbsG ?? goals.dailyCarbsG,
-        dailyFatG: data.dailyFatG ?? goals.dailyFatG,
-        dailyWaterMl: data.dailyWaterMl ?? goals.dailyWaterMl,
-        dailySleepH: data.dailySleepH ?? goals.dailySleepH,
-        dailySteps: data.dailySteps ?? goals.dailySteps,
+        dailyProteinG: profileData.dailyProteinG ?? goals.dailyProteinG,
+        dailyCarbsG: profileData.dailyCarbsG ?? goals.dailyCarbsG,
+        dailyFatG: profileData.dailyFatG ?? goals.dailyFatG,
+        dailyWaterMl: profileData.dailyWaterMl ?? goals.dailyWaterMl,
+        dailySleepH: profileData.dailySleepH ?? goals.dailySleepH,
+        dailySteps: profileData.dailySteps ?? goals.dailySteps,
       }),
     }
 
