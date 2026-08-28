@@ -102,7 +102,7 @@ async function routeSkillRegex(input: ChatInput): Promise<RouteResult> {
   if (hasVoice) return { skillName: 'nutrition', toolNames: [], confidence: 0.6 }
   if (/\b(goal plan|transformation plan|мой план|план трансформации|план питания|план тренировок)\b/i.test(lower)) return { skillName: 'fitness', toolNames: ['generateGoalPlan'], confidence: 0.85 }
   if (/\b(weight|goal|program|workout|exercise|training)\b/i.test(lower)) return { skillName: 'fitness', toolNames: ['recommendProgram'], confidence: 0.75 }
-  if (/\b(calorie|kcal|meal|food|eat|ate|breakfast|lunch|dinner|snack)\b/i.test(lower)) return { skillName: 'nutrition', toolNames: ['logFood', 'searchKnowledge'], confidence: 0.8 }
+  if (/\b(calorie|kcal|meal|food|eat|ate|breakfast|lunch|dinner|snack|diet|диет|блюдо|рецепт|кухня|плов|лагман|манты|шашлык|самса|хинкали|борщ|салат|суп|завтрак|обед|ужин|перекус)\b/i.test(lower)) return { skillName: 'nutrition', toolNames: ['logFood', 'searchKnowledge'], confidence: 0.8 }
   if (/\b(allerg|allergy|аллерг|не переношу|не ем|intolerant)\b/i.test(lower)) return { skillName: 'nutrition', toolNames: ['saveUserFact'], confidence: 0.9 }
 
   return { skillName: 'coach', toolNames: [], confidence: 0.55 }
