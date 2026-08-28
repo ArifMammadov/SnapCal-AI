@@ -182,12 +182,25 @@ export async function adminRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string }
     const user = await prisma.user.findUnique({
       where: { id },
-      include: { profile: true, subscriptions: true, enrollments: { include: { program: true } } },
+      include: { profile: true, subscriptions: { orderBy: { createdAt: 'desc' } }, enrollments: { include: { program: true } } },
     })
     if (!user) {
       return reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'User not found' } })
     }
     return { ...user, telegramId: user.telegramId?.toString() ?? null }
+  })
+
+  app.get('/users/:id/subscriptions', { preHandler: requireAdmin }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = request.params as { id: string }
+    const subscriptions = await prisma.subscription.findMany({
+      where: { userId: id },
+      orderBy: { createdAt: 'desc' },
+      include: { plan: { select: { name: true } } },
+    })
+    return subscriptions.map((s) => ({
+      ...s,
+      planName: s.plan?.name ?? null,
+    }))
   })
 
   app.get('/audit-logs', { preHandler: requireAdmin }, async (request: FastifyRequest) => {
@@ -351,18 +364,28 @@ export async function adminRoutes(app: FastifyInstance) {
   })
 
   app.get('/subscriptions/payments', { preHandler: requireAdmin }, async (request: FastifyRequest) => {
-    const { page, limit, status, provider, userId } = z.object({
+    const { page, limit, status, provider, userId, search } = z.object({
       page: z.coerce.number().int().min(1).default(1),
       limit: z.coerce.number().int().min(1).max(100).default(20),
       status: z.enum(['PENDING', 'PAID', 'SUCCESS', 'FAILED', 'REFUNDED', 'CANCELED']).optional(),
       provider: z.enum(['TELEGRAM_STARS', 'STRIPE']).optional(),
       userId: z.string().uuid().optional(),
+      search: z.string().optional(),
     }).parse(request.query)
 
     const where: any = {}
     if (status) where.status = status
     if (provider) where.provider = provider
     if (userId) where.userId = userId
+    if (search) {
+      where.user = {
+        OR: [
+          { telegramUsername: { contains: search, mode: 'insensitive' } },
+          { firstName: { contains: search, mode: 'insensitive' } },
+          ...(Number.isNaN(Number(search)) ? [] : [{ telegramId: { equals: BigInt(search) } }]),
+        ],
+      }
+    }
 
     const [payments, total] = await Promise.all([
       prisma.payment.findMany({
@@ -370,7 +393,7 @@ export async function adminRoutes(app: FastifyInstance) {
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * limit,
         take: limit,
-        include: { user: { select: { telegramId: true, telegramUsername: true, firstName: true, languageCode: true } } },
+        include: { user: { select: { id: true, telegramId: true, telegramUsername: true, firstName: true, languageCode: true } } },
       }),
       prisma.payment.count({ where }),
     ])
@@ -378,6 +401,7 @@ export async function adminRoutes(app: FastifyInstance) {
     return {
       data: payments.map((p) => ({
         ...p,
+        userId: p.userId,
         amountUsd: p.amountUsd ? Number(p.amountUsd) : null,
         telegramId: p.user.telegramId?.toString() ?? null,
         telegramUsername: p.user.telegramUsername,
@@ -389,14 +413,24 @@ export async function adminRoutes(app: FastifyInstance) {
   })
 
   app.get('/subscriptions', { preHandler: requireAdmin }, async (request: FastifyRequest) => {
-    const { page, limit, status } = z.object({
+    const { page, limit, status, search } = z.object({
       page: z.coerce.number().int().min(1).default(1),
       limit: z.coerce.number().int().min(1).max(100).default(20),
       status: z.enum(['ACTIVE', 'TRIALING', 'INACTIVE', 'CANCELED', 'PAST_DUE']).optional(),
+      search: z.string().optional(),
     }).parse(request.query)
 
     const where: any = {}
     if (status) where.status = status
+    if (search) {
+      where.user = {
+        OR: [
+          { telegramUsername: { contains: search, mode: 'insensitive' } },
+          { firstName: { contains: search, mode: 'insensitive' } },
+          ...(Number.isNaN(Number(search)) ? [] : [{ telegramId: { equals: BigInt(search) } }]),
+        ],
+      }
+    }
 
     const [subscriptions, total] = await Promise.all([
       prisma.subscription.findMany({
@@ -404,7 +438,7 @@ export async function adminRoutes(app: FastifyInstance) {
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * limit,
         take: limit,
-        include: { user: { select: { telegramId: true, telegramUsername: true, firstName: true } }, plan: true },
+        include: { user: { select: { id: true, telegramId: true, telegramUsername: true, firstName: true } }, plan: true },
       }),
       prisma.subscription.count({ where }),
     ])
@@ -412,6 +446,7 @@ export async function adminRoutes(app: FastifyInstance) {
     return {
       data: subscriptions.map((s) => ({
         ...s,
+        userId: s.userId,
         telegramId: s.user.telegramId?.toString() ?? null,
         telegramUsername: s.user.telegramUsername,
         firstName: s.user.firstName,
@@ -486,5 +521,42 @@ export async function adminRoutes(app: FastifyInstance) {
     })
 
     return { success: true, payment: updated }
+  })
+
+  app.get('/stats', { preHandler: requireAdmin }, async () => {
+    const now = new Date()
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+
+    const [totalUsers, activeSubscriptions, trialUsers, todayPayments, totalPayments] = await Promise.all([
+      prisma.user.count(),
+      prisma.subscription.count({ where: { status: 'ACTIVE', currentPeriodEnd: { gte: now } } }),
+      prisma.user.count({ where: { subscriptionStatus: 'TRIALING' } }),
+      prisma.payment.findMany({
+        where: { status: { in: ['PAID', 'SUCCESS'] }, paidAt: { gte: todayStart } },
+        select: { amountUsd: true, amountStars: true },
+      }),
+      prisma.payment.findMany({
+        where: { status: { in: ['PAID', 'SUCCESS'] } },
+        select: { amountUsd: true, amountStars: true },
+      }),
+    ])
+
+    const usdToStarsRate = 200 // 1 USD ≈ 200 Telegram Stars; adjust via env if needed
+    const sumRevenue = (items: { amountUsd: any; amountStars: any }[]) =>
+      items.reduce((acc, item) => {
+        const usd = item.amountUsd ? Number(item.amountUsd) : item.amountStars ? Number(item.amountStars) / usdToStarsRate : 0
+        return acc + usd
+      }, 0)
+
+    return {
+      totalUsers,
+      activeSubscriptions,
+      trialUsers,
+      totalPaymentsToday: todayPayments.length,
+      totalRevenueTodayUsd: Number(sumRevenue(todayPayments).toFixed(2)),
+      totalPayments: totalPayments.length,
+      totalRevenueUsd: Number(sumRevenue(totalPayments).toFixed(2)),
+    }
   })
 }
