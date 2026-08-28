@@ -75,7 +75,11 @@ api.interceptors.response.use(
     const errorCode = err.response?.data?.error?.code
 
     // Server-side business limit (e.g. daily free limit). Do not attempt refresh.
-    if (status === 429 || errorCode === 'DAILY_LIMIT_REACHED' || errorCode === 'AI_LIMIT_REACHED') {
+    if (status === 429 || errorCode === 'DAILY_LIMIT_REACHED' || errorCode === 'AI_LIMIT_REACHED' || errorCode === 'DAILY_SCAN_LIMIT' || errorCode === 'DAILY_TEXT_LIMIT') {
+      const code = errorCode === 'DAILY_SCAN_LIMIT' || errorCode === 'DAILY_TEXT_LIMIT' ? errorCode : 'DAILY_LIMIT_REACHED'
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('snapcal:paywall', { detail: { code } }))
+      }
       const message = err.response?.data?.error?.message || err.message || 'Request failed'
       return Promise.reject(new Error(message))
     }

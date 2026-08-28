@@ -2,7 +2,8 @@ import TelegramBot from 'node-telegram-bot-api'
 import crypto from 'node:crypto'
 import { env } from './lib/env.js'
 import { prisma } from '@snapcal/database'
-import { initTracing, installShutdownHandlers, logger } from '@snapcal/shared'
+import { initTracing, installShutdownHandlers, logger, TRIAL_DAYS } from '@snapcal/shared'
+import { activateTelegramStarsSubscription } from '@snapcal/database'
 
 const bot = new TelegramBot(env.TELEGRAM_BOT_TOKEN, { polling: true })
 
@@ -58,7 +59,7 @@ bot.onText(/\/start/, async (msg) => {
         firstName: user.first_name,
         lastName: user.last_name,
         languageCode: user.language_code ?? 'en',
-        trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000),
         profile: { create: {} },
       },
       update: {
@@ -77,6 +78,38 @@ bot.on('web_app_data', async (msg) => {
   const data = msg.web_app_data?.data
   if (!user || !data) return
   logger.info({ telegramId: user.id, data }, 'received web_app_data')
+})
+
+bot.on('successful_payment', async (msg) => {
+  const payment = msg.successful_payment
+  if (!payment || !msg.from) return
+
+  let payload: { userId?: string; planId?: string } = {}
+  try {
+    payload = JSON.parse(payment.invoice_payload || '{}')
+  } catch {
+    logger.warn({ payload: payment.invoice_payload }, 'failed to parse successful_payment payload')
+    return
+  }
+
+  if (!payload.userId || !payload.planId) {
+    logger.warn({ payload }, 'successful_payment missing userId or planId')
+    return
+  }
+
+  try {
+    await activateTelegramStarsSubscription({
+      userId: payload.userId,
+      planId: payload.planId,
+      telegramChargeId: payment.telegram_payment_charge_id,
+      providerTransactionId: payment.provider_payment_charge_id,
+      amountStars: payment.total_amount,
+      payload: payment.invoice_payload,
+    })
+    logger.info({ userId: payload.userId, telegramChargeId: payment.telegram_payment_charge_id }, 'activated Telegram Stars subscription')
+  } catch (err) {
+    logger.warn({ err, userId: payload.userId }, 'failed to activate Telegram Stars subscription')
+  }
 })
 
 export async function sendTelegramNotification(telegramId: bigint, text: string, options?: TelegramBot.SendMessageOptions) {

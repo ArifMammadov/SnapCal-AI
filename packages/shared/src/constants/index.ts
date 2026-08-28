@@ -35,6 +35,8 @@ export const PROGRAM_CATEGORIES = [
   'Running',
 ] as const
 
-export const DEFAULT_FREE_AI_DAILY_LIMIT = 1
+export const DEFAULT_FREE_AI_DAILY_LIMIT = 10
 
-export const TRIAL_DAYS = 7
+export const DEFAULT_FREE_PHOTO_SCANS_DAILY_LIMIT = 1
+
+export const TRIAL_DAYS = 1

@@ -4,8 +4,33 @@ import Stripe from 'stripe'
 import { prisma } from '@snapcal/database'
 import { requireAuth } from './users.js'
 import { env } from '../lib/env.js'
+import { normalizeLanguage, t } from '../lib/i18n.js'
+import { checkPhotoScanLimit, checkTextMessageLimit } from '../lib/subscriptionLimits.js'
+import axios from 'axios'
 
 const stripe = env.STRIPE_SECRET_KEY ? new Stripe(env.STRIPE_SECRET_KEY, { apiVersion: '2025-02-24.acacia' }) : null
+
+const TELEGRAM_API_BASE = `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}`
+
+const PRO_MONTHLY_PLAN = {
+  slug: 'pro_monthly',
+  name: 'SnapCal Pro Monthly',
+  priceUsd: 4.99,
+  priceStars: 250,
+  interval: 'MONTHLY',
+  features: ['Unlimited photo scans', 'Unlimited AI chat', 'Personalized meal plans'],
+}
+
+async function ensureProPlan(): Promise<{ id: string; slug: string; priceStars: number; name: string }> {
+  let plan = await prisma.subscriptionPlan.findUnique({ where: { slug: PRO_MONTHLY_PLAN.slug } })
+  if (!plan) {
+    plan = await prisma.subscriptionPlan.create({ data: PRO_MONTHLY_PLAN as any })
+  }
+  if (plan.priceStars == null) {
+    throw new Error('Pro plan is missing priceStars')
+  }
+  return { id: plan.id, slug: plan.slug, priceStars: plan.priceStars as number, name: plan.name }
+}
 
 const subscriptionRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
   app.addHook('preHandler', requireAuth)
@@ -15,21 +40,29 @@ const subscriptionRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance
       where: { id: request.user!.userId },
       include: { subscriptions: { orderBy: { createdAt: 'desc' }, take: 1 } },
     })
-    if (!user) return { error: { code: 'USER_NOT_FOUND', message: 'Пользователь не найден' } }
+    if (!user) return { error: { code: 'USER_NOT_FOUND', message: t('user_not_found', 'en') } }
 
+    const lang = normalizeLanguage(user.languageCode)
     const now = new Date()
     const trialActive = user.trialEndsAt && user.trialEndsAt > now
-    const hasActiveSub = ['active', 'trialing'].includes(user.subscriptionStatus.toLowerCase())
+    const hasActiveSub =
+      ['active', 'trialing'].includes(user.subscriptionStatus.toLowerCase()) &&
+      (!user.subscriptionExpiresAt || user.subscriptionExpiresAt > now)
 
     let message = ''
     if (trialActive) {
-      const daysLeft = Math.ceil((user.trialEndsAt!.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-      message = `Пробный период SnapCal Pro активен. Осталось ${daysLeft} ${daysLeft === 1 ? 'день' : 'дней'}.`
+      const daysLeft = Math.max(0, Math.ceil((user.trialEndsAt!.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+      message = t('subscription_trial', lang).replace('{{days}}', String(daysLeft))
     } else if (hasActiveSub) {
-      message = 'Подписка SnapCal Pro активна. Анализируйте еду без ограничений.'
+      message = t('subscription_active', lang)
     } else {
-      message = 'Бесплатный лимит: 1 анализ фото в день. Оформите SnapCal Pro для безлимитного доступа к AI Coach.'
+      message = t('subscription_free', lang)
     }
+
+    const [photoLimit, textLimit] = await Promise.all([
+      checkPhotoScanLimit(user.id),
+      checkTextMessageLimit(user.id),
+    ])
 
     const sub = user.subscriptions[0]
     return {
@@ -38,6 +71,16 @@ const subscriptionRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance
       trialActive,
       hasActiveSub,
       message,
+      photoScans: {
+        dailyLimit: photoLimit.dailyLimit === Number.POSITIVE_INFINITY ? null : photoLimit.dailyLimit,
+        usedToday: photoLimit.usedToday,
+        remainingToday: photoLimit.remainingToday === Number.POSITIVE_INFINITY ? null : photoLimit.remainingToday,
+      },
+      textMessages: {
+        dailyLimit: textLimit.dailyLimit === Number.POSITIVE_INFINITY ? null : textLimit.dailyLimit,
+        usedToday: textLimit.usedToday,
+        remainingToday: textLimit.remainingToday === Number.POSITIVE_INFINITY ? null : textLimit.remainingToday,
+      },
       currentPeriodEnd: sub?.currentPeriodEnd ?? null,
       cancelAtPeriodEnd: sub?.status === 'CANCELED',
     }
@@ -48,6 +91,67 @@ const subscriptionRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance
       where: { isActive: true },
       orderBy: { interval: 'asc' },
     })
+  })
+
+  app.post('/stars/invoice', async (request: FastifyRequest, reply) => {
+    if (!env.TELEGRAM_BOT_TOKEN || env.TELEGRAM_BOT_TOKEN === 'placeholder') {
+      return reply.status(503).send({ error: { code: 'TELEGRAM_NOT_CONFIGURED', message: 'Telegram bot not configured' } })
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: request.user!.userId } })
+    if (!user) {
+      return reply.status(404).send({ error: { code: 'USER_NOT_FOUND', message: t('user_not_found', 'en') } })
+    }
+    const lang = normalizeLanguage(user.languageCode)
+    const plan = await ensureProPlan()
+
+    const payload = JSON.stringify({ userId: user.id, planId: plan.id, ts: Date.now() })
+    try {
+      const { data } = await axios.post(`${TELEGRAM_API_BASE}/createInvoiceLink`, {
+        title: plan.name,
+        description: t('subscription_active', lang).slice(0, 200),
+        payload: payload.slice(0, 128),
+        provider_token: '',
+        currency: 'XTR',
+        prices: [{ label: plan.name, amount: plan.priceStars }],
+      })
+
+      if (!data.ok || !data.result) {
+        throw new Error(data.description || 'Telegram API error')
+      }
+
+      return { invoiceUrl: data.result, planId: plan.id, priceStars: plan.priceStars }
+    } catch (err: any) {
+      request.log.warn({ err: err.message }, 'failed to create Telegram Stars invoice')
+      return reply.status(502).send({ error: { code: 'INVOICE_FAILED', message: t('invoice_failed', lang) } })
+    }
+  })
+
+  app.post('/stars/verify', async (request: FastifyRequest, reply) => {
+    const { telegramChargeId, providerChargeId } = request.body as { telegramChargeId?: string; providerChargeId?: string }
+    const user = await prisma.user.findUnique({ where: { id: request.user!.userId } })
+    if (!user) {
+      return reply.status(404).send({ error: { code: 'USER_NOT_FOUND', message: t('user_not_found', 'en') } })
+    }
+    const lang = normalizeLanguage(user.languageCode)
+
+    const payment = await prisma.payment.findFirst({
+      where: {
+        userId: user.id,
+        status: 'PAID',
+        OR: [
+          { telegramChargeId: telegramChargeId ?? '' },
+          { providerTransactionId: providerChargeId ?? '' },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+
+    if (!payment) {
+      return reply.status(404).send({ error: { code: 'PAYMENT_NOT_FOUND', message: t('payment_not_found', lang) } })
+    }
+
+    return { success: true, message: t('payment_verified', lang), subscriptionStatus: user.subscriptionStatus }
   })
 
   app.post('/checkout', async (request: FastifyRequest, reply) => {

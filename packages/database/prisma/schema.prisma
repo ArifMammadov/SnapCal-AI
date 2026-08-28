@@ -44,6 +44,8 @@ model User {
   staffInvites  StaffInvite[]        @relation("InvitedBy")
   notifications Notification[]
   reminderPreferences ReminderPreference?
+  payments Payment[]
+  aiUsageLogs AiUsageLog[]
 
   @@index([telegramId])
   @@index([subscriptionStatus])
@@ -85,8 +87,10 @@ model SubscriptionPlan {
   name          String
   slug          String   @unique
   priceUsd      Decimal  @db.Decimal(10, 2)
+  priceStars    Int?
   interval      PlanInterval
   stripePriceId String?
+  telegramBotPayload String?
   features      String[]
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
@@ -100,7 +104,9 @@ model Subscription {
   id                   String   @id @default(uuid()) @db.Uuid
   userId               String   @db.Uuid
   planId               String?  @db.Uuid
+  paymentMethod        PaymentProvider?
   stripeSubscriptionId String?  @unique
+  telegramChargeId     String?  @unique
   status               SubscriptionStatus
   currentPeriodStart   DateTime?
   currentPeriodEnd     DateTime?
@@ -110,10 +116,49 @@ model Subscription {
 
   user User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   plan SubscriptionPlan? @relation(fields: [planId], references: [id])
+  payments Payment[]
 
   @@index([userId])
   @@index([status])
   @@map("subscriptions")
+}
+
+model Payment {
+  id                    String   @id @default(uuid()) @db.Uuid
+  userId                String   @db.Uuid
+  subscriptionId        String?  @db.Uuid
+  provider              PaymentProvider
+  providerTransactionId String? @unique
+  telegramChargeId      String? @unique
+  amountStars           Int?
+  amountUsd             Decimal? @db.Decimal(10, 2)
+  currency              String?
+  status                PaymentStatus
+  payload               String?
+  metadata              Json?
+  paidAt                DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([providerTransactionId])
+  @@index([telegramChargeId])
+  @@map("payments")
+}
+
+model AiUsageLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  usageType UsageType
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, usageType, createdAt])
+  @@map("ai_usage_logs")
 }
 
 model FoodLog {
@@ -463,6 +508,23 @@ enum PlanInterval {
   MONTHLY
   SIX_MONTH
   YEARLY
+}
+
+enum PaymentProvider {
+  TELEGRAM_STARS
+  STRIPE
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum UsageType {
+  PHOTO_SCAN
+  TEXT_MESSAGE
 }
 
 enum MealType {

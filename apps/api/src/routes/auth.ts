@@ -3,7 +3,7 @@ import { z } from 'zod'
 import crypto from 'node:crypto'
 import { prisma } from '@snapcal/database'
 import { env } from '../lib/env.js'
-import { getRegionLanguage } from '@snapcal/shared'
+import { getRegionLanguage, TRIAL_DAYS } from '@snapcal/shared'
 import { AuditEvent, auditLog } from '../lib/audit.js'
 
 const telegramAuthSchema = z.object({
@@ -82,7 +82,7 @@ export async function authRoutes(app: FastifyInstance) {
             lastName: body.lastName ?? null,
             avatarUrl: body.avatarUrl ?? null,
             languageCode,
-            trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+            trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000),
             profile: { create: {} },
           },
           include: { profile: true },
@@ -156,7 +156,7 @@ export async function authRoutes(app: FastifyInstance) {
           lastName: 'User',
           avatarUrl: null,
           languageCode: 'ru',
-          trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000),
           profile: { create: {} },
         },
         include: { profile: true },
@@ -236,7 +236,7 @@ export async function authRoutes(app: FastifyInstance) {
           lastName: tgUser.last_name,
           avatarUrl: tgUser.photo_url,
           languageCode,
-          trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000),
           profile: {
             create: {},
           },
@@ -338,7 +338,7 @@ export async function authRoutes(app: FastifyInstance) {
           lastName: null,
           avatarUrl: null,
           languageCode: 'ru',
-          trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000),
           profile: { create: {} },
         },
         include: { profile: true },

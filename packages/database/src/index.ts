@@ -31,3 +31,4 @@ export { PrismaClient }
 export * from './chunking.js'
 export * from './knowledgeVector.js'
 export * from './prompts.js'
+export * from './subscriptions.js'

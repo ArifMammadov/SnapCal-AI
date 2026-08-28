@@ -1,4 +1,4 @@
-import { useState, createContext, useContext } from 'react'
+import { useState, createContext, useContext, useEffect } from 'react'
 import { HomeIcon, ActivityIcon, CoachIcon, StatsIcon, ProfileIcon } from './components/ui.js'
 import { HomeScreen } from './screens/HomeScreen.js'
 import { ActivityScreen } from './screens/ActivityScreen.js'
@@ -11,6 +11,7 @@ import { useTelegram } from './hooks/useTelegram.js'
 import { useAppStore, type Tab } from './store/index.js'
 import { t, initLanguage } from './lib/i18n.js'
 import './index.css'
+import { PaywallModal } from './components/PaywallModal.js'
 
 initLanguage()
 
@@ -46,6 +47,16 @@ export function App() {
   const setActiveTab = useAppStore((s) => s.setActiveTab)
   const [darkMode, setDarkMode] = useState(true)
   const [showMarketplace, setShowMarketplace] = useState(false)
+  const [paywallCode, setPaywallCode] = useState<'DAILY_SCAN_LIMIT' | 'DAILY_TEXT_LIMIT' | 'DAILY_LIMIT_REACHED' | null>(null)
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const code = (e as CustomEvent).detail?.code ?? 'DAILY_LIMIT_REACHED'
+      setPaywallCode(code)
+    }
+    window.addEventListener('snapcal:paywall', handler)
+    return () => window.removeEventListener('snapcal:paywall', handler)
+  }, [])
 
   if (!ready) {
     return (
@@ -95,6 +106,8 @@ export function App() {
               {showMarketplace && <MarketplaceScreen />}
             </div>
           </div>
+
+          {paywallCode && <PaywallModal code={paywallCode} onClose={() => setPaywallCode(null)} />}
 
           {!showMarketplace && (
             <nav

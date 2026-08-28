@@ -274,6 +274,18 @@ export type TranslationKey =
   | 'sessionExpired'
   | 'min'
   | 'g'
+  | 'paywallTitle'
+  | 'paywallSubtitle'
+  | 'paywallScanLimit'
+  | 'paywallTextLimit'
+  | 'paywallTrialExpired'
+  | 'subscribeButton'
+  | 'subscriptionSuccess'
+  | 'subscriptionPending'
+  | 'subscriptionFailed'
+  | 'restorePurchases'
+  | 'freePlanBadge'
+  | 'proPlanBadge'
 
 const en: Record<TranslationKey, string | ((...args: any[]) => string)> = {
   appName: 'SnapCal AI',
@@ -564,7 +576,7 @@ const en: Record<TranslationKey, string | ((...args: any[]) => string)> = {
   faqDiet: 'Can the AI coach really build a diet for me?',
   faqDietAnswer: 'Yes. Tell the coach your goal, dietary preferences, allergies and activity level. It will create daily calorie, protein, carb, fat, water and step targets and a step-by-step timeline.',
   faqFree: 'Does SnapCal work without a subscription?',
-  faqFreeAnswer: 'Yes. New users get a 7-day unlimited trial. After that you can use 1 free food scan per day and unlimited text chat with the AI coach. Upgrade for unlimited scans and advanced analytics.',
+  faqFreeAnswer: 'Yes. New users get a 1-day unlimited trial. After that you can use 1 free food scan per day and 10 free text messages with the AI coach. Upgrade for unlimited scans and advanced analytics.',
   faqData: 'Is my data safe?',
   faqDataAnswer: 'Yes. Your data is encrypted in transit and at rest, stored in secure EU-based data centers, and never sold to third parties. You can request full account deletion at any time.',
   faqLanguage: 'How do I change my language or units?',
@@ -579,6 +591,20 @@ const en: Record<TranslationKey, string | ((...args: any[]) => string)> = {
   sessionExpired: 'Session expired. Please log in again.',
   min: "min",
   g: "g",
+
+  // Subscription / paywall
+  paywallTitle: 'SnapCal Pro',
+  paywallSubtitle: 'Unlimited food scans and AI coach chat',
+  paywallScanLimit: 'Free photo scan limit reached for today',
+  paywallTextLimit: 'Free text message limit reached for today',
+  paywallTrialExpired: 'Your 1-day trial has ended',
+  subscribeButton: 'Subscribe for {{price}} Stars/month',
+  subscriptionSuccess: 'Payment successful! SnapCal Pro is active.',
+  subscriptionPending: 'Payment pending. Please wait a moment.',
+  subscriptionFailed: 'Payment failed. Please try again.',
+  restorePurchases: 'Restore subscription',
+  freePlanBadge: 'Free plan',
+  proPlanBadge: 'Pro',
 }
 
 const ru: Record<TranslationKey, string | ((...args: any[]) => string)> = {
@@ -860,7 +886,7 @@ const ru: Record<TranslationKey, string | ((...args: any[]) => string)> = {
   faqDiet: 'Может ли AI-коуч составить диету для меня?',
   faqDietAnswer: 'Да. Расскажите коучу о цели, предпочтениях в еде, аллергиях и уровне активности. Он создаст дневные цели по калориям, белку, углеводам, жирам, воде и шагам, а также пошаговый план.',
   faqFree: 'Работает ли SnapCal без подписки?',
-  faqFreeAnswer: 'Да. Новые пользователи получают 7 дней безлимита. После этого доступен 1 бесплатный скан пищи в день и неограниченный текстовый чат с AI-коучем. Подписка открывает безлимитные сканы и продвинутую аналитику.',
+  faqFreeAnswer: 'Да. Новые пользователи получают 1 день безлимита. После этого доступен 1 бесплатный скан пищи в день и 10 бесплатных текстовых сообщений с AI-коучем. Подписка открывает безлимитные сканы и продвинутую аналитику.',
   faqData: 'Мои данные в безопасности?',
   faqDataAnswer: 'Да. Данные шифруются при передаче и хранении, размещены в защищённых европейских дата-центрах и никогда не продаются третьим лицам. Вы можете запросить полное удаление аккаунта в любое время.',
   faqLanguage: 'Как изменить язык или единицы измерения?',
@@ -871,6 +897,20 @@ const ru: Record<TranslationKey, string | ((...args: any[]) => string)> = {
   sessionExpired: 'Сессия истекла. Пожалуйста, войдите снова.',
   min: "мин",
   g: "г",
+
+  // Subscription / paywall
+  paywallTitle: 'SnapCal Pro',
+  paywallSubtitle: 'Безлимитный анализ еды и общение с AI-коучем',
+  paywallScanLimit: 'Бесплатный лимит фото-сканов на сегодня исчерпан',
+  paywallTextLimit: 'Бесплатный лимит сообщений на сегодня исчерпан',
+  paywallTrialExpired: 'Ваш 1-дневный пробный период закончился',
+  subscribeButton: 'Подписаться за {{price}} Stars/мес',
+  subscriptionSuccess: 'Оплата прошла успешно! SnapCal Pro активен.',
+  subscriptionPending: 'Оплата в обработке. Подождите немного.',
+  subscriptionFailed: 'Оплата не прошла. Попробуйте ещё раз.',
+  restorePurchases: 'Восстановить подписку',
+  freePlanBadge: 'Бесплатный тариф',
+  proPlanBadge: 'Pro',
 }
 
 const uz: Record<TranslationKey, string | ((...args: any[]) => string)> = {
@@ -1147,6 +1187,20 @@ const uz: Record<TranslationKey, string | ((...args: any[]) => string)> = {
   sessionExpired: "Sessiya muddati tugadi. Iltimos, qaytadan tizimga kiring.",
   min: "daq",
   g: "g",
+
+  // Subscription / paywall
+  paywallTitle: 'SnapCal Pro',
+  paywallSubtitle: 'Cheksiz ovqat tahlili va AI-koach suhbati',
+  paywallScanLimit: "Bugun bepul foto-skan limiti tugadi",
+  paywallTextLimit: "Bugun bepul matn xabarlari limiti tugadi",
+  paywallTrialExpired: "Sizning 1 kunlik sinov muddatingiz tugadi",
+  subscribeButton: '{{price}} Stars/oy obuna',
+  subscriptionSuccess: "To'lov muvaffaqiyatli! SnapCal Pro faol.",
+  subscriptionPending: "To'lov qayta ishlanmoqda. Bir oz kuting.",
+  subscriptionFailed: "To'lov amalga oshmadi. Qayta urinib ko'ring.",
+  restorePurchases: 'Obunani tiklash',
+  freePlanBadge: 'Bepul tarif',
+  proPlanBadge: 'Pro',
 }
 
 const kk: Record<TranslationKey, string | ((...args: any[]) => string)> = {
@@ -1423,6 +1477,20 @@ const kk: Record<TranslationKey, string | ((...args: any[]) => string)> = {
   sessionExpired: "Сеанс аяқталды. Жүйеге қайта кіріңіз.",
   min: "мин",
   g: "г",
+
+  // Subscription / paywall
+  paywallTitle: 'SnapCal Pro',
+  paywallSubtitle: 'Шексіз тағам талдауы және AI-коучпен сөйлесу',
+  paywallScanLimit: 'Бүгінгі тегін фото-скан лимиті аяқталды',
+  paywallTextLimit: 'Бүгінгі тегін мәтін хабарламалары лимиті аяқталды',
+  paywallTrialExpired: 'Сіздің 1 күндік сынақ мерзіміңіз аяқталды',
+  subscribeButton: '{{price}} Stars/ай жазылу',
+  subscriptionSuccess: 'Төлем сәтті өтті! SnapCal Pro белсенді.',
+  subscriptionPending: 'Төлем өңделуде. Сәл күтіңіз.',
+  subscriptionFailed: 'Төлем сәтсіз аяқталды. Қайта байқап көріңіз.',
+  restorePurchases: 'Жазылысты қалпына келтіру',
+  freePlanBadge: 'Тегін тариф',
+  proPlanBadge: 'Pro',
 }
 
 const az: Record<TranslationKey, string | ((...args: any[]) => string)> = {
@@ -1699,6 +1767,20 @@ const az: Record<TranslationKey, string | ((...args: any[]) => string)> = {
   sessionExpired: "Oxunub: Daxil ol",
   min: "dəq",
   g: "q",
+
+  // Subscription / paywall
+  paywallTitle: 'SnapCal Pro',
+  paywallSubtitle: 'Limitsiz qida təhlili və AI-koach söhbəti',
+  paywallScanLimit: 'Bugün pulsuz foto-skane limiti bitdi',
+  paywallTextLimit: 'Bugün pulsuz mətn mesajı limiti bitdi',
+  paywallTrialExpired: 'Sizin 1 günlük sınaq müddətiniz bitdi',
+  subscribeButton: '{{price}} Stars/ay abunə',
+  subscriptionSuccess: 'Ödəniş uğurlu oldu! SnapCal Pro aktivdir.',
+  subscriptionPending: 'Ödəniş emal olunur. Bir az gözləyin.',
+  subscriptionFailed: 'Ödəniş alınmadı. Zəhmət olmasa, yenidən cəhd edin.',
+  restorePurchases: 'Abunəni bərpa edin',
+  freePlanBadge: 'Pulsuz tarif',
+  proPlanBadge: 'Pro',
 }
 
 const tr: Record<TranslationKey, string | ((...args: any[]) => string)> = {
@@ -1975,6 +2057,20 @@ const tr: Record<TranslationKey, string | ((...args: any[]) => string)> = {
   sessionExpired: "Oturum sona erdi. Lütfen tekrar giriş yapın.",
   min: "dk",
   g: "g",
+
+  // Subscription / paywall
+  paywallTitle: 'SnapCal Pro',
+  paywallSubtitle: 'Sınırsız yiyecek taraması ve AI koç sohbeti',
+  paywallScanLimit: 'Bugün için ücretsiz fotoğraf tarama limitine ulaşıldı',
+  paywallTextLimit: 'Bugün için ücretsiz metin mesajı limitine ulaşıldı',
+  paywallTrialExpired: '1 günlük deneme süreniz sona erdi',
+  subscribeButton: '{{price}} Stars/ay abone ol',
+  subscriptionSuccess: 'Ödeme başarılı! SnapCal Pro aktif.',
+  subscriptionPending: 'Ödeme işleniyor. Lütfen biraz bekleyin.',
+  subscriptionFailed: 'Ödeme başarısız. Lütfen tekrar deneyin.',
+  restorePurchases: 'Aboneliği geri yükle',
+  freePlanBadge: 'Ücretsiz plan',
+  proPlanBadge: 'Pro',
 }
 
 const ar: Record<TranslationKey, string | ((...args: any[]) => string)> = {
@@ -2251,6 +2347,20 @@ const ar: Record<TranslationKey, string | ((...args: any[]) => string)> = {
   sessionExpired: "انتهت الجلسة تفضل بالدخول مجدداً",
   min: "دقيقة",
   g: "غ",
+
+  // Subscription / paywall
+  paywallTitle: 'SnapCal Pro',
+  paywallSubtitle: 'مسح الطعام غير المحدود والدردشة مع مدرب الذكاء الاصطناعي',
+  paywallScanLimit: 'تم الوصول إلى الحد الأقصى المجاني لمسح الصور لهذا اليوم',
+  paywallTextLimit: 'تم الوصول إلى الحد الأقصى المجاني للرسائل النصية لهذا اليوم',
+  paywallTrialExpired: 'انتهت فترة التجربة المجانية لمدة يوم واحد',
+  subscribeButton: 'اشترك مقابل {{price}} نجمة/شهر',
+  subscriptionSuccess: 'نجح الدفع! SnapCal Pro نشط.',
+  subscriptionPending: 'الدفع قيد المعالجة. يرجى الانتظار قليلاً.',
+  subscriptionFailed: 'فشل الدفع. يرجى المحاولة مرة أخرى.',
+  restorePurchases: 'استعادة الاشتراك',
+  freePlanBadge: 'الخطة المجانية',
+  proPlanBadge: 'Pro',
 }
 
 
@@ -2320,7 +2430,13 @@ export function t(key: TranslationKey, ...args: any[]): string {
   if (typeof value === 'function') {
     return (value as (...args: any[]) => string)(...args)
   }
-  if (typeof value === 'string') return value
+  if (typeof value === 'string') {
+    const vars = args[0]
+    if (vars && typeof vars === 'object' && !Array.isArray(vars)) {
+      return value.replace(/\{\{(\w+)\}\}/g, (_, v) => String(vars[v] ?? ''))
+    }
+    return value
+  }
   return key
 }
 

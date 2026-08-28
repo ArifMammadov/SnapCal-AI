@@ -5,9 +5,8 @@ import { prisma } from '@snapcal/database'
 import { requireAuth } from './users.js'
 import { env } from '../lib/env.js'
 import { normalizeLanguage, t } from '../lib/i18n.js'
-import { DEFAULT_FREE_AI_DAILY_LIMIT } from '@snapcal/shared'
 import { enqueuePhotoAnalysis, finalizePhotoAnalysis, getVisionJobContext, pollPhotoAnalysisStatus } from '../lib/aiAgentClient.js'
-import { checkAiLimit } from '../lib/subscriptionLimits.js'
+import { checkPhotoScanLimit, checkTextMessageLimit, logAiUsage } from '../lib/subscriptionLimits.js'
 
 const agent = axios.create({
   baseURL: env.AI_AGENT_URL,
@@ -63,26 +62,6 @@ interface AiAgentResponse {
   }
 }
 
-async function checkAiLimitOld(userId: string): Promise<{ allowed: boolean; reason?: string }> {
-  const user = await prisma.user.findUnique({ where: { id: userId } })
-  if (!user) return { allowed: false, reason: 'USER_NOT_FOUND' }
-
-  const now = new Date()
-  if (user.trialEndsAt && user.trialEndsAt > now) return { allowed: true }
-  if (['active', 'trialing'].includes(user.subscriptionStatus)) return { allowed: true }
-
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0)
-  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0)
-  const count = await prisma.chatMessage.count({
-    where: { userId, role: 'USER', createdAt: { gte: start, lt: end } },
-  })
-
-  if (count >= DEFAULT_FREE_AI_DAILY_LIMIT) {
-    return { allowed: false, reason: 'DAILY_LIMIT_REACHED' }
-  }
-  return { allowed: true }
-}
-
 const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
   app.addHook('preHandler', requireAuth)
 
@@ -116,24 +95,14 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
     config: { rateLimit: { max: 20, timeWindow: '1 minute' } },
   }, async (request: FastifyRequest, reply) => {
     const userId = request.user!.userId
-    // Text chat should not consume the daily free scan budget; only photo analysis does.
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { trialEndsAt: true, subscriptionStatus: true, languageCode: true } })
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { languageCode: true } })
     if (!user) {
       return reply.status(401).send({ error: { code: 'UNAUTHORIZED', message: t('user_not_found', normalizeLanguage(null)) } })
     }
     const lang = normalizeLanguage(user.languageCode)
-    const now = new Date()
-    const isPremium = (user.trialEndsAt && user.trialEndsAt > now) || ['active', 'trialing'].includes(user.subscriptionStatus.toLowerCase())
-    if (!isPremium) {
-      // Free users get up to 10 text messages per day to keep the coach usable while scans are limited.
-      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0)
-      const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0)
-      const textMessagesToday = await prisma.chatMessage.count({
-        where: { userId, role: 'USER', type: 'TEXT', createdAt: { gte: start, lt: end } },
-      })
-      if (textMessagesToday >= 10) {
-        return reply.status(429).send({ error: { code: 'DAILY_TEXT_LIMIT_REACHED', message: t('daily_text_limit', lang) } })
-      }
+    const textLimit = await checkTextMessageLimit(userId)
+    if (!textLimit.allowed) {
+      return reply.status(429).send({ error: { code: textLimit.paywallCode || 'DAILY_TEXT_LIMIT_REACHED', message: t('daily_text_limit', lang) } })
     }
 
     const { message, attachments } = chatSchema.parse(request.body)
@@ -141,6 +110,8 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
     const userMessage = await prisma.chatMessage.create({
       data: { userId, role: 'USER', type: 'TEXT', content: message, attachments: attachments ? { attachments } : undefined },
     })
+
+    await logAiUsage(userId, 'TEXT_MESSAGE').catch(() => {})
 
     try {
       const { data: aiResponse } = await agent.post<AiAgentResponse>(
@@ -220,12 +191,14 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
     const userId = request.user!.userId
     const userLang = await prisma.user.findUnique({ where: { id: userId }, select: { languageCode: true } })
     const lang = normalizeLanguage(userLang?.languageCode)
-    const limit = await checkAiLimit(userId)
+    const limit = await checkPhotoScanLimit(userId)
     if (!limit.allowed) {
-      return reply.status(429).send({ error: { code: limit.reason, message: limit.paywallMessage || t('daily_text_limit', lang) } })
+      return reply.status(429).send({ error: { code: limit.paywallCode || 'DAILY_SCAN_LIMIT_REACHED', message: t('daily_scan_limit', lang) } })
     }
 
     const { imageUrl } = analyzePhotoSchema.parse(request.body)
+
+    await logAiUsage(userId, 'PHOTO_SCAN').catch(() => {})
 
     try {
       const { jobId, statusUrl, messageId } = await enqueuePhotoAnalysis(userId, imageUrl)
