@@ -81,6 +81,7 @@ export function LoginScreen() {
       const needsOnboarding = !profile || !profile.gender || !profile.heightCm || !profile.currentWeightKg || !profile.primaryGoal
 
       if (needsOnboarding) {
+        setLoading(false)
         setStep('onboarding')
       } else {
         setUser(authUser)
