@@ -27,7 +27,7 @@ const envSchema = z.object({
   AI_AGENT_SECRET: z.string().min(16),
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
   OTEL_EXPORTER_OTLP_HEADERS: z.string().optional(),
-  SENTRY_DSN: z.string().url().optional().default('placeholder'),
+  SENTRY_DSN: z.string().url().optional(),
 })
 
 export const env = envSchema.parse(process.env)
