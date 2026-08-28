@@ -96,14 +96,16 @@ async function seedTheMealDBRegions() {
     try {
       const meals = await fetchTheMealDBMealsByArea(area)
       const details: any[] = []
-      for (const meal of meals.slice(0, 30)) {
+      for (const meal of meals.slice(0, 25)) {
         try {
           const d = await fetchTheMealDBMealDetails(meal.idMeal)
           if (d) details.push(d)
+          await new Promise((r) => setTimeout(r, 200))
         } catch (e) {
           console.warn('detail fetch', meal.idMeal, (e as Error).message)
         }
       }
+      await new Promise((r) => setTimeout(r, 1000))
 
       const lines = details.map((m) => {
         const ingredients = extractIngredients(m)

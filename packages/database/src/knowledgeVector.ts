@@ -18,6 +18,7 @@ export async function generateEmbedding(
       `${baseUrl}/embeddings`,
       {
         model: 'openai/text-embedding-3-small',
+        dimensions: 768,
         input: text.slice(0, 8000),
       },
       {
