@@ -63,7 +63,7 @@ export async function indexArticleVector(
       .map((row) => {
         const embeddingLiteral = `[${row.embedding!.join(',')}]`
         return prisma.$executeRawUnsafe(
-          `INSERT INTO knowledge_chunks (id, articleId, chunk_index, content, embedding)
+          `INSERT INTO knowledge_chunks ("id", "articleId", "chunkIndex", "content", "embedding")
            VALUES (gen_random_uuid(), $1::uuid, $2, $3, $4::vector)`,
           articleId,
           row.chunkIndex,
