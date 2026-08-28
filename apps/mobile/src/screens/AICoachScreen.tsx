@@ -2,6 +2,21 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { Button } from '../components/ui.js'
 import { useChat, type ChatMessage } from '../lib/data.js'
 import { useAppStore } from '../store/index.js'
+import { t, getCurrentLanguage, type Language } from '../lib/i18n.js'
+
+const _localeMap: Record<Language, string> = {
+  en: 'en-US',
+  ru: 'ru-RU',
+  uz: 'uz-UZ',
+  kk: 'kk-KZ',
+  az: 'az-AZ',
+  tr: 'tr-TR',
+  ar: 'ar-SA',
+}
+
+function isRussian(): boolean {
+  return getCurrentLanguage() === 'ru'
+}
 
 function parseMetricFromText(text: string): { metricType: 'WATER_ML' | 'SLEEP_H' | 'WEIGHT_KG' | 'STEPS'; value: number } | null {
   const t = text.toLowerCase().replace(/,/g, '.')
@@ -68,7 +83,6 @@ function parseActivityFromText(text: string): { type: string; distanceM?: number
 }
 
 const LOCALE = typeof navigator !== 'undefined' ? navigator.language : 'en'
-const IS_RUSSIAN = /^ru/.test(LOCALE)
 
 function buildPendingFoodData(pending: { foodData: any; imageUrl?: string }): any {
   return {
@@ -77,7 +91,7 @@ function buildPendingFoodData(pending: { foodData: any; imageUrl?: string }): an
   }
 }
 
-const suggestedPrompts = IS_RUSSIAN
+const suggestedPrompts = isRussian()
   ? [
       '📸 Проанализируй фото еды',
       '🍽️ Что приготовить на ужин?',
@@ -170,22 +184,22 @@ export function AICoachScreen() {
   }, [input, sending, messages, setMessages, logMetric, logFood, sendMessage])
 
   const handleNewChat = useCallback(async () => {
-    if (window.confirm(IS_RUSSIAN ? 'Очистить историю чата?' : 'Clear chat history?')) {
+    if (window.confirm(t('clearHistoryQuestion'))) {
       const ok = await clearHistory()
       if (ok) inputRef.current?.focus()
     }
   }, [clearHistory])
 
   const quickActions = [
-    { label: '💧 Вода', metric: ['WATER_ML', 250] as const },
-    { label: '😴 Сон', metric: ['SLEEP_H', 7.5] as const },
-    { label: '⚖️ Вес', metric: ['WEIGHT_KG', 0] as const },
-    { label: '👟 Шаги', metric: ['STEPS', 5000] as const },
+    { label: t('metricWater'), icon: '💧', metric: ['WATER_ML', 250] as const },
+    { label: t('metricSleep'), icon: '😴', metric: ['SLEEP_H', 7.5] as const },
+    { label: t('metricWeight'), icon: '⚖️', metric: ['WEIGHT_KG', 0] as const },
+    { label: t('metricSteps'), icon: '👟', metric: ['STEPS', 5000] as const },
   ]
 
   const handleQuickMetric = useCallback((metricType: 'WATER_ML' | 'SLEEP_H' | 'WEIGHT_KG' | 'STEPS', value: number) => {
     if (metricType === 'WEIGHT_KG') {
-      const weightStr = window.prompt(IS_RUSSIAN ? 'Введите ваш вес в кг' : 'Enter your weight in kg')
+      const weightStr = window.prompt(t('enterWeight'))
       const weight = Number(weightStr)
       if (!weightStr || Number.isNaN(weight) || weight <= 0) return
       logMetric('WEIGHT_KG', weight, false)
@@ -196,7 +210,7 @@ export function AICoachScreen() {
 
   const toggleVoice = useCallback(() => {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      window.alert(IS_RUSSIAN ? 'Голосовой ввод не поддерживается в этом браузере.' : 'Voice input is not supported in this browser.')
+      window.alert(t('voiceUnsupported'))
       return
     }
     if (listening) {
@@ -205,7 +219,7 @@ export function AICoachScreen() {
     }
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     const recognition = new SpeechRecognition()
-    recognition.lang = user?.languageCode ?? (IS_RUSSIAN ? 'ru-RU' : LOCALE)
+    recognition.lang = _localeMap[(user?.languageCode as Language) ?? getCurrentLanguage()]
     recognition.interimResults = false
     recognition.maxAlternatives = 1
     recognition.onstart = () => setListening(true)
@@ -217,7 +231,7 @@ export function AICoachScreen() {
     }
     recognition.onerror = () => {
       setListening(false)
-      window.alert(IS_RUSSIAN ? 'Не удалось распознать голос. Попробуйте ещё раз.' : 'Could not recognize voice. Please try again.')
+      window.alert(t('voiceFailed'))
     }
     recognitionRef.current = recognition
     recognition.start()
@@ -237,18 +251,22 @@ export function AICoachScreen() {
           {imageUrl && <img src={imageUrl} alt="food photo" style={{ width: '100%', height: 160, objectFit: 'cover', display: 'block' }} />}
           <div style={{ padding: '14px 16px' }}>
             <p className="font-display" style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-              {IS_RUSSIAN ? 'Анализирую фото...' : 'Analyzing photo...'}
+              {t('analyzingPhoto')}
               <span className="spinner" style={{ width: 14, height: 14, border: '2px solid var(--text-secondary)', borderTopColor: 'transparent', borderRadius: '50%', display: 'inline-block' }} />
             </p>
-            <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '4px 0 0' }}>{IS_RUSSIAN ? 'Секундочку' : 'Please wait'}</p>
+            <p style={{ fontSize: 11, color: 'var(--text-secondary)', margin: '4px 0 0' }}>{t('pleaseWait')}</p>
           </div>
         </div>
       )
     }
 
-    const macroLabels = IS_RUSSIAN
-      ? { calories: 'Калории', protein: 'Белок', carbs: 'Углеводы', fat: 'Жиры', serving: 'Порция' }
-      : { calories: 'Calories', protein: 'Protein', carbs: 'Carbs', fat: 'Fat', serving: 'Serving' }
+    const macroLabels = {
+      calories: t('calories'),
+      protein: t('protein'),
+      carbs: t('carbs'),
+      fat: t('fat'),
+      serving: t('serving'),
+    }
 
     return (
       <div style={{ background: 'var(--bg-card)', borderRadius: 18, border: '1px solid var(--border)', overflow: 'hidden', boxShadow: 'var(--shadow-card)' }}>
@@ -406,18 +424,18 @@ export function AICoachScreen() {
             </div>
             <div>
               <h1 className="font-display" style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-                SnapCal AI Coach
+                {t('aiCoachTitle')}
               </h1>
               <p style={{ fontSize: 12, color: 'var(--green)', margin: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
                 <span className="pulse-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green)', display: 'inline-block' }} />
-                Online · Nutrition & Fitness Expert
+                {t('aiCoachOnline')}
               </p>
             </div>
           </div>
           <button
             onClick={handleNewChat}
-            aria-label={IS_RUSSIAN ? 'Новый чат' : 'New chat'}
-            title={IS_RUSSIAN ? 'Новый чат' : 'New chat'}
+            aria-label={t('newChat')}
+            title={t('newChat')}
             style={{
               width: 38,
               height: 38,
@@ -468,7 +486,7 @@ export function AICoachScreen() {
               fontFamily: 'inherit',
             }}
           >
-            {a.label}
+            {a.icon} {a.label}
           </button>
         ))}
         {suggestedPrompts.map((p) => (
@@ -673,7 +691,7 @@ export function AICoachScreen() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              placeholder={IS_RUSSIAN ? 'Спросите о питании или тренировках...' : 'Ask about nutrition or fitness...'}
+              placeholder={t('askAboutNutrition')}
               style={{
                 flex: 1,
                 background: 'none',
@@ -727,12 +745,9 @@ export function AICoachScreen() {
 }
 
 function buildGreeting(user: { firstName?: string | null; languageCode?: string } | null): string {
-  const isRu = user?.languageCode ? /^ru/.test(user.languageCode) : IS_RUSSIAN
   const name = user?.firstName?.trim()
-  const greeting = isRu
-    ? `Привет${name ? ', ' + name : ''}! 👋 Я ваш AI-коуч по питанию и фитнесу. Задавайте вопросы, присылайте фото еды или просто расскажите, что вы съели — я помогу с подсчётом калорий и макросов.`
-    : `Good morning${name ? ', ' + name : ''}! 👋 I'm your AI nutrition coach. Ask questions, send food photos, or tell me what you ate — I'll help track calories and macros.`
-  return greeting
+  const hello = name ? t('helloName', name) : t('helloFriend')
+  return `${hello} 👋 ${t('coachIntro')}`
 }
 
 function findPendingMetric(messages: ChatMessage[]): { metricType: 'WATER_ML' | 'SLEEP_H' | 'WEIGHT_KG' | 'STEPS'; value: number; confirmationMessageId: string } | null {

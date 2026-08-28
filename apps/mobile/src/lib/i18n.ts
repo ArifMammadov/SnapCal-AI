@@ -39,6 +39,7 @@ export type TranslationKey =
   | 'calculatingPlan'
   | 'helloName'
   | 'helloFriend'
+  | 'coachIntro'
   | 'greetingMorning'
   | 'greetingAfternoon'
   | 'greetingEvening'
@@ -315,6 +316,7 @@ const en: Record<TranslationKey, string | ((...args: any[]) => string)> = {
   calculatingPlan: 'AI is calculating plan...',
   helloName: (name: string) => `Hi, ${name}!`,
   helloFriend: 'Hi, friend!',
+  coachIntro: "I'm your AI nutrition coach. Ask questions, send food photos, or tell me what you ate — I'll help track calories and macros.",
 
   // Home,
   greetingMorning: 'Good morning',
@@ -618,6 +620,7 @@ const ru: Record<TranslationKey, string | ((...args: any[]) => string)> = {
   calculatingPlan: 'AI рассчитывает план...',
   helloName: (name: string) => `Привет, ${name}!`,
   helloFriend: 'Привет, друг!',
+  coachIntro: 'Я ваш AI-коуч по питанию и фитнесу. Задавайте вопросы, присылайте фото еды или просто расскажите, что вы съели — я помогу с подсчётом калорий и макросов.',
   greetingMorning: 'Доброе утро',
   greetingAfternoon: "Добрый день",
   greetingEvening: "Добрый вечер",
@@ -909,6 +912,7 @@ const uz: Record<TranslationKey, string | ((...args: any[]) => string)> = {
   calculatingPlan: "Sun'iy intellekt rejani hisoblamoqda...",
   helloName: (name: string) => 'Salom, ' + name + '!',
   helloFriend: "'Hi, friend!',\n\n  // Home",
+  coachIntro: 'Men sizning AI ovqatlanish va fitnes murabbiyingizman. Savollar bering, ovqat rasmlarini yuboring yoki nima yeganligingizni ayting — kaloriya va makrolarni hisoblashga yordam beraman.',
   greetingMorning: "Xayrli tong",
   greetingAfternoon: "Tun yaxshimi",
   greetingEvening: "Xayrli kech",
@@ -1184,6 +1188,7 @@ const kk: Record<TranslationKey, string | ((...args: any[]) => string)> = {
   calculatingPlan: "AI жоспарды есептеп жатыр...",
   helloName: (name: string) => 'Сәлем, ' + name + '!',
   helloFriend: "'Hi, friend!',\n\n  // Home",
+  coachIntro: 'Мен сіздің AI тамақтану және фитнес жаттықтырушыңызбын. Сұрақтар қойыңыз, тағам суреттерін жіберіңіз немесе не жегеніңізді айтыңыз — калория мен макронутриенттерді есептеуге көмектесемін.',
   greetingMorning: "Қайырлы таң",
   greetingAfternoon: "Қайырлы күн",
   greetingEvening: "Қайырлы кеш",
@@ -1459,6 +1464,7 @@ const az: Record<TranslationKey, string | ((...args: any[]) => string)> = {
   calculatingPlan: "AI planı hesab edir ...",
   helloName: (name: string) => 'Salam, ' + name + '!',
   helloFriend: "'Hi, friend!',\n\n  // Home",
+  coachIntro: 'Mən sizin AI qidalanma və fitness koçunuzam. Suallar verin, qida şəkilləri göndərin və ya nə yediyinizi deyin — kalori və makroların hesablanmasına kömək edəcəyəm.',
   greetingMorning: "Yadda saxla",
   greetingAfternoon: "Günaydın",
   greetingEvening: "Hörmətli axşam",
@@ -1734,6 +1740,7 @@ const tr: Record<TranslationKey, string | ((...args: any[]) => string)> = {
   calculatingPlan: "AI plan hesaplar...",
   helloName: (name: string) => 'Merhaba, ' + name + '!',
   helloFriend: "'Hi, friend!',\n\n  // Home",
+  coachIntro: 'Ben kişisel AI beslenme ve fitness koçunuzum. Sorular sorun, yemek fotoğrafları gönderin veya ne yediğinizi anlatın — kalori ve makroları takip etmenize yardımcı olacağım.',
   greetingMorning: "İyi sabah",
   greetingAfternoon: "İyi günler",
   greetingEvening: "İyi akşamlar",
@@ -2009,6 +2016,7 @@ const ar: Record<TranslationKey, string | ((...args: any[]) => string)> = {
   calculatingPlan: "آي يحسب خطة...",
   helloName: (name: string) => 'مرحباً ' + name + '!',
   helloFriend: "'Hi, friend!',\n\n  // Home",
+  coachIntro: 'أنا مدربك الشخصي للتغذية واللياقة بالذكاء الاصطناعي. اسألني، أرسل صور الطعام، أو أخبرني بما أكلت — سأساعدك في تتبع السعرات والمغذيات الكبرى.',
   greetingMorning: "صباح الخير",
   greetingAfternoon: "مساء الخير",
   greetingEvening: "مساء الخير",
