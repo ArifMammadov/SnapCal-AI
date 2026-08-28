@@ -74,8 +74,17 @@ export function LoginScreen() {
       setAuthTokens(accessToken, refreshToken)
       setToken(accessToken)
       setRefreshToken(refreshToken)
-      setUser(authUser)
-      setStep('complete')
+      setAuthUser(authUser)
+
+      const profile = authUser?.profile
+      const needsOnboarding = !profile || !profile.gender || !profile.heightCm || !profile.currentWeightKg || !profile.primaryGoal
+
+      if (needsOnboarding) {
+        setStep('onboarding')
+      } else {
+        setUser(authUser)
+        setStep('complete')
+      }
     }
 
     const tryStartToken = async (): Promise<boolean> => {
@@ -192,25 +201,22 @@ export function LoginScreen() {
       }
 
       await api.patch('/users/me/profile', update)
-      setStep('complete')
-      const savedUser = authUser
-        ? {
-            ...authUser,
-            firstName: update.firstName,
-            profile: {
-              ...(authUser.profile || {}),
-              birthDate: update.birthDate,
-              gender: update.gender,
-              heightCm: update.heightCm,
-              currentWeightKg: update.currentWeightKg,
-              targetWeightKg: update.targetWeightKg ?? null,
-              primaryGoal: update.primaryGoal,
-              activityLevel: update.activityLevel,
-            },
-          }
-        : null
-      if (savedUser) setUser(savedUser)
-      if (!savedUser) setError('Unable to finalize login')
+
+      // Generate personalized AI plan based on completed profile
+      try {
+        await api.post('/users/me/goal-plan/generate')
+      } catch (planErr: any) {
+        console.warn('[onboarding plan generation]', planErr.response?.data?.error?.message || planErr.message)
+      }
+
+      const meRes = await api.get('/users/me')
+      const savedUser = meRes.data || null
+      if (savedUser) {
+        setUser(savedUser)
+        setStep('complete')
+      } else {
+        setError('Unable to finalize login')
+      }
     } catch (err: any) {
       console.error('[submitOnboarding error]', err)
       setError(err.response?.data?.error?.message || err.message || 'Failed to save profile')
@@ -220,7 +226,16 @@ export function LoginScreen() {
   }
 
   if (step === 'onboarding') {
-    return null
+    return (
+      <OnboardingForm
+        tgUser={tgUser}
+        onboarding={onboarding}
+        setOnboarding={setOnboarding}
+        loading={loading}
+        error={error}
+        onSubmit={submitOnboarding}
+      />
+    )
   }
 
   if (step === 'complete') {
