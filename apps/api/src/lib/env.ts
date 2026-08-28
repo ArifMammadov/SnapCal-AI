@@ -10,6 +10,7 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32),
   JWT_REFRESH_SECRET: z.string().min(32),
   TELEGRAM_BOT_TOKEN: z.string().optional().default('placeholder'),
+  TELEGRAM_BOT_USERNAME: z.string().optional(),
   OPENROUTER_API_KEY: z.string().optional(),
   OPENROUTER_BASE_URL: z.string().url().default('https://openrouter.ai/api/v1'),
   OLLAMA_BASE_URL: z.string().url().default('http://localhost:11434'),
@@ -26,6 +27,7 @@ const envSchema = z.object({
   AI_AGENT_SECRET: z.string().min(16),
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
   OTEL_EXPORTER_OTLP_HEADERS: z.string().optional(),
+  SENTRY_DSN: z.string().url().optional().default('placeholder'),
 })
 
 export const env = envSchema.parse(process.env)

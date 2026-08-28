@@ -1,5 +1,6 @@
 import { getRedis } from '@snapcal/shared'
 import { prisma } from '@snapcal/database'
+import { logger } from '@snapcal/shared'
 
 export interface AiUsageWindow {
   requestsToday: number
@@ -24,6 +25,10 @@ const DEFAULT_LIMITS: Record<string, LimitConfig> = {
   PAST_DUE: { maxRequestsPerDay: 10, maxTokensPerDay: 2_000, maxCostUsdPerDay: 0.2, maxRequestsPerMinute: 2 },
 }
 
+const GLOBAL_DAILY_COST_CAP_USD = Number(process.env.AI_GLOBAL_DAILY_COST_CAP_USD || '200')
+const GLOBAL_DAILY_TOKEN_CAP = Number(process.env.AI_GLOBAL_DAILY_TOKEN_CAP || '5_000_000'.replace(/_/g, ''))
+const GLOBAL_KEY_PREFIX = 'ai:global:usage'
+
 function getWindowKey(userId: string, suffix: string): string {
   return `ai:usage:${userId}:${suffix}`
 }
@@ -39,9 +44,38 @@ export function getUserLimitConfig(subscriptionStatus: string): LimitConfig {
 
 export interface LimitCheckResult {
   allowed: boolean
-  reason?: 'RATE_LIMIT' | 'DAILY_REQUEST_LIMIT' | 'DAILY_TOKEN_LIMIT' | 'DAILY_COST_LIMIT' | 'SUBSCRIPTION_SUSPENDED'
+  reason?: 'RATE_LIMIT' | 'DAILY_REQUEST_LIMIT' | 'DAILY_TOKEN_LIMIT' | 'DAILY_COST_LIMIT' | 'SUBSCRIPTION_SUSPENDED' | 'GLOBAL_COST_CAP' | 'GLOBAL_TOKEN_CAP'
   current: AiUsageWindow
   config: LimitConfig
+}
+
+async function getGlobalUsage(): Promise<{ costUsd: number; tokens: number; requests: number }> {
+  const redis = getRedis()
+  const dayBucket = getDayBucket()
+  const [costStr, tokensStr, requestsStr] = await redis.mget(
+    `${GLOBAL_KEY_PREFIX}:cost:${dayBucket}`,
+    `${GLOBAL_KEY_PREFIX}:tokens:${dayBucket}`,
+    `${GLOBAL_KEY_PREFIX}:requests:${dayBucket}`,
+  )
+  return {
+    costUsd: Number(costStr ?? 0),
+    tokens: Number(tokensStr ?? 0),
+    requests: Number(requestsStr ?? 0),
+  }
+}
+
+export async function recordGlobalAiUsage(inputTokens: number, outputTokens: number, costUsd: number): Promise<void> {
+  const redis = getRedis()
+  const dayBucket = getDayBucket()
+  const ttlSeconds = 25 * 60 * 60
+  const pipeline = redis.pipeline()
+  pipeline.incrbyfloat(`${GLOBAL_KEY_PREFIX}:cost:${dayBucket}`, costUsd)
+  pipeline.incrby(`${GLOBAL_KEY_PREFIX}:tokens:${dayBucket}`, inputTokens + outputTokens)
+  pipeline.incr(`${GLOBAL_KEY_PREFIX}:requests:${dayBucket}`)
+  for (const suffix of ['cost', 'tokens', 'requests']) {
+    pipeline.expire(`${GLOBAL_KEY_PREFIX}:${suffix}:${dayBucket}`, ttlSeconds)
+  }
+  await pipeline.exec()
 }
 
 export async function checkAiUsageLimits(
@@ -67,6 +101,27 @@ export async function checkAiUsageLimits(
   const estimatedCost = estimateCost('openai/gpt-4o', estimatedInputTokens, estimatedOutputTokens)
   const tomorrow = new Date()
   tomorrow.setUTCHours(24, 0, 0, 0)
+
+  // Global platform-level caps to protect against runaway costs / abuse
+  const global = await getGlobalUsage()
+  if (global.costUsd + estimatedCost > GLOBAL_DAILY_COST_CAP_USD) {
+    logger.warn({ globalCostUsd: global.costUsd, cap: GLOBAL_DAILY_COST_CAP_USD, userId }, 'global daily AI cost cap reached')
+    return {
+      allowed: false,
+      reason: 'GLOBAL_COST_CAP',
+      current: { requestsToday, tokensToday, estimatedCostUsd: costToday, windowResetAt: tomorrow },
+      config,
+    }
+  }
+  if (global.tokens + estimatedInputTokens + estimatedOutputTokens > GLOBAL_DAILY_TOKEN_CAP) {
+    logger.warn({ globalTokens: global.tokens, cap: GLOBAL_DAILY_TOKEN_CAP, userId }, 'global daily AI token cap reached')
+    return {
+      allowed: false,
+      reason: 'GLOBAL_TOKEN_CAP',
+      current: { requestsToday, tokensToday, estimatedCostUsd: costToday, windowResetAt: tomorrow },
+      config,
+    }
+  }
 
   if (config.maxRequestsPerDay === 0) {
     return {
@@ -131,6 +186,8 @@ export async function recordAiUsage(
     pipeline.expire(getWindowKey(userId, suffix), ttlSeconds)
   }
   await pipeline.exec()
+
+  await recordGlobalAiUsage(inputTokens, outputTokens, costUsd)
 
   return { costUsd }
 }

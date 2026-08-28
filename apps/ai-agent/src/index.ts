@@ -7,6 +7,9 @@ import agentRoutes from './routes/agent.js'
 import { startVisionWorker } from './lib/visionQueue.js'
 import { registerMetricsEndpoint } from './lib/metrics.js'
 import { getRedis, initTracing, installShutdownHandlers, logger, onShutdown } from '@snapcal/shared'
+import { initSentry } from './lib/sentry.js'
+
+initSentry('snapcal-ai-agent')
 
 async function buildApp() {
   initTracing('snapcal-ai-agent')

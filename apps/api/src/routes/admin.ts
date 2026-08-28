@@ -5,7 +5,6 @@ import { requireAuth } from './users.js'
 import { env } from '../lib/env.js'
 import { enqueueKnowledgeIndex, enqueueKnowledgeIndexAll } from '@snapcal/shared'
 import { logger } from '@snapcal/shared'
-
 const requireAdmin = async (request: FastifyRequest, reply: FastifyReply) => {
   if (request.user?.role !== 'ADMIN') {
     await prisma.auditLog.create({
@@ -81,6 +80,15 @@ const evalCaseSchema = z.object({
   input: z.record(z.unknown()),
   expected: z.record(z.unknown()),
   tags: z.array(z.string()).default([]),
+})
+
+const extendSubscriptionSchema = z.object({
+  days: z.coerce.number().int().min(1).max(365).default(30),
+  status: z.enum(['ACTIVE', 'TRIALING', 'INACTIVE', 'CANCELED']).default('ACTIVE'),
+})
+
+const refundPaymentSchema = z.object({
+  reason: z.string().max(500).optional(),
 })
 
 function slugify(name: string) {
@@ -340,5 +348,143 @@ export async function adminRoutes(app: FastifyInstance) {
       passed: z.boolean(),
     }).parse(request.body)
     return saveEvalRun(data)
+  })
+
+  app.get('/subscriptions/payments', { preHandler: requireAdmin }, async (request: FastifyRequest) => {
+    const { page, limit, status, provider, userId } = z.object({
+      page: z.coerce.number().int().min(1).default(1),
+      limit: z.coerce.number().int().min(1).max(100).default(20),
+      status: z.enum(['PENDING', 'PAID', 'SUCCESS', 'FAILED', 'REFUNDED', 'CANCELED']).optional(),
+      provider: z.enum(['TELEGRAM_STARS', 'STRIPE']).optional(),
+      userId: z.string().uuid().optional(),
+    }).parse(request.query)
+
+    const where: any = {}
+    if (status) where.status = status
+    if (provider) where.provider = provider
+    if (userId) where.userId = userId
+
+    const [payments, total] = await Promise.all([
+      prisma.payment.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        include: { user: { select: { telegramId: true, telegramUsername: true, firstName: true, languageCode: true } } },
+      }),
+      prisma.payment.count({ where }),
+    ])
+
+    return {
+      data: payments.map((p) => ({
+        ...p,
+        amountUsd: p.amountUsd ? Number(p.amountUsd) : null,
+        telegramId: p.user.telegramId?.toString() ?? null,
+        telegramUsername: p.user.telegramUsername,
+        firstName: p.user.firstName,
+        languageCode: p.user.languageCode,
+      })),
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    }
+  })
+
+  app.get('/subscriptions', { preHandler: requireAdmin }, async (request: FastifyRequest) => {
+    const { page, limit, status } = z.object({
+      page: z.coerce.number().int().min(1).default(1),
+      limit: z.coerce.number().int().min(1).max(100).default(20),
+      status: z.enum(['ACTIVE', 'TRIALING', 'INACTIVE', 'CANCELED', 'PAST_DUE']).optional(),
+    }).parse(request.query)
+
+    const where: any = {}
+    if (status) where.status = status
+
+    const [subscriptions, total] = await Promise.all([
+      prisma.subscription.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        include: { user: { select: { telegramId: true, telegramUsername: true, firstName: true } }, plan: true },
+      }),
+      prisma.subscription.count({ where }),
+    ])
+
+    return {
+      data: subscriptions.map((s) => ({
+        ...s,
+        telegramId: s.user.telegramId?.toString() ?? null,
+        telegramUsername: s.user.telegramUsername,
+        firstName: s.user.firstName,
+        planName: s.plan?.name ?? null,
+      })),
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    }
+  })
+
+  app.post('/subscriptions/:id/extend', { preHandler: requireAdmin }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = request.params as { id: string }
+    const { days, status } = extendSubscriptionSchema.parse(request.body)
+    const subscription = await prisma.subscription.findUnique({ where: { id }, include: { user: true } })
+    if (!subscription) {
+      return reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Subscription not found' } })
+    }
+    const now = new Date()
+    const currentPeriodEnd = subscription.currentPeriodEnd && subscription.currentPeriodEnd > now
+      ? subscription.currentPeriodEnd
+      : now
+    const newPeriodEnd = new Date(currentPeriodEnd)
+    newPeriodEnd.setDate(newPeriodEnd.getDate() + days)
+
+    const updated = await prisma.subscription.update({
+      where: { id },
+      data: { status, currentPeriodStart: now, currentPeriodEnd: newPeriodEnd },
+    })
+
+    await prisma.user.update({
+      where: { id: subscription.userId },
+      data: { subscriptionStatus: status, subscriptionExpiresAt: newPeriodEnd },
+    })
+
+    await prisma.auditLog.create({
+      data: {
+        action: 'ADMIN_SUBSCRIPTION_EXTENDED',
+        userId: request.user!.userId,
+        details: { subscriptionId: id, targetUserId: subscription.userId, days, newStatus: status, newPeriodEnd },
+      },
+    })
+
+    return { success: true, subscription: updated }
+  })
+
+  app.post('/subscriptions/payments/:id/refund', { preHandler: requireAdmin }, async (request: FastifyRequest, reply: FastifyReply) => {
+    const { id } = request.params as { id: string }
+    const { reason } = refundPaymentSchema.parse(request.body)
+    const payment = await prisma.payment.findUnique({ where: { id }, include: { user: true } })
+    if (!payment) {
+      return reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Payment not found' } })
+    }
+    if (payment.status !== 'PAID') {
+      return reply.status(400).send({ error: { code: 'INVALID_STATUS', message: 'Only paid payments can be refunded' } })
+    }
+
+    const updated = await prisma.payment.update({
+      where: { id },
+      data: { status: 'REFUNDED', metadata: { ...(payment.metadata as object || {}), refundReason: reason, refundedAt: new Date().toISOString() } },
+    })
+
+    // If Stars payment, we cannot reverse Telegram Stars automatically. Log manual action required.
+    if (payment.provider === 'TELEGRAM_STARS') {
+      logger.warn({ paymentId: id, userId: payment.userId, amountStars: payment.amountStars }, 'Manual Telegram Stars refund required')
+    }
+
+    await prisma.auditLog.create({
+      data: {
+        action: 'ADMIN_PAYMENT_REFUNDED',
+        userId: request.user!.userId,
+        details: { paymentId: id, targetUserId: payment.userId, reason, provider: payment.provider },
+      },
+    })
+
+    return { success: true, payment: updated }
   })
 }

@@ -17,6 +17,10 @@ import { goalRoutes } from './routes/goals.js'
 import { notificationsRoutes } from './routes/notifications.js'
 import { gdprRoutes } from './routes/gdpr.js'
 import { errorHandler } from './lib/error-handler.js'
+import { registerMetricsEndpoint, requestMetricsHook } from './lib/metrics.js'
+import { initSentry } from './lib/sentry.js'
+
+initSentry('snapcal-api')
 
 export async function buildApp() {
   initTracing('snapcal-api')
@@ -101,7 +105,17 @@ export async function buildApp() {
   app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }))
   app.get('/api/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }))
 
+  registerMetricsEndpoint(app)
+  requestMetricsHook(app)
+
   app.setErrorHandler(errorHandler)
+
+  // Send unhandled errors to Sentry and log metric; keep the original errorHandler as final responder
+  app.setErrorHandler(async (err: any, request: any, reply: any) => {
+    const { captureException } = await import('./lib/sentry.js')
+    captureException(err, { route: request.routerPath || request.url, userId: request.user?.userId })
+    return errorHandler(err as any, request, reply)
+  })
 
   await app.register(authRoutes, { prefix: '/api/auth' })
   await app.register(userRoutes, { prefix: '/api/users' })

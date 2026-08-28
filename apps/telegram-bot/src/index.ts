@@ -7,6 +7,7 @@ import { activateTelegramStarsSubscription } from '@snapcal/database'
 
 const bot = new TelegramBot(env.TELEGRAM_BOT_TOKEN, { polling: true })
 
+const TELEGRAM_BOT_USERNAME = env.TELEGRAM_BOT_USERNAME || 'snapcal_ai_bot'
 const MINI_APP_URL = env.MOBILE_APP_URL
 
 function createMiniAppUrl(telegramId: number): string {
@@ -94,6 +95,13 @@ bot.on('successful_payment', async (msg) => {
 
   if (!payload.userId || !payload.planId) {
     logger.warn({ payload }, 'successful_payment missing userId or planId')
+    return
+  }
+
+  // Validate that the invoice payload was issued by this bot instance
+  const expectedPrefix = `stars_${TELEGRAM_BOT_USERNAME}_`
+  if (!payment.invoice_payload?.startsWith(expectedPrefix)) {
+    logger.warn({ payload, invoice_payload: payment.invoice_payload }, 'successful_payment payload prefix mismatch')
     return
   }
 

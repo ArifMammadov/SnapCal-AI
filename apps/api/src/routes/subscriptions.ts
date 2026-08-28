@@ -11,6 +11,12 @@ import axios from 'axios'
 const stripe = env.STRIPE_SECRET_KEY ? new Stripe(env.STRIPE_SECRET_KEY, { apiVersion: '2025-02-24.acacia' }) : null
 
 const TELEGRAM_API_BASE = `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}`
+const TELEGRAM_BOT_USERNAME = env.TELEGRAM_BOT_USERNAME || 'snapcal_ai_bot'
+
+function createStarsInvoicePayload(userId: string, planId: string): string {
+  const raw = JSON.stringify({ userId, planId, ts: Date.now() })
+  return `stars_${TELEGRAM_BOT_USERNAME}_${Buffer.from(raw).toString('base64url').slice(0, 80)}`
+}
 
 const PRO_MONTHLY_PLAN = {
   slug: 'pro_monthly',
@@ -32,7 +38,7 @@ async function ensureProPlan(): Promise<{ id: string; slug: string; priceStars: 
   return { id: plan.id, slug: plan.slug, priceStars: plan.priceStars as number, name: plan.name }
 }
 
-const subscriptionRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
+export async function registerSubscriptionRoutes(app: FastifyInstance) {
   app.addHook('preHandler', requireAuth)
 
   app.get('/status', async (request: FastifyRequest) => {
@@ -105,7 +111,7 @@ const subscriptionRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance
     const lang = normalizeLanguage(user.languageCode)
     const plan = await ensureProPlan()
 
-    const payload = JSON.stringify({ userId: user.id, planId: plan.id, ts: Date.now() })
+    const payload = createStarsInvoicePayload(user.id, plan.id).slice(0, 128)
     try {
       const { data } = await axios.post(`${TELEGRAM_API_BASE}/createInvoiceLink`, {
         title: plan.name,
@@ -303,4 +309,4 @@ const subscriptionRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance
   })
 }
 
-export const subscriptionRoutes = fp(subscriptionRoutesPlugin)
+export const subscriptionRoutes = fp(registerSubscriptionRoutes)

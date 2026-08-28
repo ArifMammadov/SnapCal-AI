@@ -1,0 +1,12 @@
+[Unit]
+Description=SnapCal AI database backup
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+EnvironmentFile=/opt/snapcal-main/.env
+ExecStart=/opt/snapcal-main/infra/scripts/backup-db.sh
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=snapcal-db-backup

@@ -16,6 +16,7 @@
     "@fastify/helmet": "^12.0.0",
     "@fastify/jwt": "^9.0.0",
     "@fastify/rate-limit": "^10.0.0",
+    "@sentry/node": "^8.39.0",
     "@snapcal/database": "workspace:*",
     "@snapcal/shared": "workspace:*",
     "axios": "^1.7.0",

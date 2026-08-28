@@ -586,6 +586,298 @@ function AiLogsPanel() {
   )
 }
 
-function SubscriptionsPanel() {
-  return <p className="text-slate-400">Subscription management will be added here.</p>
+interface Subscription {
+  id: string
+  userId: string
+  telegramId: string | null
+  telegramUsername: string | null
+  firstName: string | null
+  status: string
+  paymentMethod: string | null
+  planName: string | null
+  currentPeriodStart: string | null
+  currentPeriodEnd: string | null
+  createdAt: string
 }
+
+interface Payment {
+  id: string
+  userId: string
+  telegramId: string | null
+  telegramUsername: string | null
+  firstName: string | null
+  languageCode: string
+  provider: string
+  providerTransactionId: string | null
+  telegramChargeId: string | null
+  amountStars: number | null
+  amountUsd: number | null
+  currency: string | null
+  status: string
+  paidAt: string | null
+  createdAt: string
+}
+
+function SubscriptionsPanel() {
+  const [activeTab, setActiveTab] = useState<'subscriptions' | 'payments'>('subscriptions')
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
+  const [payments, setPayments] = useState<Payment[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [selectedSub, setSelectedSub] = useState<Subscription | null>(null)
+  const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null)
+
+  const loadSubscriptions = useCallback(() => {
+    setLoading(true)
+    api
+      .get('/admin/subscriptions')
+      .then((res) => setSubscriptions(res.data.data))
+      .catch((err) => setError(err.response?.data?.error?.message || 'Failed to load subscriptions'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const loadPayments = useCallback(() => {
+    setLoading(true)
+    api
+      .get('/admin/subscriptions/payments')
+      .then((res) => setPayments(res.data.data))
+      .catch((err) => setError(err.response?.data?.error?.message || 'Failed to load payments'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    if (activeTab === 'subscriptions') loadSubscriptions()
+    else loadPayments()
+  }, [activeTab, loadSubscriptions, loadPayments])
+
+  return (
+    <div className="space-y-4">
+      {error && <p className="text-red-400">{error}</p>}
+      <div className="flex flex-wrap gap-2">
+        {(['subscriptions', 'payments'] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setActiveTab(t)}
+            className={`px-4 py-2 rounded-lg text-sm capitalize ${activeTab === t ? 'bg-emerald-500' : 'bg-slate-800'}`}
+          >
+            {t === 'subscriptions' ? 'Подписки' : 'Платежи'}
+          </button>
+        ))}
+        <button
+          onClick={() => (activeTab === 'subscriptions' ? loadSubscriptions() : loadPayments())}
+          className="bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-sm hover:bg-slate-700"
+        >
+          Обновить
+        </button>
+      </div>
+
+      {loading && <p className="text-slate-400">Загрузка...</p>}
+
+      {activeTab === 'subscriptions' && !loading && (
+        <div className="overflow-x-auto rounded-xl border border-slate-800">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-900 text-slate-400">
+              <tr>
+                <th className="p-3 text-left">Telegram ID</th>
+                <th className="p-3 text-left">Имя / Username</th>
+                <th className="p-3 text-left">Статус</th>
+                <th className="p-3 text-left">План</th>
+                <th className="p-3 text-left">Окончание</th>
+                <th className="p-3 text-left"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800">
+              {subscriptions.map((s) => (
+                <tr key={s.id} className="hover:bg-slate-900/50">
+                  <td className="p-3 font-mono">{s.telegramId || '-'}</td>
+                  <td className="p-3">
+                    {s.firstName || '-'} {s.telegramUsername ? `(@${s.telegramUsername})` : ''}
+                  </td>
+                  <td className="p-3">
+                    <span className={`px-2 py-1 rounded text-xs ${s.status === 'ACTIVE' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-700'}`}>
+                      {s.status}
+                    </span>
+                  </td>
+                  <td className="p-3">{s.planName || '-'}</td>
+                  <td className="p-3 text-slate-400">{s.currentPeriodEnd ? new Date(s.currentPeriodEnd).toLocaleDateString() : '-'}</td>
+                  <td className="p-3">
+                    <button
+                      onClick={() => setSelectedSub(s)}
+                      className="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1 rounded"
+                    >
+                      Продлить
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {activeTab === 'payments' && !loading && (
+        <div className="overflow-x-auto rounded-xl border border-slate-800">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-900 text-slate-400">
+              <tr>
+                <th className="p-3 text-left">Telegram ID</th>
+                <th className="p-3 text-left">Имя</th>
+                <th className="p-3 text-left">Провайдер</th>
+                <th className="p-3 text-left">Сумма</th>
+                <th className="p-3 text-left">Статус</th>
+                <th className="p-3 text-left">Дата</th>
+                <th className="p-3 text-left"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800">
+              {payments.map((p) => (
+                <tr key={p.id} className="hover:bg-slate-900/50">
+                  <td className="p-3 font-mono">{p.telegramId || '-'}</td>
+                  <td className="p-3">{p.firstName || '-'} {p.telegramUsername ? `(@${p.telegramUsername})` : ''}</td>
+                  <td className="p-3">{p.provider}</td>
+                  <td className="p-3">
+                    {p.amountStars ? `${p.amountStars} ⭐` : p.amountUsd ? `$${p.amountUsd}` : '-'}
+                  </td>
+                  <td className="p-3">
+                    <span className={`px-2 py-1 rounded text-xs ${p.status === 'PAID' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-700'}`}>
+                      {p.status}
+                    </span>
+                  </td>
+                  <td className="p-3 text-slate-400">{p.paidAt ? new Date(p.paidAt).toLocaleString() : new Date(p.createdAt).toLocaleString()}</td>
+                  <td className="p-3">
+                    {p.status === 'PAID' && (
+                      <button
+                        onClick={() => setSelectedPayment(p)}
+                        className="text-xs bg-red-500/20 text-red-300 px-3 py-1 rounded"
+                      >
+                        Возврат
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {selectedSub && <SubscriptionExtendModal subscription={selectedSub} onClose={() => setSelectedSub(null)} onUpdated={loadSubscriptions} />}
+      {selectedPayment && <PaymentRefundModal payment={selectedPayment} onClose={() => setSelectedPayment(null)} onUpdated={loadPayments} />}
+    </div>
+  )
+}
+
+function SubscriptionExtendModal({ subscription, onClose, onUpdated }: { subscription: Subscription; onClose: () => void; onUpdated: () => void }) {
+  const [days, setDays] = useState(30)
+  const [status, setStatus] = useState(subscription.status)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleSave = async () => {
+    setSaving(true)
+    setError('')
+    try {
+      await api.post(`/admin/subscriptions/${subscription.id}/extend`, { days, status })
+      onUpdated()
+      onClose()
+    } catch (err: any) {
+      setError(err.response?.data?.error?.message || 'Ошибка продления')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-md space-y-4">
+        <h2 className="text-lg font-bold">Продлить подписку</h2>
+        {error && <p className="text-red-400 text-sm">{error}</p>}
+        <div className="space-y-2">
+          <label className="block text-sm text-slate-400">Пользователь</label>
+          <p className="text-sm">{subscription.firstName || '-'} {subscription.telegramUsername ? `(@${subscription.telegramUsername})` : ''}</p>
+        </div>
+        <div className="space-y-2">
+          <label className="block text-sm text-slate-400">Дней продления</label>
+          <input
+            type="number"
+            min={1}
+            max={365}
+            value={days}
+            onChange={(e) => setDays(Number(e.target.value))}
+            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2"
+          />
+        </div>
+        <div className="space-y-2">
+          <label className="block text-sm text-slate-400">Статус</label>
+          <select value={status} onChange={(e) => setStatus(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+            <option value="ACTIVE">ACTIVE</option>
+            <option value="TRIALING">TRIALING</option>
+            <option value="INACTIVE">INACTIVE</option>
+            <option value="CANCELED">CANCELED</option>
+          </select>
+        </div>
+        <div className="flex gap-3 pt-2">
+          <button onClick={onClose} className="flex-1 bg-slate-800 rounded-lg py-2">Отмена</button>
+          <button onClick={handleSave} disabled={saving} className="flex-1 bg-emerald-500 rounded-lg py-2 font-medium">
+            {saving ? 'Сохранение...' : 'Продлить'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PaymentRefundModal({ payment, onClose, onUpdated }: { payment: Payment; onClose: () => void; onUpdated: () => void }) {
+  const [reason, setReason] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleSave = async () => {
+    setSaving(true)
+    setError('')
+    try {
+      await api.post(`/admin/subscriptions/payments/${payment.id}/refund`, { reason })
+      onUpdated()
+      onClose()
+    } catch (err: any) {
+      setError(err.response?.data?.error?.message || 'Ошибка возврата')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-md space-y-4">
+        <h2 className="text-lg font-bold">Возврат платежа</h2>
+        {error && <p className="text-red-400 text-sm">{error}</p>}
+        <div className="space-y-2">
+          <label className="block text-sm text-slate-400">Платёж</label>
+          <p className="text-sm">
+            {payment.amountStars ? `${payment.amountStars} ⭐` : payment.amountUsd ? `$${payment.amountUsd}` : '-'} · {payment.provider}
+          </p>
+          {payment.provider === 'TELEGRAM_STARS' && (
+            <p className="text-xs text-amber-300">⚠️ Telegram Stars возвращаются вручную через @BotFather/Support.</p>
+          )}
+        </div>
+        <div className="space-y-2">
+          <label className="block text-sm text-slate-400">Причина</label>
+          <input
+            type="text"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2"
+            placeholder="Необязательно"
+          />
+        </div>
+        <div className="flex gap-3 pt-2">
+          <button onClick={onClose} className="flex-1 bg-slate-800 rounded-lg py-2">Отмена</button>
+          <button onClick={handleSave} disabled={saving} className="flex-1 bg-red-500 rounded-lg py-2 font-medium">
+            {saving ? 'Обработка...' : 'Возврат'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+

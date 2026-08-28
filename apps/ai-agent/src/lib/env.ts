@@ -18,6 +18,7 @@ export const env = z.object({
   AGENT_SECRET: z.string().min(16),
   WORKER_ONLY: z.enum(['true', 'false']).default('false'),
   OTEL_EXPORTER_OTLP_HEADERS: z.string().optional(),
+  SENTRY_DSN: z.string().url().optional().default('placeholder'),
   BRAVE_API_KEY: z.string().optional(),
   SERPAPI_KEY: z.string().optional(),
   USDA_API_KEY: z.string().optional(),

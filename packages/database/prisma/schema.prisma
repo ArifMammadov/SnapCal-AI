@@ -518,8 +518,10 @@ enum PaymentProvider {
 enum PaymentStatus {
   PENDING
   PAID
+  SUCCESS
   FAILED
   REFUNDED
+  CANCELED
 }
 
 enum UsageType {
