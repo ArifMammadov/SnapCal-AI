@@ -7,11 +7,9 @@ import { StatisticsScreen } from './screens/StatisticsScreen.js'
 import { ProfileScreen } from './screens/ProfileScreen.js'
 import { LoginScreen } from './screens/LoginScreen.js'
 import { MarketplaceScreen } from './screens/MarketplaceScreen.js'
-import { useAppStore } from './store/index.js'
 import { useTelegram } from './hooks/useTelegram.js'
+import { useAppStore, type Tab } from './store/index.js'
 import './index.css'
-
-export type Tab = 'home' | 'activity' | 'coach' | 'stats' | 'profile'
 
 interface AppContextType {
   darkMode: boolean
@@ -41,8 +39,9 @@ const navItems: { id: Tab; label: string; icon: React.FC<{ size?: number }> }[] 
 export function App() {
   const { ready } = useTelegram()
   const user = useAppStore((s) => s.user)
+  const activeTab = useAppStore((s) => s.activeTab)
+  const setActiveTab = useAppStore((s) => s.setActiveTab)
   const [darkMode, setDarkMode] = useState(true)
-  const [activeTab, setActiveTab] = useState<Tab>('coach')
   const [showMarketplace, setShowMarketplace] = useState(false)
 
   if (!ready) {

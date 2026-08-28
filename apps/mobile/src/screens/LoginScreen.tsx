@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, setAuthTokens } from '../lib/api.js'
 import { useAppStore } from '../store/index.js'
-import { Card, Button, Avatar } from '../components/ui.js'
+import { Card, Button, Avatar, CalendarIcon, UserIcon, RulerIcon, ScaleIcon, TargetIcon, DumbbellIcon, ActivityIcon, CoachIcon, ArrowRightIcon } from '../components/ui.js'
 import type { TelegramWebApp } from '../types/telegram.js'
 
 type OnboardingStep = 'login' | 'onboarding' | 'complete'
@@ -54,6 +54,7 @@ export function LoginScreen() {
   const setUser = useAppStore((s) => s.setUser)
   const setToken = useAppStore((s) => s.setToken)
   const setRefreshToken = useAppStore((s) => s.setRefreshToken)
+  const setActiveTab = useAppStore((s) => s.setActiveTab)
 
   const [onboarding, setOnboarding] = useState<OnboardingData>({
     age: 30,
@@ -213,6 +214,7 @@ export function LoginScreen() {
       const savedUser = meRes.data || null
       if (savedUser) {
         setUser(savedUser)
+        setActiveTab('coach')
         setStep('complete')
       } else {
         setError('Unable to finalize login')
@@ -288,11 +290,11 @@ interface OnboardingFormProps {
 }
 
 function OnboardingForm({ tgUser, onboarding, setOnboarding, loading, error, onSubmit }: OnboardingFormProps) {
-  const goals: { value: PrimaryGoal; label: string; emoji: string }[] = [
-    { value: 'FAT_LOSS', label: 'Похудеть', emoji: '📉' },
-    { value: 'MUSCLE_GAIN', label: 'Набрать массу', emoji: '💪' },
-    { value: 'MAINTENANCE', label: 'Быть в тонусе', emoji: '⚖️' },
-    { value: 'HEALTH', label: 'Улучшить здоровье', emoji: '🌿' },
+  const goals: { value: PrimaryGoal; label: string; icon: React.ReactNode }[] = [
+    { value: 'FAT_LOSS', label: 'Похудеть', icon: <TargetIcon size={22} /> },
+    { value: 'MUSCLE_GAIN', label: 'Набрать массу', icon: <DumbbellIcon size={22} /> },
+    { value: 'MAINTENANCE', label: 'Быть в тонусе', icon: <ScaleIcon size={22} /> },
+    { value: 'HEALTH', label: 'Улучшить здоровье', icon: <ActivityIcon size={22} /> },
   ]
 
   return (
@@ -315,24 +317,17 @@ function OnboardingForm({ tgUser, onboarding, setOnboarding, loading, error, onS
           textAlign: 'center',
         }}
       >
-        {tgUser ? (
-          <div style={{ marginBottom: 20 }}>
-            <Avatar src={tgUser.photo_url} fallback={tgUser.first_name?.[0] || '👤'} size={64} />
-            <p style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', margin: '8px 0 0' }}>
-              Привет, {tgUser.first_name || 'друг'}!
-            </p>
+        <div style={{ marginBottom: 20, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--green-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--green)', marginBottom: 12 }}>
+            <CoachIcon size={32} />
           </div>
-        ) : (
-          <div style={{ marginBottom: 20 }}>
-            <Avatar fallback={onboarding.name?.[0] || '👤'} size={64} />
-            <p style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', margin: '8px 0 0' }}>
-              Привет!
-            </p>
-            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '4px 0 0' }}>
-              Telegram не поделился данными — введите имя вручную.
-            </p>
-          </div>
-        )}
+          <p style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
+            {tgUser ? `Привет, ${tgUser.first_name || 'друг'}!` : 'Добро пожаловать в SnapCal'}
+          </p>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: '4px 0 0' }}>
+            {tgUser ? 'Расскажите о себе, чтобы AI-coach рассчитал ваш план.' : 'Telegram не поделился данными — введите имя вручную.'}
+          </p>
+        </div>
 
         <h1 className="font-display" style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 8px' }}>
           Расскажите о себе
@@ -369,6 +364,7 @@ function OnboardingForm({ tgUser, onboarding, setOnboarding, loading, error, onS
 
           <NumberField
             label="Сколько вам лет?"
+            icon={<CalendarIcon size={18} />}
             value={onboarding.age}
             onChange={(v: number | null) => setOnboarding({ ...onboarding, age: v ?? 18 })}
             min={10}
@@ -376,7 +372,7 @@ function OnboardingForm({ tgUser, onboarding, setOnboarding, loading, error, onS
           />
 
           <div>
-            <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'block', marginBottom: 8 }}>Пол</label>
+            <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}><span style={{ display: 'flex', color: 'var(--green)' }}><UserIcon size={18} /></span>Пол</label>
             <div style={{ display: 'flex', gap: 8 }}>
               {[
                 { value: 'MALE', label: 'Мужской' },
@@ -404,6 +400,7 @@ function OnboardingForm({ tgUser, onboarding, setOnboarding, loading, error, onS
 
           <NumberField
             label="Рост (см)"
+            icon={<RulerIcon size={18} />}
             value={onboarding.heightCm}
             onChange={(v: number | null) => setOnboarding({ ...onboarding, heightCm: v ?? 170 })}
             min={50}
@@ -412,6 +409,7 @@ function OnboardingForm({ tgUser, onboarding, setOnboarding, loading, error, onS
 
           <NumberField
             label="Текущий вес (кг)"
+            icon={<ScaleIcon size={18} />}
             value={onboarding.currentWeightKg}
             onChange={(v: number | null) => setOnboarding({ ...onboarding, currentWeightKg: v ?? 70 })}
             min={20}
@@ -420,6 +418,7 @@ function OnboardingForm({ tgUser, onboarding, setOnboarding, loading, error, onS
 
           <NumberField
             label="Желаемый вес (кг) — необязательно"
+            icon={<ScaleIcon size={18} />}
             value={onboarding.targetWeightKg}
             onChange={(v: number | null) => setOnboarding({ ...onboarding, targetWeightKg: v === null ? null : v })}
             min={20}
@@ -428,7 +427,7 @@ function OnboardingForm({ tgUser, onboarding, setOnboarding, loading, error, onS
           />
 
           <div>
-            <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'block', marginBottom: 8 }}>Ваша цель</label>
+            <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}><span style={{ display: 'flex', color: 'var(--green)' }}><TargetIcon size={18} /></span>Ваша цель</label>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               {goals.map((g) => (
                 <button
@@ -445,7 +444,7 @@ function OnboardingForm({ tgUser, onboarding, setOnboarding, loading, error, onS
                     textAlign: 'center',
                   }}
                 >
-                  <div style={{ fontSize: 24, marginBottom: 4 }}>{g.emoji}</div>
+                  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4, color: 'inherit' }}>{g.icon}</div>
                   <div style={{ fontSize: 13 }}>{g.label}</div>
                 </button>
               ))}
@@ -455,7 +454,14 @@ function OnboardingForm({ tgUser, onboarding, setOnboarding, loading, error, onS
 
         <div style={{ marginTop: 24 }}>
           <Button variant="primary" size="lg" fullWidth onClick={onSubmit} disabled={loading}>
-            {loading ? 'Сохранение...' : `Продолжить — ${getPrimaryGoalLabel(onboarding.primaryGoal)}`}
+            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              {loading ? 'Сохранение...' : (
+                <>
+                  Рассчитать
+                  <ArrowRightIcon size={18} />
+                </>
+              )}
+            </span>
           </Button>
         </div>
       </Card>
@@ -465,6 +471,7 @@ function OnboardingForm({ tgUser, onboarding, setOnboarding, loading, error, onS
 
 interface NumberFieldProps {
   label: string
+  icon?: React.ReactNode
   value: number | '' | null
   onChange: (v: number | null) => void
   min: number
@@ -472,7 +479,7 @@ interface NumberFieldProps {
   optional?: boolean
 }
 
-function NumberField({ label, value, onChange, min, max, optional }: NumberFieldProps) {
+function NumberField({ label, icon, value, onChange, min, max, optional }: NumberFieldProps) {
   const [draft, setDraft] = useState(formatValue(value))
 
   useEffect(() => {
@@ -511,7 +518,8 @@ function NumberField({ label, value, onChange, min, max, optional }: NumberField
 
   return (
     <div>
-      <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'block', marginBottom: 8 }}>
+      <label style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+        {icon && <span style={{ display: 'flex', color: 'var(--green)' }}>{icon}</span>}
         {label}
       </label>
       <input

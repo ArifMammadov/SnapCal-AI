@@ -44,9 +44,13 @@ export interface User {
   } | null
 }
 
+export type Tab = 'home' | 'activity' | 'coach' | 'stats' | 'profile'
+
 interface AppState {
   currentScreen: string
   setScreen: (screen: string) => void
+  activeTab: Tab
+  setActiveTab: (tab: Tab) => void
   user: User | null
   setUser: (user: User | null) => void
   token: string | null
@@ -59,6 +63,8 @@ interface AppState {
 export const useAppStore = create<AppState>((set) => ({
   currentScreen: 'home',
   setScreen: (screen) => set({ currentScreen: screen }),
+  activeTab: 'coach',
+  setActiveTab: (tab) => set({ activeTab: tab }),
   user: null,
   setUser: (user) => set({ user }),
   token: localStorage.getItem('snapcal_access_token'),
