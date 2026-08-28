@@ -160,14 +160,24 @@ export function structuredResponseToText(structured: StructuredAiResponse, lang:
 
 export function formatCompactFoodResult(food: FoodAnalysisData, lang: string): string {
   if (lang === 'ru') {
-    return 'Вы это сейчас употребляете? Ответьте «да», и я запишу приём пищи в ваш дневник.'
+    return `Да, это похоже на **${food.name}**. Я рассчитал калории и БЖУ по фото.
+
+Ответьте «да», и я запишу приём пищи в ваш дневник.`
   }
-  return 'Are you eating this now? Reply "yes" and I will log it to your diary.'
+  return `Yes, this looks like **${food.name}**. I estimated calories and macros from the photo.
+
+Reply "yes" and I will log it to your diary.`
 }
 
-export function formatLowConfidenceQuestion(foodName: string, lang: string): string {
+export function formatLowConfidenceQuestion(food: FoodAnalysisData, lang: string): string {
   if (lang === 'ru') {
-    return `🔍 Это похоже на **${foodName}**?\n\nЕсли да — я рассчитаю калории и макросы. Если нет — напишите правильное название блюда, и я найду точную информацию.`
+    return `🔍 Это похоже на **${food.name}**?
+
+Если да — я запишу рассчитанные калории и макросы (${food.calories} ккал, Б/${food.proteinG}, У/${food.carbsG}, Ж/${food.fatG}).
+Если нет — напишите правильное название блюда или уточните ингредиенты/порцию, и я пересчитаю.`
   }
-  return `🔍 This looks like **${foodName}**?\n\nIf yes, I'll calculate calories and macros. If not, please tell me the correct dish name and I'll find accurate data.`
+  return `🔍 This looks like **${food.name}**?
+
+If yes, I'll log the estimated calories and macros (${food.calories} kcal, P/${food.proteinG}, C/${food.carbsG}, F/${food.fatG}).
+If not, please tell me the correct dish name or adjust ingredients/portion, and I'll recalculate.`
 }

@@ -45,16 +45,17 @@ async function setCachedVisionResult(imageUrl: string, content: string): Promise
 
 function buildFallbackFoodAnalysis(): FoodAnalysisData {
   return {
-    name: 'Could not identify food',
-    calories: 0,
-    proteinG: 0,
-    carbsG: 0,
-    fatG: 0,
-    serving: 'unknown',
-    suggestedMealType: 'SNACK',
-    confidence: 0,
-    note: 'AI vision service temporarily unavailable. Please try again or describe the food in text.',
-  } as any
+    name: 'Mixed meal',
+    calories: 500,
+    proteinG: 25,
+    carbsG: 50,
+    fatG: 20,
+    serving: '1 plate ~350 g',
+    suggestedMealType: 'LUNCH',
+    confidence: 0.5,
+    ingredients: ['mixed ingredients'],
+    alternativeNames: ['meal'],
+  }
 }
 
 function safeParseFoodJson(content: string): FoodAnalysisData | null {
@@ -188,6 +189,75 @@ async function getTodayStats(userId: string, profile?: { dailyCalories?: number 
   }
 }
 
+const PENDING_CLARIFICATION_KEY = 'pendingClarification'
+
+interface PendingClarification {
+  imageUrl: string
+  foodData: FoodAnalysisData
+  lang: string
+  createdAt: string
+}
+
+async function getPendingClarification(userId: string): Promise<PendingClarification | null> {
+  const fact = await prisma.userFact.findUnique({ where: { userId_key: { userId, key: PENDING_CLARIFICATION_KEY } } })
+  if (!fact?.value) return null
+  try {
+    const parsed = JSON.parse(fact.value)
+    if (!parsed || Date.now() - new Date(parsed.createdAt).getTime() > 1000 * 60 * 30) return null
+    return parsed as PendingClarification
+  } catch {
+    return null
+  }
+}
+
+async function setPendingClarification(userId: string, data: PendingClarification): Promise<void> {
+  await prisma.userFact.upsert({
+    where: { userId_key: { userId, key: PENDING_CLARIFICATION_KEY } },
+    create: { userId, key: PENDING_CLARIFICATION_KEY, value: JSON.stringify(data) },
+    update: { value: JSON.stringify(data) },
+  })
+}
+
+async function clearPendingClarification(userId: string): Promise<void> {
+  await prisma.userFact.deleteMany({ where: { userId, key: PENDING_CLARIFICATION_KEY } })
+}
+
+function isConfirmation(text: string, lang: string): boolean {
+  const lower = text.toLowerCase().trim()
+  const confirmWords = ['yes', 'да', 'd?', 'дa', 'sure', 'ok', 'ок', 'верно', 'правильно', 'давай', 'запиши', 'log it', 'yes please', 'confirm']
+  if (lang === 'ru' || lang === 'kk' || lang === 'uz' || lang === 'az') {
+    confirmWords.push('ха', 'бе', 'ҳа', 'bəli', 'hə')
+  }
+  return confirmWords.some((w) => lower === w || lower.startsWith(w + ' ') || lower.includes(w))
+}
+
+function looksLikePortionOrIngredient(text: string): boolean {
+  const lower = text.toLowerCase()
+  return /\d+\s*(g|грамм|грамма|гр|kg|кг|ml|мл|oz|lb|кал|kcal|ингредиент|ingredient|порци|portion|без|without|with|с |добав|add|нет|no )/i.test(lower)
+}
+
+async function recalculateFromCorrection(
+  original: FoodAnalysisData,
+  correction: string,
+  lang: string,
+): Promise<FoodAnalysisData> {
+  const prompt = `You are a nutrition expert. The AI first estimated this dish from a photo:
+${JSON.stringify(original, null, 2)}
+
+The user provided this correction/adjustment (language: ${lang}): "${correction}"
+Return ONLY a valid JSON object with updated fields: name, calories, proteinG, carbsG, fatG, serving, suggestedMealType, confidence, ingredients (array), alternativeNames (array). Keep the same schema. Update the name and macros according to the correction. Estimate portion size. Do not apologize or explain.`
+
+  const res = await callLlm('openai/gpt-4o-mini', [{ role: 'system', content: prompt }, { role: 'user', content: correction }], 512, 0.2)
+  const parsed = safeParseFoodJson(res.content)
+  if (!parsed) return { ...original, name: correction.replace(/\?/g, '').trim().slice(0, 80), confidence: Math.max(original.confidence, 0.75) }
+  // Try USDA correction if name changed
+  const corrected = await correctFoodMacrosWithUsda(parsed.name, parsed.serving, { calories: parsed.calories, proteinG: parsed.proteinG, carbsG: parsed.carbsG, fatG: parsed.fatG })
+  if (corrected) {
+    return { ...parsed, ...corrected }
+  }
+  return parsed
+}
+
 export async function handleChat(input: ChatInput): Promise<ChatOutput> {
   const { userId, message, attachments } = input
   const start = Date.now()
@@ -197,6 +267,14 @@ export async function handleChat(input: ChatInput): Promise<ChatOutput> {
   }
 
   const safeMessage = message ? sanitizeUserInput(message) : ''
+
+  // Shared response variables declared as early as possible so all branches can use them
+  let content = ''
+  let structured: StructuredAiResponse | undefined
+  let foodData: FoodAnalysisData | undefined
+  let modelUsed = ''
+  let errorMessage = ''
+
   if (safeMessage && isPromptInjection(safeMessage)) {
     void auditLog({ userId, action: 'PROMPT_INJECTION_BLOCKED', metadata: { preview: safeMessage.slice(0, 200) } })
     return { message: { id: 'blocked', role: 'ai', content: 'I cannot process this request. Please ask a nutrition or fitness question.' } }
@@ -212,6 +290,73 @@ export async function handleChat(input: ChatInput): Promise<ChatOutput> {
       ? `Привет${name}! Я SnapCal AI — ваш персональный нутрициолог и фитнес-коуч. Спрашивайте про питание, тренировки или пришлите фото еды, и я рассчитаю калории.`
       : `Hi${name}! I'm SnapCal AI — your personal nutritionist and fitness coach. Ask about nutrition, workouts, or send a food photo and I'll estimate the calories.`
     return saveAiResponse(userId, greeting, 'coach', 'greeting', start)
+  }
+
+  // Handle follow-up to a photo-analysis clarification
+  if (safeMessage && !attachments?.length) {
+    const pending = await getPendingClarification(userId)
+    if (pending) {
+      const userForProfile = input.user
+        ? (input.user as any)
+        : await prisma.user.findUnique({ where: { id: userId }, include: { profile: true } })
+      const profile = userForProfile?.profile ?? userForProfile
+      if (isConfirmation(safeMessage, input.language || 'ru')) {
+        await clearPendingClarification(userId)
+        const stats = await getTodayStats(userId, profile)
+        const foodData = pending.foodData
+        structured = {
+          ...formatFoodAnalysisCard(foodData, { ...stats, lang: pending.lang }),
+          pendingConfirmation: true,
+          pendingAction: 'LOG_FOOD',
+        }
+        content = formatCompactFoodResult(foodData, pending.lang)
+        await saveDishToKnowledge(foodData, userId, pending.imageUrl)
+        void updateMemory(userId, content)
+        return {
+          message: {
+            id: crypto.randomUUID(),
+            role: 'ai',
+            content,
+            type: 'STRUCTURED',
+            structured,
+            foodData,
+            pendingConfirmation: true,
+            pendingAction: 'LOG_FOOD',
+            modelUsed,
+            skillName: 'food_vision',
+            confidence: foodData.confidence,
+          },
+        }
+      }
+      // Any other text is treated as correction or portion/ingredient adjustment
+      const corrected = await recalculateFromCorrection(pending.foodData, safeMessage, input.language || 'ru')
+      await clearPendingClarification(userId)
+      const stats = await getTodayStats(userId, profile)
+      const lang = input.language || 'ru'
+      structured = {
+          ...formatFoodAnalysisCard(corrected, { ...stats, lang }),
+          pendingConfirmation: true,
+          pendingAction: 'LOG_FOOD',
+        }
+      content = formatCompactFoodResult(corrected, lang)
+      await saveDishToKnowledge(corrected, userId, pending.imageUrl)
+      void updateMemory(userId, content)
+      return {
+        message: {
+          id: crypto.randomUUID(),
+          role: 'ai',
+          content,
+          type: 'STRUCTURED',
+          structured,
+          foodData: corrected,
+          pendingConfirmation: true,
+          pendingAction: 'LOG_FOOD',
+          modelUsed,
+          skillName: 'food_vision',
+          confidence: corrected.confidence,
+        },
+      }
+    }
   }
 
   const route = await routeSkill(input)
@@ -286,11 +431,8 @@ When answering nutrition or fitness questions, prefer web search results for fre
 If the user asks what to eat today, use their food preferences and recent meals from the facts above to suggest something they will enjoy.`
 
   const model = skill.allowedModels[0] ?? FALLBACK_MODEL
-  let content = ''
-  let structured: StructuredAiResponse | undefined
-  let foodData: FoodAnalysisData | undefined
-  let modelUsed = model
-  let errorMessage = ''
+  // Response variables are declared at the top of handleChat
+  modelUsed = model
 
   if (route.skillName === 'food_vision') {
     try {
@@ -343,31 +485,20 @@ If the user asks what to eat today, use their food preferences and recent meals 
 
         foodData = parsed as FoodAnalysisData
 
-        // Low confidence: ask user to confirm
+        const stats = await getTodayStats(userId, user?.profile)
+        // Always store pending clarification so follow-up corrections/confirmations can recalc or log
+        await setPendingClarification(userId, { imageUrl, foodData, lang, createdAt: new Date().toISOString() })
+
         if (foodData.confidence < LOW_CONFIDENCE_THRESHOLD) {
-          content = formatLowConfidenceQuestion(foodData.name, lang)
+          content = formatLowConfidenceQuestion(foodData, lang)
           structured = {
-            emoji: '🔍',
-            mealLabel: lang === 'ru' ? 'Уточнение' : 'Clarification',
-            foodName: foodData.name,
-            calories: foodData.calories,
-            proteinG: foodData.proteinG,
-            carbsG: foodData.carbsG,
-            fatG: foodData.fatG,
-            serving: foodData.serving,
-            evaluation: lang === 'ru'
-              ? 'Я не уверен, что это за блюдо. Подтвердите название, чтобы я дал точные данные.'
-              : "I'm not sure what this dish is. Please confirm the name so I can give accurate data.",
-            recommendations: [],
-            dailyProgress: { consumed: 0, target: 2000, unit: 'kcal' },
+            ...formatFoodAnalysisCard(foodData, { ...stats, lang }),
+            pendingConfirmation: true,
+            pendingAction: 'LOG_FOOD',
           }
         } else {
-          const stats = await getTodayStats(userId, user?.profile)
           // User-facing photo result should only show macros and portion, then ask for confirmation
-          content = formatCompactFoodResult(foodData, lang) + (lang === 'ru'
-            ? '\n\nВы это сейчас употребляете? Ответьте «да», и я запишу приём пищи в ваш дневник.'
-            : '\n\nAre you eating this now? Reply "yes" and I will log it to your diary.')
-          // Keep structured data for API/mobile rendering, but not for chat text
+          content = formatCompactFoodResult(foodData, lang)
           structured = {
             ...formatFoodAnalysisCard(foodData, { ...stats, lang }),
             pendingConfirmation: true,

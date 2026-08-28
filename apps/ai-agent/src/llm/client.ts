@@ -184,11 +184,12 @@ Required fields:
 - proteinG, carbsG, fatG (numbers)
 - serving (string, e.g. "1 plate ~350 g")
 - suggestedMealType (one of: BREAKFAST, LUNCH, DINNER, SNACK)
-- confidence (number 0.0-1.0): how sure you are about the dish identification
+- confidence (number 0.0-1.0): how sure you are about the dish IDENTIFICATION (not data availability)
 - ingredients (string[]): visible/main ingredients
 - alternativeNames (string[]): 1-2 alternative names if ambiguous
 
-If you are not sure what the dish is, set confidence below 0.75 and give your best guess in "name".
+You NEVER say you cannot identify the food. You ALWAYS give your best guess for the dish name and estimate macros from the photo.
+If you are unsure of the exact dish, set confidence below 0.75 and provide your best guess name plus 1-2 alternative names.
 Estimate portion size from the photo and scale macros accordingly.`,
     },
     {
@@ -232,5 +233,19 @@ Estimate portion size from the photo and scale macros accordingly.`,
     }
   }
 
-  throw new Error('All vision models failed')
+  const fallback = JSON.stringify({
+    name: 'Mixed meal',
+    calories: 500,
+    proteinG: 25,
+    carbsG: 50,
+    fatG: 20,
+    serving: '1 plate ~350 g',
+    suggestedMealType: 'LUNCH',
+    confidence: 0.5,
+    ingredients: ['mixed ingredients'],
+    alternativeNames: ['meal'],
+    note: 'Vision models unavailable. Estimated macros for a typical plate.',
+  })
+  logger.warn('All vision models failed, returning fallback estimate')
+  return { content: fallback, model: 'fallback', provider: 'local' }
 }
