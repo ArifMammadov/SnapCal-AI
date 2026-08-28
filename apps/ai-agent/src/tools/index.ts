@@ -1,6 +1,6 @@
 import { prisma } from '@snapcal/database'
 import type { ToolContext, ToolResult } from '../types/index.js'
-import { createFoodLog, createActivityLog, updateGoalPlan } from '../lib/apiClient.js'
+import { createFoodLog, createActivityLog, createUserFact, updateGoalPlan } from '../lib/apiClient.js'
 import { parseFoodJson } from '../lib/foodParser.js'
 
 export async function getUserSummary(context: ToolContext): Promise<ToolResult> {
@@ -31,6 +31,29 @@ import { searchKnowledgeWithVector } from './knowledge.js'
 import { webSearch } from './webSearch.js'
 
 export { searchKnowledgeWithVector as searchKnowledge, webSearch }
+
+export async function saveUserFact(context: ToolContext): Promise<ToolResult> {
+  const { userId, message } = context
+  if (!message) return { success: false, error: 'No fact information provided' }
+
+  // Parse a structured fact from the message. Expected formats:
+  // - key: value
+  // - allergies: nuts, shellfish
+  const lines = message.split('\n').filter(Boolean)
+  const facts: Array<{ key: string; value: string }> = []
+
+  for (const line of lines) {
+    const [rawKey, ...rest] = line.split(':')
+    if (!rawKey || rest.length === 0) continue
+    const key = rawKey.trim().toLowerCase().replace(/\s+/g, '_')
+    const value = rest.join(':').trim()
+    if (!value) continue
+    await createUserFact(userId, key, value, 'ai_conversation')
+    facts.push({ key, value })
+  }
+
+  return { success: true, data: { savedFacts: facts } }
+}
 
 export async function recommendProgram(context: ToolContext): Promise<ToolResult> {
   const { userId } = context

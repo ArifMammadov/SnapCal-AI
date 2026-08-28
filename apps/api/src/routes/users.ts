@@ -217,6 +217,28 @@ export const userRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
     }
   })
 
+  app.post('/me/facts', async (request: FastifyRequest, reply: FastifyReply) => {
+    const userId = request.user!.userId
+    const body = request.body as any
+    const key = String(body?.key ?? '').trim()
+    const value = String(body?.value ?? '').trim()
+    if (!key || !value) {
+      return reply.status(400).send({ error: { code: 'INVALID_INPUT', message: 'key and value are required' } })
+    }
+    const fact = await prisma.userFact.upsert({
+      where: { userId_key: { userId, key } },
+      update: { value, source: body?.source, confidence: body?.confidence ?? 0.9 },
+      create: { userId, key, value, source: body?.source, confidence: body?.confidence ?? 0.9 },
+    })
+    return fact
+  })
+
+  app.get('/me/facts', async (request: FastifyRequest) => {
+    const userId = request.user!.userId
+    const facts = await prisma.userFact.findMany({ where: { userId }, orderBy: { updatedAt: 'desc' } })
+    return { facts }
+  })
+
   app.put('/me/goal-plan', async (request: FastifyRequest) => {
     const userId = request.user!.userId
     const plan = (request.body as any) ?? {}
@@ -234,17 +256,50 @@ export const userRoutes: FastifyPluginAsync = async (app: FastifyInstance) => {
     if (!user?.profile) {
       return reply.status(400).send({ error: { code: 'NO_PROFILE', message: 'Complete your profile first' } })
     }
+
     try {
-      const userMessage = await prisma.chatMessage.create({
-        data: { userId, role: 'USER', type: 'TEXT', content: 'Generate my detailed 6-month transformation plan based on my profile.' },
+      // Hidden system prompt so the plan generation does not clutter the chat UI
+      const systemMessage = await prisma.chatMessage.create({
+        data: {
+          userId,
+          role: 'SYSTEM',
+          type: 'TEXT',
+          content: '[system] Generate a personalized 6-month transformation plan based on the user profile.',
+        },
       })
+
       await aiAgent.post('/chat', {
         userId,
-        message: 'Generate my detailed 6-month transformation plan based on my profile.',
-        messageId: userMessage.id,
+        message: systemMessage.content,
+        messageId: systemMessage.id,
       })
+
       const updated = await prisma.user.findUnique({ where: { id: userId }, include: { profile: true } })
-      return updated?.profile?.goalPlan ?? { generated: true }
+      const plan = updated?.profile?.goalPlan
+      const goalLabel: Record<string, string> = {
+        FAT_LOSS: 'похудение',
+        MUSCLE_GAIN: 'набор массы',
+        MAINTENANCE: 'поддержание формы',
+        HEALTH: 'улучшение здоровья',
+      }
+
+      // Welcome AI message — first thing the user sees after onboarding
+      const name = user.firstName || 'друг'
+      const goalText = goalLabel[user.profile.primaryGoal ?? 'HEALTH'] ?? 'вашу цель'
+      const targetPart = user.profile.targetWeightKg
+        ? `Цель — ${Number(user.profile.targetWeightKg)} кг.`
+        : ''
+
+      await prisma.chatMessage.create({
+        data: {
+          userId,
+          role: 'AI',
+          type: 'TEXT',
+          content: `Добро пожаловать в SnapCal, ${name}! 👋\n\nЯ ваш персональный AI-коуч. Можно фотографировать еду и узнавать калории и макросы, общаться со мной и узнавать новое в направлении здоровья и питания.\n\nЯ уже рассчитал для вас персональный план (${goalText}). Его можно посмотреть на главной странице в разделе «Обзор плана». ${targetPart}\n\nДля поддержки здоровья и эффективного продвижения к вашей цели в программе Эксперт выберите программу для активности.\n\nЧтобы я делал свою работу корректно, скажите, есть ли у вас аллергия на какие-либо продукты?`,
+        },
+      })
+
+      return plan ?? { generated: true }
     } catch (err: any) {
       return reply.status(502).send({ error: { code: 'AI_AGENT_ERROR', message: err.message || 'Failed to generate plan' } })
     }

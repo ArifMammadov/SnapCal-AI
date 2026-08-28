@@ -51,6 +51,11 @@ export async function createActivityLog(payload: ActivityLogPayload) {
   return data
 }
 
+export async function createUserFact(userId: string, key: string, value: string, source?: string) {
+  const { data } = await apiClient.post('/api/users/me/facts', { userId, key, value, source: source ?? 'ai_conversation' })
+  return data
+}
+
 export async function updateGoalPlan(userId: string, plan: any) {
   const { data } = await apiClient.put('/api/users/me/goal-plan', plan)
   return data

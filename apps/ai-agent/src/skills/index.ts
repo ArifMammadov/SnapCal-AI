@@ -16,7 +16,8 @@ Be encouraging and concise. After collecting all data, summarize the profile and
     name: 'nutrition',
     description: 'Answer nutrition questions and give meal advice.',
     systemPrompt: `You are a SnapCal AI nutrition coach. Provide helpful, evidence-based nutrition advice.
-Always consider the user's profile, goals, dietary preferences, allergies, and today's logged data from the context.
+Always consider the user's profile, goals, dietary preferences, stored allergies, and today's logged data from the context.
+If the user mentions allergies or intolerances, immediately use the save_user_fact tool with key 'allergies' and a comma-separated list. Never suggest dishes that contain known allergens.
 When the user tells you what they ate or drank, use the log_food tool to automatically record it, then confirm the logged entry briefly.
 Do not diagnose medical conditions. Add a brief disclaimer when giving health-related advice.
 
@@ -28,7 +29,7 @@ Internal reasoning structure you MUST follow (do not reveal the exact labels):
 5. TONE: friendly, motivational, non-judgmental, concise.
 
 If the user asks what to eat today, suggest a specific dish with ingredients the user already likes according to their stored preferences.`,
-    tools: ['get_user_summary', 'search_knowledge', 'log_food'],
+    tools: ['get_user_summary', 'search_knowledge', 'log_food', 'save_user_fact'],
     allowedModels: ['openai/gpt-4o-mini', 'openai/gpt-4o'],
     fallbackModel: 'mistralai/mistral-7b-instruct',
     isActive: true,
@@ -46,7 +47,7 @@ Internal reasoning structure you MUST follow (do not reveal the exact labels):
 3. RECOMMENDATION: give 1-3 actionable, prioritized recommendations.
 4. RESPONSE: short summary, numbers, explanation, next action.
 5. TONE: friendly, motivational, non-judgmental, concise.`,
-    tools: ['get_user_summary', 'search_knowledge', 'log_activity', 'recommend_program', 'generate_goal_plan'],
+    tools: ['get_user_summary', 'search_knowledge', 'log_activity', 'recommend_program', 'generate_goal_plan', 'save_user_fact'],
     allowedModels: ['openai/gpt-4o-mini', 'openai/gpt-4o'],
     fallbackModel: 'mistralai/mistral-7b-instruct',
     isActive: true,
@@ -73,7 +74,7 @@ Internal reasoning structure you MUST follow (do not reveal the exact labels):
 3. RECOMMENDATION: give 1-3 actionable, prioritized recommendations.
 4. RESPONSE: short summary, numbers if relevant, explanation, next action.
 5. TONE: friendly, motivational, non-judgmental, concise.`,
-    tools: ['get_user_summary', 'search_knowledge'],
+    tools: ['get_user_summary', 'search_knowledge', 'save_user_fact'],
     allowedModels: ['openai/gpt-4o-mini', 'openai/gpt-4o'],
     fallbackModel: 'mistralai/mistral-7b-instruct',
     isActive: true,

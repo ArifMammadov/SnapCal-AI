@@ -88,7 +88,7 @@ const aiRoutesPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
   app.get('/history', async (request: FastifyRequest) => {
     const userId = request.user!.userId
     const messages = await prisma.chatMessage.findMany({
-      where: { userId },
+      where: { userId, role: { not: 'SYSTEM' } },
       orderBy: { createdAt: 'desc' },
       take: 200,
     })

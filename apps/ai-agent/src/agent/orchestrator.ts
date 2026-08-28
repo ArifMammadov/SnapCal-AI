@@ -11,7 +11,7 @@ import { routeSkillLlm } from './router.js'
 import { aiCostTotal, aiErrorsTotal, aiLatencyHistogram, aiRequestsTotal } from '../lib/metrics.js'
 import { auditLog } from '../audit/index.js'
 import { updateMemory, recordFoodPreference, getFoodPreferences } from '../memory/index.js'
-import { getUserSummary, searchKnowledge, recommendProgram, analyzePhoto, logFood, logActivity, webSearch } from '../tools/index.js'
+import { getUserSummary, saveUserFact, searchKnowledge, recommendProgram, analyzePhoto, logFood, logActivity, webSearch } from '../tools/index.js'
 import { correctFoodMacrosWithUsda, lookupUsdaNutrition } from '../lib/foodNutrition.js'
 import { formatFoodAnalysisCard, formatCompactFoodResult, formatLowConfidenceQuestion } from '../lib/responseFormatter.js'
 import { findDishInKnowledge, saveDishToKnowledge } from '../lib/knowledgeBase.js'
@@ -103,6 +103,7 @@ async function routeSkillRegex(input: ChatInput): Promise<RouteResult> {
   if (/\b(goal plan|transformation plan|мой план|план трансформации|план питания|план тренировок)\b/i.test(lower)) return { skillName: 'fitness', toolNames: ['generateGoalPlan'], confidence: 0.85 }
   if (/\b(weight|goal|program|workout|exercise|training)\b/i.test(lower)) return { skillName: 'fitness', toolNames: ['recommendProgram'], confidence: 0.75 }
   if (/\b(calorie|kcal|meal|food|eat|ate|breakfast|lunch|dinner|snack)\b/i.test(lower)) return { skillName: 'nutrition', toolNames: ['logFood', 'searchKnowledge'], confidence: 0.8 }
+  if (/\b(allerg|allergy|аллерг|не переношу|не ем|intolerant)\b/i.test(lower)) return { skillName: 'nutrition', toolNames: ['saveUserFact'], confidence: 0.9 }
 
   return { skillName: 'coach', toolNames: [], confidence: 0.55 }
 }
@@ -143,6 +144,9 @@ async function runTools(toolNames: string[], context: ToolContext): Promise<Reco
           break
         case 'webSearch':
           results[name] = await webSearch(context)
+          break
+        case 'saveUserFact':
+          results[name] = await saveUserFact(context)
           break
         case 'generateGoalPlan':
           results[name] = await (await import('../tools/index.js')).generateGoalPlan(context)
