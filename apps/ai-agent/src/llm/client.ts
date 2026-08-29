@@ -180,17 +180,20 @@ export async function callVisionLlm(imageUrl: string): Promise<LlmResponse> {
 
 Required fields:
 - name (string): specific dish name in user-friendly form
-- calories (integer)
-- proteinG, carbsG, fatG (numbers)
+- calories (integer): total calories for the WHOLE portion shown in the photo
+- proteinG, carbsG, fatG (numbers): grams for the WHOLE portion shown in the photo
 - serving (string, e.g. "1 plate ~350 g")
 - suggestedMealType (one of: BREAKFAST, LUNCH, DINNER, SNACK)
 - confidence (number 0.0-1.0): how sure you are about the dish IDENTIFICATION (not data availability)
 - ingredients (string[]): visible/main ingredients
 - alternativeNames (string[]): 1-2 alternative names if ambiguous
 
-You NEVER say you cannot identify the food. You ALWAYS give your best guess for the dish name and estimate macros from the photo.
-If you are unsure of the exact dish, set confidence below 0.75 and provide your best guess name plus 1-2 alternative names.
-Estimate portion size from the photo and scale macros accordingly.`,
+Rules:
+- You NEVER say you cannot identify the food. Always give your best guess.
+- Estimate portion size from the photo and scale macros to that portion.
+- calories must be roughly proteinG*4 + carbsG*4 + fatG*9 (within 20%).
+- For a normal single portion, protein and fat are usually 10-60 g each; carbs are usually 20-120 g unless the dish is a large bowl of rice/noodles/pasta.
+- If you are unsure of the exact dish, set confidence below 0.75 and provide your best guess name plus 1-2 alternative names.`,
     },
     {
       role: 'user',

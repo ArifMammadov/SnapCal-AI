@@ -12,7 +12,7 @@ import { aiCostTotal, aiErrorsTotal, aiLatencyHistogram, aiRequestsTotal } from 
 import { auditLog } from '../audit/index.js'
 import { updateMemory, recordFoodPreference, getFoodPreferences } from '../memory/index.js'
 import { getUserSummary, saveUserFact, searchKnowledge, recommendProgram, analyzePhoto, logFood, logActivity, webSearch } from '../tools/index.js'
-import { correctFoodMacrosWithUsda, lookupUsdaNutrition } from '../lib/foodNutrition.js'
+import { correctFoodMacrosWithUsda, lookupUsdaNutrition, estimateServingG } from '../lib/foodNutrition.js'
 import { formatFoodAnalysisCard, formatCompactFoodResult, formatLowConfidenceQuestion } from '../lib/responseFormatter.js'
 import { findDishInKnowledge, saveDishToKnowledge } from '../lib/knowledgeBase.js'
 
@@ -82,6 +82,64 @@ function safeParseFoodJson(content: string): FoodAnalysisData | null {
 function validateMealType(value: unknown): 'BREAKFAST' | 'LUNCH' | 'DINNER' | 'SNACK' {
   const valid = ['BREAKFAST', 'LUNCH', 'DINNER', 'SNACK']
   return valid.includes(String(value)) ? (String(value) as any) : 'SNACK'
+}
+
+function validateAndFixMacros(food: FoodAnalysisData): FoodAnalysisData {
+  let { calories, proteinG, carbsG, fatG } = food
+
+  // Round to reasonable precision
+  proteinG = Math.max(0, Math.round(proteinG * 10) / 10)
+  carbsG = Math.max(0, Math.round(carbsG * 10) / 10)
+  fatG = Math.max(0, Math.round(fatG * 10) / 10)
+  calories = Math.max(0, Math.round(calories))
+
+  // Macronutrient energy sanity: 1g protein/carbs = 4 kcal, 1g fat = 9 kcal
+  const macroKcal = proteinG * 4 + carbsG * 4 + fatG * 9
+  if (calories > 0 && Math.abs(macroKcal - calories) / Math.max(calories, 1) > 0.25) {
+    // Scale macros toward the stated calories while keeping their ratios
+    const factor = calories / Math.max(macroKcal, 1)
+    proteinG = Math.round(proteinG * factor * 10) / 10
+    carbsG = Math.round(carbsG * factor * 10) / 10
+    fatG = Math.round(fatG * factor * 10) / 10
+  }
+
+  // Hard caps for a normal single portion (prevents absurd LLM/USDA values)
+  const maxProtein = Math.min(120, calories / 3.5)
+  const maxCarbs = Math.min(200, calories / 3.5)
+  const maxFat = Math.min(90, calories / 9)
+  if (proteinG > maxProtein) proteinG = maxProtein
+  if (carbsG > maxCarbs) carbsG = maxCarbs
+  if (fatG > maxFat) fatG = maxFat
+
+  // Recalculate calories to match the clamped macros so UI is consistent
+  calories = Math.round(proteinG * 4 + carbsG * 4 + fatG * 9)
+
+  return {
+    ...food,
+    calories,
+    proteinG,
+    carbsG,
+    fatG,
+  }
+}
+
+function scaleKnowledgeDish(dish: { calories: number; proteinG: number; carbsG: number; fatG: number; serving: string }, servingG: number) {
+  const baseG = estimateServingG(dish.serving)
+  const factor = baseG > 0 ? servingG / baseG : 1
+  return {
+    name: (dish as any).title ?? 'Dish',
+    calories: Math.round(dish.calories * factor),
+    proteinG: Math.round(dish.proteinG * factor * 10) / 10,
+    carbsG: Math.round(dish.carbsG * factor * 10) / 10,
+    fatG: Math.round(dish.fatG * factor * 10) / 10,
+    serving: `${servingG} g`,
+  }
+}
+
+function estimateServingGFromText(text: string, fallbackServing: string): number {
+  const fromText = estimateServingG(text)
+  if (fromText !== 200) return fromText
+  return estimateServingG(fallbackServing)
 }
 
 interface RouteResult {
@@ -241,21 +299,32 @@ async function recalculateFromCorrection(
   correction: string,
   lang: string,
 ): Promise<FoodAnalysisData> {
-  const prompt = `You are a nutrition expert. The AI first estimated this dish from a photo:
-${JSON.stringify(original, null, 2)}
+  const cleanCorrection = correction.replace(/\\?/g, '').trim().slice(0, 80)
 
-The user provided this correction/adjustment (language: ${lang}): "${correction}"
-Return ONLY a valid JSON object with updated fields: name, calories, proteinG, carbsG, fatG, serving, suggestedMealType, confidence, ingredients (array), alternativeNames (array). Keep the same schema. Update the name and macros according to the correction. Estimate portion size. Do not apologize or explain.`
+  // 1. Prefer knowledge base for named dishes (doner, shaverma, etc.)
+  const known = await findDishInKnowledge(cleanCorrection)
+  if (known) {
+    const servingG = estimateServingGFromText(correction, original.serving)
+    const scaled = scaleKnowledgeDish(known, servingG)
+    return validateAndFixMacros({
+      ...scaled,
+      name: cleanCorrection,
+      confidence: 0.9,
+      suggestedMealType: validateMealType(original.suggestedMealType),
+      ingredients: known.tags?.length ? known.tags.filter((t) => !['food', 'ai-analyzed'].includes(t)) : original.ingredients,
+      alternativeNames: original.alternativeNames,
+    } as FoodAnalysisData)
+  }
+
+  // 2. LLM recalculation with explicit constraints
+  const prompt = `You are a nutrition expert. The AI first estimated this dish from a photo:\n${JSON.stringify(original, null, 2)}\n\nThe user provided this correction/adjustment (language: ${lang}): "${correction}"\nReturn ONLY a valid JSON object with no markdown and no explanation. Fields: name, calories (integer), proteinG, carbsG, fatG (numbers), serving, suggestedMealType (BREAKFAST/LUNCH/DINNER/SNACK), confidence (0.0-1.0), ingredients (array), alternativeNames (array).\n\nRules:\n- The name must reflect the user's correction.\n- Estimate macros for a typical single portion of that dish.\n- calories must be roughly proteinG*4 + carbsG*4 + fatG*9 (within 20%).\n- For a normal portion, protein and fat are usually each 10-60 g; carbs 20-120 g unless it is a large bowl of rice/noodles/pasta.\n- Do not invent unrealistic numbers.`
 
   const res = await callLlm('openai/gpt-4o-mini', [{ role: 'system', content: prompt }, { role: 'user', content: correction }], 512, 0.2)
   const parsed = safeParseFoodJson(res.content)
-  if (!parsed) return { ...original, name: correction.replace(/\?/g, '').trim().slice(0, 80), confidence: Math.max(original.confidence, 0.75) }
-  // Try USDA correction if name changed
-  const corrected = await correctFoodMacrosWithUsda(parsed.name, parsed.serving, { calories: parsed.calories, proteinG: parsed.proteinG, carbsG: parsed.carbsG, fatG: parsed.fatG })
-  if (corrected) {
-    return { ...parsed, ...corrected }
+  if (!parsed) {
+    return validateAndFixMacros({ ...original, name: cleanCorrection, confidence: Math.max(original.confidence, 0.75) })
   }
-  return parsed
+  return validateAndFixMacros(parsed)
 }
 
 export async function handleChat(input: ChatInput): Promise<ChatOutput> {
@@ -310,7 +379,8 @@ export async function handleChat(input: ChatInput): Promise<ChatOutput> {
           pendingAction: 'LOG_FOOD',
         }
         content = formatCompactFoodResult(foodData, pending.lang)
-        await saveDishToKnowledge(foodData, userId, pending.imageUrl)
+        void saveDishToKnowledge(foodData, userId, pending.imageUrl)
+        void recordFoodPreference(userId, foodData.name, foodData.ingredients ?? [], foodData.confidence)
         void updateMemory(userId, content)
         return {
           message: {
@@ -339,7 +409,8 @@ export async function handleChat(input: ChatInput): Promise<ChatOutput> {
           pendingAction: 'LOG_FOOD',
         }
       content = formatCompactFoodResult(corrected, lang)
-      await saveDishToKnowledge(corrected, userId, pending.imageUrl)
+      void saveDishToKnowledge(corrected, userId, pending.imageUrl)
+      void recordFoodPreference(userId, corrected.name, corrected.ingredients ?? [], corrected.confidence)
       void updateMemory(userId, content)
       return {
         message: {
@@ -444,40 +515,15 @@ If the user asks what to eat today, use their food preferences and recent meals 
           content = cachedRaw as string
           modelUsed = 'cached'
         } else {
-          // Knowledge-base lookup first
-          const known = await findDishInKnowledge(safeMessage || imageUrl)
-          if (known) {
-            parsed = {
-              name: known.title,
-              calories: known.calories,
-              proteinG: known.proteinG,
-              carbsG: known.carbsG,
-              fatG: known.fatG,
-              serving: known.serving,
-              suggestedMealType: validateMealType(known.mealType),
-              confidence: 0.95,
-            }
-            modelUsed = 'knowledge-base'
+          // Vision model is the primary source for photos. KB search by image URL is not useful.
+          const visionResult = await callVisionLlm(imageUrl)
+          parsed = safeParseFoodJson(visionResult.content)
+          if (parsed) {
+            parsed = validateAndFixMacros(parsed)
+            modelUsed = visionResult.model
           } else {
-            const visionResult = await callVisionLlm(imageUrl)
-            parsed = safeParseFoodJson(visionResult.content)
-            if (parsed) {
-              const corrected = await correctFoodMacrosWithUsda(parsed.name, parsed.serving, {
-                calories: parsed.calories,
-                proteinG: parsed.proteinG,
-                carbsG: parsed.carbsG,
-                fatG: parsed.fatG,
-              })
-              if (corrected) {
-                parsed = { ...parsed, ...corrected }
-                modelUsed = `${visionResult.model}+USDA`
-              } else {
-                modelUsed = visionResult.model
-              }
-            } else {
-              parsed = buildFallbackFoodAnalysis()
-              modelUsed = visionResult.model
-            }
+            parsed = buildFallbackFoodAnalysis()
+            modelUsed = visionResult.model
           }
           content = JSON.stringify(parsed)
           await setCachedVisionResult(imageUrl, content)
@@ -504,9 +550,9 @@ If the user asks what to eat today, use their food preferences and recent meals 
             pendingConfirmation: true,
             pendingAction: 'LOG_FOOD',
           }
-          // Only remember the dish for future knowledge/preference, actual foodLog requires user confirmation
-          await saveDishToKnowledge(foodData, userId, imageUrl)
-          await recordFoodPreference(userId, foodData.name, foodData.ingredients ?? [], foodData.confidence)
+          // Remember the dish in background; do not block response on KB embedding.
+          void saveDishToKnowledge(foodData, userId, imageUrl)
+          void recordFoodPreference(userId, foodData.name, foodData.ingredients ?? [], foodData.confidence)
         }
       } else {
         content = JSON.stringify({ error: 'No image provided' })

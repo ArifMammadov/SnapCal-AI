@@ -19,6 +19,7 @@ export interface KnowledgeDish {
 
 export async function findDishInKnowledge(name: string): Promise<KnowledgeDish | null> {
   try {
+    const lowerName = name.toLowerCase()
     const embedding = await generateEmbedding(
       name,
       env.OPENROUTER_API_KEY ?? '',
@@ -26,18 +27,81 @@ export async function findDishInKnowledge(name: string): Promise<KnowledgeDish |
     )
     if (!embedding) return null
 
-    const chunks = await searchKnowledgeChunks(embedding, 3, 0.3)
+    const chunks = await searchKnowledgeChunks(embedding, 5, 0.35)
     if (!chunks.length) return null
 
-    const best = chunks[0]
-    const parsed = parseDishContent(best.content)
-    if (parsed && titleSimilarity(parsed.title, name) > 0.6) {
-    return { ...parsed, id: best.articleId, sourceUrl: best.sourceUrl ?? undefined }
+    // Try the best semantic match that also has a title or content keyword match
+    for (const chunk of chunks) {
+      const parsed = parseDishContent(chunk.content)
+      if (parsed) {
+        const titleScore = titleSimilarity(parsed.title, name)
+        const contentScore = contentKeywordScore(chunk.content, lowerName)
+        if (titleScore > 0.5 || contentScore > 0.5) {
+          return { ...parsed, id: chunk.articleId, sourceUrl: chunk.sourceUrl ?? undefined }
+        }
+      }
+
+      // Fallback: seed articles store plain text lines like "Дёнер кебаб — 450–650 ккал..."
+      const seedDish = parseSeedTextDish(chunk.content, lowerName)
+      if (seedDish) {
+        return {
+          ...seedDish,
+          id: chunk.articleId,
+          sourceUrl: chunk.sourceUrl ?? undefined,
+        }
+      }
     }
   } catch (err) {
     // ignore, fall through to null
   }
   return null
+}
+
+function contentKeywordScore(content: string, name: string): number {
+  const contentLower = content.toLowerCase()
+  const tokens = name.split(/\s+/).filter((t) => t.length >= 3)
+  const matches = tokens.filter((t) => contentLower.includes(t)).length
+  return tokens.length > 0 ? matches / tokens.length : 0
+}
+
+function parseSeedTextDish(content: string, query: string): KnowledgeDish | null {
+  const lines = content.split(/\n/)
+  const queryTokens = query.split(/\s+/).filter((t) => t.length >= 2)
+  let bestLine = ''
+  let bestScore = 0
+
+  for (const line of lines) {
+    const lower = line.toLowerCase()
+    const score = queryTokens.reduce((s, token) => (lower.includes(token) ? s + 1 : s), 0)
+    if (score > bestScore) {
+      bestScore = score
+      bestLine = line
+    }
+  }
+
+  // Match Russian/English seed format: "Name — 450–650 ккал, 20–25 г белка, 50–70 г углеводов, 15–25 г жиров."
+  const match = bestLine.match(/^(.*?)\s*[—-]\s*(\d+(?:[–-]\d+)?)\s*ккал.*?([\d.,]+(?:[–-][\d.,]+)?)\s*г?\s*белка.*?([\d.,]+(?:[–-][\d.,]+)?)\s*г?\s*углеводов.*?([\d.,]+(?:[–-][\d.,]+)?)\s*г?\s*жиров/i)
+  if (!match || bestScore === 0) return null
+
+  const title = match[1].trim()
+  const calRange = match[2].toString().split(/[–-]/).map((n) => parseFloat(n.replace(',', '.')))
+  const proteinRange = match[3].toString().split(/[–-]/).map((n) => parseFloat(n.replace(',', '.')))
+  const carbsRange = match[4].toString().split(/[–-]/).map((n) => parseFloat(n.replace(',', '.')))
+  const fatRange = match[5].toString().split(/[–-]/).map((n) => parseFloat(n.replace(',', '.')))
+
+  const avg = (range: number[]) => range.reduce((a, b) => a + b, 0) / range.length
+  const servingMatch = bestLine.match(/порция\s+(\d+(?:\.\d+)?)\s*г/i)
+  return {
+    title,
+    content: bestLine,
+    calories: Math.round(avg(calRange)),
+    proteinG: avg(proteinRange),
+    carbsG: avg(carbsRange),
+    fatG: avg(fatRange),
+    serving: servingMatch ? `1 portion ~${servingMatch[1]} g` : '1 standard portion',
+    mealType: 'LUNCH',
+    tags: [],
+  }
 }
 
 export async function saveDishToKnowledge(
