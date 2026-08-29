@@ -294,6 +294,16 @@ function looksLikePortionOrIngredient(text: string): boolean {
   return /\d+\s*(g|грамм|грамма|гр|kg|кг|ml|мл|oz|lb|кал|kcal|ингредиент|ingredient|порци|portion|без|without|with|с |добав|add|нет|no )/i.test(lower)
 }
 
+async function getRecentFoodGuess(userId: string): Promise<string | undefined> {
+  try {
+    const prefs = await getFoodPreferences(userId)
+    if (!prefs?.recent?.length) return undefined
+    return prefs.recent[0]
+  } catch {
+    return undefined
+  }
+}
+
 async function recalculateFromCorrection(
   original: FoodAnalysisData,
   correction: string,
@@ -372,7 +382,23 @@ export async function handleChat(input: ChatInput): Promise<ChatOutput> {
       if (isConfirmation(safeMessage, input.language || 'ru')) {
         await clearPendingClarification(userId)
         const stats = await getTodayStats(userId, profile)
-        const foodData = pending.foodData
+        const recentGuess = await getRecentFoodGuess(userId)
+        let foodData = pending.foodData
+        // If the user is confirming a recent-food hint, label the log with that dish name.
+        if (recentGuess && foodData.name.toLowerCase().includes('mixed')) {
+          const known = await findDishInKnowledge(recentGuess)
+          if (known) {
+            const servingG = estimateServingGFromText('', foodData.serving)
+            foodData = {
+              ...scaleKnowledgeDish(known, servingG),
+              name: known.title,
+              confidence: 0.9,
+              suggestedMealType: validateMealType(foodData.suggestedMealType),
+            }
+          } else {
+            foodData = { ...foodData, name: recentGuess }
+          }
+        }
         structured = {
           ...formatFoodAnalysisCard(foodData, { ...stats, lang: pending.lang }),
           pendingConfirmation: true,
@@ -536,7 +562,8 @@ If the user asks what to eat today, use their food preferences and recent meals 
         await setPendingClarification(userId, { imageUrl, foodData, lang, createdAt: new Date().toISOString() })
 
         if (foodData.confidence < LOW_CONFIDENCE_THRESHOLD) {
-          content = formatLowConfidenceQuestion(foodData, lang)
+          const recentGuess = await getRecentFoodGuess(userId)
+          content = formatLowConfidenceQuestion(foodData, lang, recentGuess)
           structured = {
             ...formatFoodAnalysisCard(foodData, { ...stats, lang }),
             pendingConfirmation: true,

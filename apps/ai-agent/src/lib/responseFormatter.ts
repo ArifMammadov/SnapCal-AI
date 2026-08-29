@@ -169,15 +169,11 @@ export function formatCompactFoodResult(food: FoodAnalysisData, lang: string): s
 Reply "yes" and I will log it to your diary.`
 }
 
-export function formatLowConfidenceQuestion(food: FoodAnalysisData, lang: string): string {
+export function formatLowConfidenceQuestion(food: FoodAnalysisData, lang: string, guess?: string): string {
+  const ruGuess = guess ? `\n\nВы раньше логгировали **${guess}** — может, это снова оно? Просто напишите «да» или правильное название.` : ''
+  const enGuess = guess ? `\n\nYou previously logged **${guess}** — could it be that again? Just reply "yes" or the correct name.` : ''
   if (lang === 'ru') {
-    return `🔍 Это похоже на **${food.name}**?
-
-Если да — я запишу рассчитанные калории и макросы (${food.calories} ккал, Б/${food.proteinG}, У/${food.carbsG}, Ж/${food.fatG}).
-Если нет — напишите правильное название блюда или уточните ингредиенты/порцию, и я пересчитаю.`
+    return `🔍 Это похоже на **${food.name}**?${ruGuess}\n\nЕсли да — я запишу рассчитанные калории и макросы (${food.calories} ккал, Б/${food.proteinG}, У/${food.carbsG}, Ж/${food.fatG}).\nЕсли нет — напишите правильное название блюда или уточните ингредиенты/порцию, и я пересчитаю.`
   }
-  return `🔍 This looks like **${food.name}**?
-
-If yes, I'll log the estimated calories and macros (${food.calories} kcal, P/${food.proteinG}, C/${food.carbsG}, F/${food.fatG}).
-If not, please tell me the correct dish name or adjust ingredients/portion, and I'll recalculate.`
+  return `🔍 This looks like **${food.name}**?${enGuess}\n\nIf yes, I'll log the estimated calories and macros (${food.calories} kcal, P/${food.proteinG}, C/${food.carbsG}, F/${food.fatG}).\nIf not, please tell me the correct dish name or adjust ingredients/portion, and I'll recalculate.`
 }
