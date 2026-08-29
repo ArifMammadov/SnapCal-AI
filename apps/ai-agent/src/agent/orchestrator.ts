@@ -19,7 +19,7 @@ import { findDishInKnowledge, saveDishToKnowledge } from '../lib/knowledgeBase.j
 const FALLBACK_MODEL = 'gpt-4o-mini'
 const MAX_OUTPUT_TOKENS = 1024
 const VISION_CACHE_TTL_SECONDS = 60 * 60 * 24 // 24h
-const LOW_CONFIDENCE_THRESHOLD = 0.75
+const LOW_CONFIDENCE_THRESHOLD = 0.0
 const redis = getRedis()
 
 function visionCacheKey(imageUrl: string): string {
