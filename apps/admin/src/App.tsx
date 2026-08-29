@@ -96,28 +96,47 @@ export function App() {
   const [token, setToken] = useState(localStorage.getItem('snapcal_admin_token') ?? '')
   const [tab, setTab] = useState('overview')
   const [collapsed, setCollapsed] = useState(false)
+  const [error, setError] = useState('')
+  const [secret, setSecret] = useState('')
+  const [loggingIn, setLoggingIn] = useState(false)
+
+  const handleLogin = async () => {
+    setLoggingIn(true)
+    setError('')
+    try {
+      const res = await api.post('/admin/login', { secret })
+      const accessToken = res.data.accessToken
+      localStorage.setItem('snapcal_admin_token', accessToken)
+      setToken(accessToken)
+      window.location.reload()
+    } catch (err: any) {
+      setError(err.response?.data?.error?.message || 'Ошибка входа')
+    } finally {
+      setLoggingIn(false)
+    }
+  }
 
   if (!token) {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-slate-900 rounded-2xl p-6 space-y-4">
           <h1 className="text-xl font-bold text-center">SnapCal AI Admin</h1>
-          <p className="text-slate-400 text-sm">Вставьте admin access token</p>
+          <p className="text-slate-400 text-sm">Введите admin secret для входа</p>
           <input
             type="password"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
+            value={secret}
+            onChange={(e) => setSecret(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
             className="w-full bg-slate-800 rounded-lg px-4 py-2"
-            placeholder="Access token"
+            placeholder="Admin secret"
           />
+          {error && <p className="text-red-400 text-sm">{error}</p>}
           <button
-            onClick={() => {
-              localStorage.setItem('snapcal_admin_token', token)
-              window.location.reload()
-            }}
-            className="w-full bg-emerald-500 rounded-lg py-2 font-medium"
+            onClick={handleLogin}
+            disabled={loggingIn}
+            className="w-full bg-emerald-500 rounded-lg py-2 font-medium disabled:opacity-50"
           >
-            Login
+            {loggingIn ? 'Вход...' : 'Login'}
           </button>
         </div>
       </div>
