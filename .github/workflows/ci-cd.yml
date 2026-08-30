@@ -160,10 +160,19 @@ jobs:
             git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/ArifMammadov/SnapCal-AI.git
             git fetch origin
             git checkout -f origin/main
+            # Ensure new AI pipeline env defaults are present in .env
+            grep -q '^USE_LEGACY_FOOD_VISION=' .env || echo 'USE_LEGACY_FOOD_VISION=false' >> .env
+            grep -q '^AI_CONFIDENCE_THRESHOLD=' .env || echo 'AI_CONFIDENCE_THRESHOLD=0.80' >> .env
+            grep -q '^AI_PROVIDER=' .env || echo 'AI_PROVIDER=openrouter' >> .env
+            grep -q '^AI_PRIMARY_MODEL=' .env || echo 'AI_PRIMARY_MODEL=openai/gpt-4o-mini' >> .env
+            grep -q '^AI_ADVANCED_MODEL=' .env || echo 'AI_ADVANCED_MODEL=openai/gpt-4o' >> .env
+            grep -q '^AI_TIMEOUT_MS=' .env || echo 'AI_TIMEOUT_MS=25000' >> .env
+            grep -q '^AI_MAX_RETRIES=' .env || echo 'AI_MAX_RETRIES=2' >> .env
+            grep -q '^AI_LOW_CONFIDENCE_ADVANCED=' .env || echo 'AI_LOW_CONFIDENCE_ADVANCED=true' >> .env
             pnpm install --frozen-lockfile
             pnpm --filter @snapcal/database build
             pnpm --filter @snapcal/shared build
-            cd packages/database && DATABASE_URL="$DATABASE_URL" npx prisma migrate deploy
+            cd packages/database && DATABASE_URL="$DATABASE_URL" npx prisma migrate deploy && DATABASE_URL="$DATABASE_URL" pnpm db:seed
             cd /opt/snapcal-main
             pnpm --filter @snapcal/api build
             pnpm --filter @snapcal/ai-agent build
