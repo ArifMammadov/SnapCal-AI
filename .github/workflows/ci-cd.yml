@@ -172,7 +172,7 @@ jobs:
             pnpm install --frozen-lockfile
             pnpm --filter @snapcal/database build
             pnpm --filter @snapcal/shared build
-            cd packages/database && DATABASE_URL="$DATABASE_URL" npx prisma migrate deploy && DATABASE_URL="$DATABASE_URL" pnpm db:seed
+            cd packages/database && DATABASE_URL="$DATABASE_URL" npx prisma migrate deploy && DATABASE_URL="$DATABASE_URL" pnpm seed
             cd /opt/snapcal-main
             pnpm --filter @snapcal/api build
             pnpm --filter @snapcal/ai-agent build
