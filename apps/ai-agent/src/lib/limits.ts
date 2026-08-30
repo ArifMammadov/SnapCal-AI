@@ -199,6 +199,9 @@ const PRICING: Record<string, { input: number; output: number }> = {
   'mistralai/mistral-7b-instruct': { input: 0.2, output: 0.2 },
   'ollama/llava': { input: 0, output: 0 },
   'llama3.2': { input: 0, output: 0 },
+  'google/gemini-2.5-flash-lite-preview': { input: 0.1, output: 0.4 },
+  'google/gemini-2.5-flash-preview': { input: 0.15, output: 0.6 },
+  'google/gemini-2.0-flash-001': { input: 0.1, output: 0.4 },
 }
 
 export function estimateCost(model: string, inputTokens: number, outputTokens: number): number {

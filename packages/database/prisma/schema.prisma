@@ -46,6 +46,7 @@ model User {
   reminderPreferences ReminderPreference?
   payments Payment[]
   aiUsageLogs AiUsageLog[]
+  photoCorrections PhotoCorrection[]
 
   @@index([telegramId])
   @@index([subscriptionStatus])
@@ -179,6 +180,57 @@ model FoodLog {
 
   @@index([userId, loggedAt])
   @@map("food_logs")
+}
+
+model Food {
+  id                String   @id @default(uuid()) @db.Uuid
+  name              String
+  normalizedName    String   @unique
+  aliases           String[] @default([])
+  category          String?
+  cuisine           String?
+  country           String?
+  servingSizeG      Decimal? @db.Decimal(6, 1)
+  kcalPer100g       Decimal  @db.Decimal(7, 2)
+  proteinPer100g    Decimal  @db.Decimal(6, 2)
+  fatPer100g        Decimal  @db.Decimal(6, 2)
+  carbsPer100g      Decimal  @db.Decimal(6, 2)
+  fiberPer100g      Decimal? @db.Decimal(6, 2)
+  source            String?
+  verified          Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  corrections PhotoCorrection[]
+
+  @@index([normalizedName])
+  @@index([cuisine])
+  @@index([aliases])
+  @@map("foods")
+}
+
+model PhotoCorrection {
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @db.Uuid
+  foodId            String?  @db.Uuid
+  photoId           String?
+  imageUrl          String?
+  aiPredictionName  String?
+  aiConfidence      Decimal? @db.Decimal(3, 2)
+  userCorrection    String
+  finalFoodName     String
+  finalPortionG     Int?
+  finalCalories     Int?
+  finalProteinG     Int?
+  finalCarbsG       Int?
+  finalFatG         Int?
+  createdAt         DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  food Food? @relation(fields: [foodId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@map("photo_corrections")
 }
 
 model ActivityLog {

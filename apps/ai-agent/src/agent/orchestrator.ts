@@ -14,7 +14,10 @@ import { updateMemory, recordFoodPreference, getFoodPreferences } from '../memor
 import { getUserSummary, saveUserFact, searchKnowledge, recommendProgram, analyzePhoto, logFood, logActivity, webSearch } from '../tools/index.js'
 import { correctFoodMacrosWithUsda, lookupUsdaNutrition, estimateServingG } from '../lib/foodNutrition.js'
 import { formatFoodAnalysisCard, formatCompactFoodResult, formatLowConfidenceQuestion } from '../lib/responseFormatter.js'
+import { env } from '../lib/env.js'
 import { findDishInKnowledge, saveDishToKnowledge } from '../lib/knowledgeBase.js'
+import { recognizeFoodFromPhoto } from '../services/ai/vision/index.js'
+import { logPhotoCorrection } from '../services/ai/correctionLogger.js'
 
 const FALLBACK_MODEL = 'gpt-4o-mini'
 const MAX_OUTPUT_TOKENS = 1024
@@ -311,7 +314,26 @@ async function recalculateFromCorrection(
 ): Promise<FoodAnalysisData> {
   const cleanCorrection = correction.replace(/\\?/g, '').trim().slice(0, 80)
 
-  // 1. Prefer knowledge base for named dishes (doner, shaverma, etc.)
+  // 1. Prefer structured food database first (exact/aliases)
+  const foodDbMatch = await (await import('../services/ai/nutrition/foodDatabase.js')).findFoodByName(cleanCorrection)
+  if (foodDbMatch) {
+    const servingG = estimateServingGFromText(correction, original.serving)
+    const factor = servingG / (foodDbMatch.servingSizeG || 100)
+    return validateAndFixMacros({
+      name: foodDbMatch.name,
+      calories: Math.round(foodDbMatch.kcalPer100g * factor),
+      proteinG: Math.round(foodDbMatch.proteinPer100g * factor * 10) / 10,
+      carbsG: Math.round(foodDbMatch.carbsPer100g * factor * 10) / 10,
+      fatG: Math.round(foodDbMatch.fatPer100g * factor * 10) / 10,
+      serving: `${servingG} g`,
+      confidence: 0.9,
+      suggestedMealType: validateMealType(original.suggestedMealType),
+      ingredients: original.ingredients,
+      alternativeNames: foodDbMatch.aliases,
+    } as FoodAnalysisData)
+  }
+
+  // 2. Fallback to knowledge base for named dishes (doner, shaverma, etc.)
   const known = await findDishInKnowledge(cleanCorrection)
   if (known) {
     const servingG = estimateServingGFromText(correction, original.serving)
@@ -408,6 +430,7 @@ export async function handleChat(input: ChatInput): Promise<ChatOutput> {
         void saveDishToKnowledge(foodData, userId, pending.imageUrl)
         void recordFoodPreference(userId, foodData.name, foodData.ingredients ?? [], foodData.confidence)
         void updateMemory(userId, content)
+        void logPhotoCorrection(userId, pending.foodData, recentGuess || '', foodData, pending.imageUrl)
         return {
           message: {
             id: crypto.randomUUID(),
@@ -438,6 +461,7 @@ export async function handleChat(input: ChatInput): Promise<ChatOutput> {
       void saveDishToKnowledge(corrected, userId, pending.imageUrl)
       void recordFoodPreference(userId, corrected.name, corrected.ingredients ?? [], corrected.confidence)
       void updateMemory(userId, content)
+      void logPhotoCorrection(userId, pending.foodData, safeMessage, corrected, pending.imageUrl)
       return {
         message: {
           id: crypto.randomUUID(),
@@ -535,51 +559,61 @@ If the user asks what to eat today, use their food preferences and recent meals 
     try {
       const imageUrl = context.attachments?.find((a) => a.type === 'image')?.url
       if (imageUrl) {
-        const cachedRaw = await getCachedVisionResult(imageUrl)
-        let parsed: FoodAnalysisData | null = cachedRaw ? safeParseFoodJson(cachedRaw) : null
-        if (parsed) {
-          content = cachedRaw as string
-          modelUsed = 'cached'
-        } else {
-          // Vision model is the primary source for photos. KB search by image URL is not useful.
-          const visionResult = await callVisionLlm(imageUrl)
-          parsed = safeParseFoodJson(visionResult.content)
+        const stats = await getTodayStats(userId, user?.profile)
+
+        if (env.USE_LEGACY_FOOD_VISION === 'true') {
+          // Legacy path: single LLM returns name + macros
+          const cachedRaw = await getCachedVisionResult(imageUrl)
+          let parsed: FoodAnalysisData | null = cachedRaw ? safeParseFoodJson(cachedRaw) : null
           if (parsed) {
-            parsed = validateAndFixMacros(parsed)
-            modelUsed = visionResult.model
+            content = cachedRaw as string
+            modelUsed = 'cached'
           } else {
-            parsed = buildFallbackFoodAnalysis()
-            modelUsed = visionResult.model
+            const visionResult = await callVisionLlm(imageUrl)
+            parsed = safeParseFoodJson(visionResult.content)
+            if (parsed) {
+              parsed = validateAndFixMacros(parsed)
+              modelUsed = visionResult.model
+            } else {
+              parsed = buildFallbackFoodAnalysis()
+              modelUsed = visionResult.model
+            }
+            content = JSON.stringify(parsed)
+            await setCachedVisionResult(imageUrl, content)
           }
-          content = JSON.stringify(parsed)
+          foodData = parsed as FoodAnalysisData
+        } else {
+          // New hybrid pipeline: vision -> confidence router -> food resolver -> nutrition engine
+          const result = await recognizeFoodFromPhoto(userId, imageUrl)
+          foodData = result.foodData
+          modelUsed = result.modelUsed
+          content = JSON.stringify(foodData)
           await setCachedVisionResult(imageUrl, content)
         }
 
-        foodData = parsed as FoodAnalysisData
-
-        const stats = await getTodayStats(userId, user?.profile)
         // Always store pending clarification so follow-up corrections/confirmations can recalc or log
-        await setPendingClarification(userId, { imageUrl, foodData, lang, createdAt: new Date().toISOString() })
+        const finalFoodData = foodData!
+        await setPendingClarification(userId, { imageUrl, foodData: finalFoodData, lang, createdAt: new Date().toISOString() })
 
-        if (foodData.confidence < LOW_CONFIDENCE_THRESHOLD) {
+        if (finalFoodData.confidence < LOW_CONFIDENCE_THRESHOLD) {
           const recentGuess = await getRecentFoodGuess(userId)
-          content = formatLowConfidenceQuestion(foodData, lang, recentGuess)
+          content = formatLowConfidenceQuestion(finalFoodData, lang, recentGuess)
           structured = {
-            ...formatFoodAnalysisCard(foodData, { ...stats, lang }),
+            ...formatFoodAnalysisCard(finalFoodData, { ...stats, lang }),
             pendingConfirmation: true,
             pendingAction: 'LOG_FOOD',
           }
         } else {
           // User-facing photo result should only show macros and portion, then ask for confirmation
-          content = formatCompactFoodResult(foodData, lang)
+          content = formatCompactFoodResult(finalFoodData, lang)
           structured = {
-            ...formatFoodAnalysisCard(foodData, { ...stats, lang }),
+            ...formatFoodAnalysisCard(finalFoodData, { ...stats, lang }),
             pendingConfirmation: true,
             pendingAction: 'LOG_FOOD',
           }
           // Remember the dish in background; do not block response on KB embedding.
-          void saveDishToKnowledge(foodData, userId, imageUrl)
-          void recordFoodPreference(userId, foodData.name, foodData.ingredients ?? [], foodData.confidence)
+          void saveDishToKnowledge(finalFoodData, userId, imageUrl)
+          void recordFoodPreference(userId, finalFoodData.name, finalFoodData.ingredients ?? [], finalFoodData.confidence)
         }
       } else {
         content = JSON.stringify({ error: 'No image provided' })
